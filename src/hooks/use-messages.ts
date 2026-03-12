@@ -33,8 +33,10 @@ type IncomingRealtimeMessage = ChatMessagePayload & {
   created_at?: string;
 };
 
+const EMPTY_PARTICIPANTS: Agent[] = [];
+
 export function useMessages(options: UseMessagesOptions) {
-  const { sessionId, participants = [], autoLoad = true } = options;
+  const { sessionId, participants = EMPTY_PARTICIPANTS, autoLoad = true } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);

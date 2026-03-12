@@ -5,7 +5,6 @@ import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard,
   MessageSquare,
-  Users,
   CheckSquare,
   Settings,
   FileText,
@@ -36,12 +35,6 @@ const sidebarItems: SidebarItem[] = [
     label: '会话',
     icon: <MessageSquare className="w-5 h-5" />,
     path: '/chat',
-  },
-  {
-    id: 'agents',
-    label: 'Agents',
-    icon: <Users className="w-5 h-5" />,
-    path: '/agents',
   },
   {
     id: 'tasks',
@@ -75,7 +68,6 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Logo区域 */}
       <div className="h-16 flex items-center justify-center border-b border-border px-4">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0">
@@ -87,7 +79,6 @@ export function Sidebar() {
         </div>
       </div>
 
-      {/* 导航菜单 */}
       <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
         {sidebarItems.map((item) => {
           const isActive = pathname === item.path || pathname.startsWith(`${item.path}/`);
@@ -120,7 +111,6 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* 底部操作区 */}
       <div className="p-2 border-t border-border space-y-1">
         <button
           onClick={toggleCollapsed}

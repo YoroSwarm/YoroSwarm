@@ -8,6 +8,76 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
+const LOCAL_WS_SERVER_PORT = '3001';
+
+let wsServerInitializationPromise: Promise<void> | null = null;
+
+function resolveWebSocketUrl(rawUrl: string): string {
+  if (!rawUrl || typeof window === 'undefined') {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl, window.location.origin);
+
+    if (parsed.protocol === 'http:') {
+      parsed.protocol = 'ws:';
+    } else if (parsed.protocol === 'https:') {
+      parsed.protocol = 'wss:';
+    }
+
+    const usesApiWsBootstrapPath = parsed.pathname === '/api/ws' || parsed.pathname.startsWith('/api/ws/');
+    if (usesApiWsBootstrapPath) {
+      parsed.pathname = parsed.pathname.replace(/^\/api\/ws(?=\/|$)/, '') || '/';
+
+      // `/api/ws` boots a dedicated ws server that listens on port 3001.
+      parsed.port = LOCAL_WS_SERVER_PORT;
+    }
+
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
+
+function shouldInitializeLocalWebSocketServer(resolvedUrl: string): boolean {
+  if (!resolvedUrl || typeof window === 'undefined') {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(resolvedUrl);
+    return parsed.hostname === window.location.hostname && parsed.port === LOCAL_WS_SERVER_PORT;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureLocalWebSocketServerInitialized(resolvedUrl: string): Promise<void> {
+  if (!shouldInitializeLocalWebSocketServer(resolvedUrl)) {
+    return;
+  }
+
+  if (!wsServerInitializationPromise) {
+    wsServerInitializationPromise = fetch('/api/ws', {
+      method: 'GET',
+      cache: 'no-store',
+      credentials: 'same-origin',
+    })
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`WebSocket bootstrap failed with status ${response.status}`);
+        }
+      })
+      .catch((error) => {
+        wsServerInitializationPromise = null;
+        throw error;
+      });
+  }
+
+  await wsServerInitializationPromise;
+}
+
 export type WebSocketMessageType =
   | 'connected'
   | 'disconnected'
@@ -86,7 +156,17 @@ export function useWebSocket({
   const heartbeatTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const pendingAcksRef = useRef<Map<string, { resolve: (value: boolean) => void; timeout: NodeJS.Timeout }>>(new Map());
   const isManualDisconnectRef = useRef(false);
+  const isConnectingRef = useRef(false);
+  const connectionAttemptsRef = useRef(0);
   const connectRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    isConnectingRef.current = isConnecting;
+  }, [isConnecting]);
+
+  useEffect(() => {
+    connectionAttemptsRef.current = connectionAttempts;
+  }, [connectionAttempts]);
 
   const clearHeartbeat = useCallback(() => {
     if (heartbeatIntervalRef.current) {
@@ -135,89 +215,128 @@ export function useWebSocket({
   }, []);
 
   const connect = useCallback(() => {
-    if (isConnecting || wsRef.current?.readyState === WebSocket.OPEN) {
+    if (isConnectingRef.current || wsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
+    isConnectingRef.current = true;
     setIsConnecting(true);
     isManualDisconnectRef.current = false;
 
-    try {
-      const ws = new WebSocket(url);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setIsConnected(true);
+    void (async () => {
+      const resolvedUrl = resolveWebSocketUrl(url);
+      if (!resolvedUrl) {
+        isConnectingRef.current = false;
         setIsConnecting(false);
-        setConnectionAttempts(0);
-        startHeartbeat();
-        onConnect?.();
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const message = JSON.parse(event.data) as WebSocketMessage;
-
-          // Handle pong
-          if (message.type === 'pong') {
-            if (heartbeatTimeoutRef.current) {
-              clearTimeout(heartbeatTimeoutRef.current);
-              heartbeatTimeoutRef.current = null;
-            }
-            return;
-          }
-
-          // Handle acknowledgment responses
-          if (message.type === 'message_received' && message.message_id) {
-            handleAcknowledgment(message.message_id);
-            return;
-          }
-
-          // Send acknowledgment if required
-          if (message.requires_ack && message.message_id) {
-            ws.send(JSON.stringify({
-              type: 'ack',
-              payload: { message_id: message.message_id }
-            }));
-          }
-
-          onMessage?.(message);
-        } catch (error) {
-          console.error('Failed to parse WebSocket message:', error);
-        }
-      };
-
-      ws.onclose = (event) => {
         setIsConnected(false);
+        return;
+      }
+
+      try {
+        await ensureLocalWebSocketServerInitialized(resolvedUrl);
+      } catch (error) {
+        console.warn('Failed to initialize local WebSocket server before connect:', error);
+      }
+
+      if (isManualDisconnectRef.current) {
+        isConnectingRef.current = false;
         setIsConnecting(false);
-        clearHeartbeat();
-        onDisconnect?.(event.code, event.reason);
+        return;
+      }
 
-        // Clear pending acknowledgments
-        pendingAcksRef.current.forEach((pending) => {
-          clearTimeout(pending.timeout);
-          pending.resolve(false);
-        });
-        pendingAcksRef.current.clear();
+      try {
+        const ws = new WebSocket(resolvedUrl);
+        wsRef.current = ws;
 
-        // Auto reconnect if not manually disconnected
-        if (autoReconnect && !isManualDisconnectRef.current && connectionAttempts < maxReconnectAttempts) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            setConnectionAttempts((prev) => prev + 1);
-            connectRef.current?.();
-          }, reconnectInterval);
-        }
-      };
+        ws.onopen = () => {
+          setIsConnected(true);
+          isConnectingRef.current = false;
+          setIsConnecting(false);
+          connectionAttemptsRef.current = 0;
+          setConnectionAttempts(0);
+          startHeartbeat();
+          onConnect?.();
+        };
 
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        onError?.(error);
-      };
-    } catch (error) {
-      console.error('Failed to connect WebSocket:', error);
-      setIsConnecting(false);
-      setIsConnected(false);
-    }
+        ws.onmessage = (event) => {
+          try {
+            const message = JSON.parse(event.data) as WebSocketMessage;
+
+            // Handle pong
+            if (message.type === 'pong') {
+              if (heartbeatTimeoutRef.current) {
+                clearTimeout(heartbeatTimeoutRef.current);
+                heartbeatTimeoutRef.current = null;
+              }
+              return;
+            }
+
+            // Handle acknowledgment responses
+            if (message.type === 'message_received' && message.message_id) {
+              handleAcknowledgment(message.message_id);
+              return;
+            }
+
+            // Send acknowledgment if required
+            if (message.requires_ack && message.message_id) {
+              ws.send(JSON.stringify({
+                type: 'ack',
+                payload: { message_id: message.message_id }
+              }));
+            }
+
+            onMessage?.(message);
+          } catch (error) {
+            console.error('Failed to parse WebSocket message:', error);
+          }
+        };
+
+        ws.onclose = (event) => {
+          if (wsRef.current === ws) {
+            wsRef.current = null;
+          }
+
+          setIsConnected(false);
+          isConnectingRef.current = false;
+          setIsConnecting(false);
+          clearHeartbeat();
+          onDisconnect?.(event.code, event.reason);
+
+          // Clear pending acknowledgments
+          pendingAcksRef.current.forEach((pending) => {
+            clearTimeout(pending.timeout);
+            pending.resolve(false);
+          });
+          pendingAcksRef.current.clear();
+
+          // Auto reconnect if not manually disconnected
+          if (autoReconnect && !isManualDisconnectRef.current && connectionAttemptsRef.current < maxReconnectAttempts) {
+            reconnectTimeoutRef.current = setTimeout(() => {
+              setConnectionAttempts((prev) => {
+                const next = prev + 1;
+                connectionAttemptsRef.current = next;
+                return next;
+              });
+              connectRef.current?.();
+            }, reconnectInterval);
+          }
+        };
+
+        ws.onerror = (error) => {
+          console.warn('WebSocket error:', {
+            url: resolvedUrl,
+            readyState: ws.readyState,
+            eventType: error.type,
+          });
+          onError?.(error);
+        };
+      } catch (error) {
+        console.error('Failed to connect WebSocket:', { url: resolvedUrl, error });
+        isConnectingRef.current = false;
+        setIsConnecting(false);
+        setIsConnected(false);
+      }
+    })();
   }, [
     url,
     onMessage,
@@ -226,12 +345,10 @@ export function useWebSocket({
     onError,
     reconnectInterval,
     maxReconnectAttempts,
-    connectionAttempts,
     autoReconnect,
     startHeartbeat,
     clearHeartbeat,
     handleAcknowledgment,
-    isConnecting,
   ]);
 
   useEffect(() => {
@@ -240,6 +357,7 @@ export function useWebSocket({
 
   const disconnect = useCallback(() => {
     isManualDisconnectRef.current = true;
+    isConnectingRef.current = false;
     clearReconnect();
     clearHeartbeat();
 
@@ -252,6 +370,8 @@ export function useWebSocket({
 
     wsRef.current?.close();
     wsRef.current = null;
+    setIsConnecting(false);
+    setIsConnected(false);
   }, [clearReconnect, clearHeartbeat]);
 
   const sendMessage = useCallback((message: Omit<WebSocketMessage, 'message_id'> & { message_id?: string }): boolean => {
@@ -303,7 +423,7 @@ export function useWebSocket({
 
     if (autoConnect) {
       timeoutId = setTimeout(() => {
-        connect();
+        connectRef.current?.();
       }, 0);
     }
 
@@ -313,7 +433,7 @@ export function useWebSocket({
       }
       disconnect();
     };
-  }, [autoConnect, connect, disconnect]);
+  }, [autoConnect, url, disconnect]);
 
   return useMemo(() => ({
     isConnected,

@@ -1,7 +1,5 @@
-"use client";
+import { redirect } from 'next/navigation';
 
-import { MonitorDashboard } from "@/components/monitor/MonitorDashboard";
-
-export default function AgentsPage() {
-  return <MonitorDashboard />;
+export default function RedirectToChatPage() {
+  redirect('/chat');
 }
