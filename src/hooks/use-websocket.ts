@@ -59,8 +59,8 @@ export interface UseWebSocketReturn {
   sendMessageWithAck: (message: Omit<WebSocketMessage, 'message_id'>) => Promise<boolean>;
   connect: () => void;
   disconnect: () => void;
-  subscribe: (target: 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
-  unsubscribe: (target: 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
+  subscribe: (target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
+  unsubscribe: (target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
 }
 
 export function useWebSocket({
@@ -284,14 +284,14 @@ export function useWebSocket({
     });
   }, []);
 
-  const subscribe = useCallback((target: 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
+  const subscribe = useCallback((target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
     sendMessage({
       type: 'subscribe',
       payload: { target, id }
     });
   }, [sendMessage]);
 
-  const unsubscribe = useCallback((target: 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
+  const unsubscribe = useCallback((target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
     sendMessage({
       type: 'unsubscribe',
       payload: { target, id }

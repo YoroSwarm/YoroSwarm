@@ -10,7 +10,7 @@ export interface Agent {
   name: string;
   avatar?: string;
   role: string;
-  status: 'online' | 'offline' | 'busy';
+  status: 'online' | 'offline' | 'busy' | 'idle' | 'error';
   color?: string;
 }
 

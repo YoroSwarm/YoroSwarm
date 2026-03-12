@@ -8,7 +8,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { agentsApi } from '@/lib/api/agents';
+import { teamsApi, type TeamAgentResponse } from '@/lib/api/teams';
 import type { Agent, AgentActivity, AgentMessage } from '@/types/agent';
+import { storage } from '@/utils/storage';
+
+const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
 
 // 转换 API Agent 到前端 Agent 类型
 const convertApiAgent = (apiAgent: {
@@ -50,10 +54,11 @@ const convertApiAgent = (apiAgent: {
 
 interface UseAgentsOptions {
   autoLoad?: boolean;
+  teamId?: string;
 }
 
 export function useAgents(options: UseAgentsOptions = {}) {
-  const { autoLoad = true } = options;
+  const { autoLoad = true, teamId } = options;
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
@@ -61,31 +66,86 @@ export function useAgents(options: UseAgentsOptions = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const resolveTeamId = useCallback(() => {
+    const storedTeamId = storage.get<string>(CURRENT_TEAM_STORAGE_KEY);
+    if (teamId || storedTeamId) {
+      return teamId || storedTeamId || undefined;
+    }
+
+    const teams = storage.get<Array<{ id: string }>>('monitor_teams');
+    const currentTeam = storage.get<{ id?: string }>('monitor_current_team');
+
+    return currentTeam?.id || teams?.[0]?.id || undefined;
+  }, [teamId]);
+
+  const convertTeamAgent = useCallback((apiAgent: TeamAgentResponse): Agent => {
+    return {
+      id: apiAgent.id,
+      name: apiAgent.name,
+      type: (apiAgent.role === 'team_lead'
+        ? 'leader'
+        : apiAgent.role.includes('analysis') || apiAgent.role.includes('research') || apiAgent.role.includes('document')
+          ? 'specialist'
+          : apiAgent.role.includes('coordinator')
+            ? 'coordinator'
+            : 'worker') as Agent['type'],
+      status: apiAgent.status === 'offline'
+        ? 'offline'
+        : apiAgent.status === 'busy'
+          ? 'busy'
+          : apiAgent.status === 'error'
+            ? 'error'
+            : 'idle',
+      currentTask: undefined,
+      load: Math.min(Math.round((apiAgent.current_load / Math.max(apiAgent.max_load, 1)) * 100), 100),
+      description: apiAgent.description || apiAgent.role,
+      expertise: apiAgent.capabilities || [],
+      createdAt: apiAgent.created_at,
+      lastActiveAt: apiAgent.last_active_at || apiAgent.updated_at,
+      messageCount: 0,
+      completedTasks: 0,
+    };
+  }, []);
+
   // 加载 Agent 列表
   const loadAgents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await agentsApi.getAgents();
-      const convertedAgents = response.agents.map(convertApiAgent);
+      const scopedTeamId = resolveTeamId();
+      const convertedAgents = scopedTeamId
+        ? (await teamsApi.getTeamMembers(scopedTeamId)).items.map(convertTeamAgent)
+        : (await agentsApi.getAgents()).agents.map(convertApiAgent);
       setAgents(convertedAgents);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Agent 失败');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [convertTeamAgent, resolveTeamId]);
 
   // 创建 Agent
   const createAgent = useCallback(async (agentData: Omit<Agent, 'id' | 'createdAt' | 'lastActiveAt' | 'messageCount' | 'completedTasks'>) => {
     setIsLoading(true);
     try {
-      const response = await agentsApi.createAgent({
-        name: agentData.name,
-        agent_type: agentData.type,
-        description: agentData.description,
-        expertise: agentData.expertise,
-      });
+      const scopedTeamId = resolveTeamId();
+      const response = scopedTeamId
+        ? await teamsApi.createAgent(scopedTeamId, {
+            name: agentData.name,
+            role: agentData.type === 'leader'
+              ? 'team_lead'
+              : agentData.type === 'specialist'
+                ? 'specialist'
+                : agentData.type,
+            description: agentData.description,
+            capabilities: agentData.expertise,
+          })
+        : await agentsApi.createAgent({
+            name: agentData.name,
+            agent_type: agentData.type,
+            description: agentData.description,
+            expertise: agentData.expertise,
+          });
       // 重新加载列表
       await loadAgents();
       return response;
@@ -95,7 +155,7 @@ export function useAgents(options: UseAgentsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadAgents]);
+  }, [loadAgents, resolveTeamId]);
 
   // 更新 Agent
   const updateAgent = useCallback(async (id: string, updates: Partial<Agent>) => {

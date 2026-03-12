@@ -3,6 +3,7 @@ import prisma from '@/lib/db'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { successResponse, errorResponse, unauthorizedResponse } from '@/lib/api/response'
 import { cookies } from 'next/headers'
+import { serializeAgent } from '@/lib/server/swarm'
 
 // GET - List all agents
 export async function GET(request: NextRequest) {
@@ -25,14 +26,14 @@ export async function GET(request: NextRequest) {
 
     const agents = await prisma.agent.findMany({
       where: teamId ? { teamId } : undefined,
-      include: {
-        team: true,
-        tasks: true,
-      },
+      include: { tasks: true },
       orderBy: { createdAt: 'desc' },
     })
 
-    return successResponse(agents)
+    return successResponse({
+      agents: agents.map(serializeAgent),
+      total: agents.length,
+    })
   } catch (error) {
     console.error('List agents error:', error)
     return errorResponse('Internal server error', 500)
@@ -56,9 +57,11 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, role, description, teamId, capabilities, config } = body
+    const { name, role, description, teamId, capabilities, config, agent_type, expertise } = body
+    const normalizedRole = role || agent_type
+    const normalizedCapabilities = capabilities || expertise
 
-    if (!name || !role || !teamId) {
+    if (!name || !normalizedRole || !teamId) {
       return errorResponse('Name, role, and teamId are required', 400)
     }
 
@@ -74,18 +77,23 @@ export async function POST(request: NextRequest) {
     const agent = await prisma.agent.create({
       data: {
         name,
-        role,
+        role: normalizedRole,
         description,
         teamId,
-        capabilities: capabilities ? JSON.stringify(capabilities) : null,
+        capabilities: normalizedCapabilities ? JSON.stringify(normalizedCapabilities) : null,
         config: JSON.stringify(config || {}),
       },
       include: {
-        team: true,
+        tasks: true,
       },
     })
 
-    return successResponse(agent, 'Agent created successfully')
+    return successResponse({
+      agent_id: agent.id,
+      name: agent.name,
+      status: agent.status.toLowerCase(),
+      message: 'Agent created successfully',
+    }, 'Agent created successfully')
   } catch (error) {
     console.error('Create agent error:', error)
     return errorResponse('Internal server error', 500)

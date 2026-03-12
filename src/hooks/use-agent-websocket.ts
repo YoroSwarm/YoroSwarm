@@ -45,8 +45,12 @@ export interface SystemNotification {
 }
 
 export interface UseAgentWebSocketOptions {
-  clientId: string;
+  clientId?: string;
   token?: string;
+  teamId?: string;
+  sessionId?: string;
+  path?: string;
+  scopePath?: string;
   onAgentStatus?: (update: AgentStatusUpdate) => void;
   onTaskUpdate?: (update: TaskStatusUpdate) => void;
   onChatMessage?: (message: AgentMessage) => void;
@@ -80,6 +84,10 @@ export interface UseAgentWebSocketReturn {
 export function useAgentWebSocket({
   clientId,
   token,
+  teamId,
+  sessionId,
+  path,
+  scopePath,
   onAgentStatus,
   onTaskUpdate,
   onChatMessage,
@@ -153,8 +161,18 @@ export function useAgentWebSocket({
   }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification]);
 
   // Get WebSocket URL from environment
+  const query = new URLSearchParams();
+  if (token) query.set('token', token);
+  if (clientId) query.set('clientId', clientId);
+  if (teamId) query.set('teamId', teamId);
+  if (sessionId) query.set('sessionId', sessionId);
+
+  const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
+  const resolvedScopePath = scopePath
+    || path
+    || (teamId ? `/ws/teams/${teamId}` : sessionId ? `/ws/sessions/${sessionId}` : clientId ? `/ws/agents/${clientId}` : '/ws');
   const wsUrl = typeof window !== 'undefined'
-    ? `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000'}/ws/agents/${clientId}${token ? `?token=${token}` : ''}`
+    ? `${baseUrl.replace(/\/$/, '')}${resolvedScopePath}${query.size ? `?${query.toString()}` : ''}`
     : '';
 
   const {

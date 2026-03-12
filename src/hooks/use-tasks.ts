@@ -8,12 +8,20 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { tasksApi, type TaskResponse, type TaskStatus, type TaskPriority } from '@/lib/api/tasks';
+import { teamsApi } from '@/lib/api/teams';
+import { storage } from '@/utils/storage';
 import type { Task } from '@/types/agent';
+
+const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
 
 interface UseTasksOptions {
   teamId?: string;
   autoLoad?: boolean;
 }
+
+type ApiTaskListShape =
+  | { items: TaskResponse[]; total: number }
+  | TaskResponse[];
 
 // 转换 API 任务到前端 Task 类型
 const convertApiTask = (apiTask: TaskResponse): Task => {
@@ -50,26 +58,31 @@ export function useTasks(options: UseTasksOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
+  const resolvedTeamId = teamId || storage.get<string>(CURRENT_TEAM_STORAGE_KEY) || undefined;
+
   // 加载任务列表
   const loadTasks = useCallback(async (params?: { status?: TaskStatus }) => {
     setIsLoading(true);
     setError(null);
     try {
       let response;
-      if (teamId) {
-        response = await tasksApi.getTeamTasks(teamId, params);
+      if (resolvedTeamId) {
+        response = await tasksApi.getTeamTasks(resolvedTeamId, params);
       } else {
         response = await tasksApi.listTasks(params);
       }
-      const convertedTasks = response.items.map(convertApiTask);
+      const normalizedResponse = Array.isArray(response)
+        ? { items: response, total: response.length }
+        : response as ApiTaskListShape;
+      const convertedTasks = normalizedResponse.items.map(convertApiTask);
       setTasks(convertedTasks);
-      setTotalCount(response.total);
+      setTotalCount(normalizedResponse.total);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载任务失败');
     } finally {
       setIsLoading(false);
     }
-  }, [teamId]);
+  }, [resolvedTeamId]);
 
   // 创建任务
   const createTask = useCallback(async (data: {
@@ -79,11 +92,17 @@ export function useTasks(options: UseTasksOptions = {}) {
   }) => {
     setIsLoading(true);
     try {
-      const response = await tasksApi.createTask({
+      const response = resolvedTeamId
+        ? await teamsApi.createTask(resolvedTeamId, {
         title: data.title,
         description: data.description,
         priority: data.priority,
-      });
+          })
+        : await tasksApi.createTask({
+            title: data.title,
+            description: data.description,
+            priority: data.priority,
+          });
       const newTask = convertApiTask(response);
       setTasks((prev) => [newTask, ...prev]);
       return newTask;
@@ -93,7 +112,7 @@ export function useTasks(options: UseTasksOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [resolvedTeamId]);
 
   // 分配任务
   const assignTask = useCallback(async (taskId: string, agentId?: string) => {

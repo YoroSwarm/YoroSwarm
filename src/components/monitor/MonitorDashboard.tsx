@@ -1,91 +1,126 @@
 'use client';
 
-import React, { useState } from 'react';
-import { AgentList } from './AgentList';
-import { TeamOverview } from './TeamOverview';
-import { RealTimeMonitor } from './RealTimeMonitor';
-import { CreateAgentModal } from './CreateAgentModal';
-import { TaskAssignment } from './TaskAssignment';
+import React, { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AgentDetailDrawer } from './AgentDetailDrawer';
-import { useAgents } from '@/hooks/use-agents';
+import { AgentList } from './AgentList';
+import { CreateSwarmSessionModal } from './CreateSwarmSessionModal';
+import { RealTimeMonitor } from './RealTimeMonitor';
+import { TaskAssignment } from './TaskAssignment';
+import { TeamOverview } from './TeamOverview';
+import { useSwarmTeam } from '@/hooks/use-swarm-team';
 import { useTasks } from '@/hooks/use-tasks';
-import { useTeamStats } from '@/hooks/use-team-stats';
+import { useSessions } from '@/hooks/use-sessions';
 import { useWebSocket } from '@/hooks/use-websocket';
-import type { Agent, Team, Task } from '@/types/agent';
+import type { Agent, AgentActivity, AgentMessage, Task } from '@/types/agent';
+
+const defaultActivities: AgentActivity[] = [
+  {
+    id: 'activity-1',
+    agentId: 'team-lead',
+    agentName: 'Team Lead',
+    action: 'team_bootstrap',
+    details: 'Lead 已接管会话，正在评估目标并准备创建工作项。',
+    timestamp: new Date().toISOString(),
+  },
+  {
+    id: 'activity-2',
+    agentId: 'researcher',
+    agentName: 'Researcher',
+    action: 'standby',
+    details: 'Researcher 待命，可开始信息搜集与资料比对。',
+    timestamp: new Date().toISOString(),
+  },
+  {
+    id: 'activity-3',
+    agentId: 'documenter',
+    agentName: 'Documenter',
+    action: 'standby',
+    details: 'Documenter 待命，可生成文档、PPT 结构和表格方案。',
+    timestamp: new Date().toISOString(),
+  },
+];
+
+const defaultMessages: AgentMessage[] = [
+  {
+    id: 'message-1',
+    agentId: 'team-lead',
+    agentName: 'Team Lead',
+    content: 'Swarm 已初始化。Lead 会根据目标动态拆解任务并调用合适队友。',
+    type: 'system',
+    timestamp: new Date().toISOString(),
+  },
+];
 
 export const MonitorDashboard: React.FC = () => {
+  const router = useRouter();
   const {
+    teams,
+    currentTeam,
+    currentTeamId,
+    currentTeamCard,
     agents,
-    activities,
-    messages,
-    selectedAgent,
-    setSelectedAgent,
-    createAgent,
-    addMessage,
-    getAgentMessages,
-    getAgentActivities,
-    isLoading: isAgentsLoading,
-    error: agentsError,
-  } = useAgents();
-
+    isLoading: isTeamLoading,
+    error: teamError,
+    setCurrentTeamId,
+    createSwarmSession,
+  } = useSwarmTeam();
   const {
     tasks,
     isLoading: isTasksLoading,
     error: tasksError,
     assignTask,
     updateTaskStatus,
-  } = useTasks({ autoLoad: true });
-
-  const {
-    totalAgents,
-    activeAgents,
-    totalTasks,
-    completedTasks,
-    isLoading: isStatsLoading,
-    error: statsError,
-  } = useTeamStats({ teamId: 'default' });
-
-  const team: Team = {
-    id: 'default',
-    name: 'Swarm Development Team',
-    description: '专注于AI多智能体协作系统的开发团队',
-    agentCount: totalAgents,
-    activeAgents: activeAgents,
-    totalTasks: totalTasks,
-    completedTasks: completedTasks,
-  };
+  } = useTasks({ teamId: currentTeamId || undefined, autoLoad: Boolean(currentTeamId) });
+  const { openDirectSessionForAgent } = useSessions({ autoLoad: false });
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [openingDirectChatAgentId, setOpeningDirectChatAgentId] = useState<string | null>(null);
+  const [directChatError, setDirectChatError] = useState<string | null>(null);
+
+  const messages = defaultMessages;
+
+  const activities = useMemo(() => {
+    if (!currentTeam) return defaultActivities;
+
+    return [
+      {
+        id: `${currentTeam.id}-lead`,
+        agentId: currentTeam.agents?.[0]?.id || 'team-lead',
+        agentName: currentTeam.agents?.[0]?.name || 'Team Lead',
+        action: 'lead_active',
+        details: 'Lead 正在维护团队状态、评估进度并准备分配下一轮任务。',
+        timestamp: new Date().toISOString(),
+      },
+      ...defaultActivities.slice(1),
+    ];
+  }, [currentTeam]);
 
   const { isConnected } = useWebSocket({
-    url: 'ws://localhost:8000/ws',
+    url: 'ws://localhost:3001',
     onMessage: (msg) => {
       console.log('WebSocket message:', msg);
     },
   });
 
+  const isLoading = isTeamLoading || isTasksLoading;
+  const error = directChatError || teamError || tasksError;
+
   const handleAgentClick = (agent: Agent) => {
     setSelectedAgent(agent);
     setIsDrawerOpen(true);
+    setDirectChatError(null);
   };
 
-  const handleCreateAgent = async (agentData: {
+  const handleCreateSwarmSession = async (sessionData: {
     name: string;
-    type: Agent['type'];
     description: string;
-    expertise: string[];
+    sessionGoal: string;
   }) => {
-    try {
-      await createAgent({
-        ...agentData,
-        status: 'idle',
-        load: 0,
-      });
-      setIsCreateModalOpen(false);
-    } catch (err) {
-      console.error('创建Agent失败:', err);
-    }
+    await createSwarmSession(sessionData);
+    setIsCreateModalOpen(false);
   };
 
   const handleAssignTask = async (taskId: string, agentId: string | undefined) => {
@@ -104,103 +139,154 @@ export const MonitorDashboard: React.FC = () => {
     }
   };
 
-  const handleSendMessage = (content: string) => {
-    if (selectedAgent) {
-      addMessage({
-        agentId: selectedAgent.id,
-        agentName: selectedAgent.name,
-        content,
-        type: 'message',
-      });
+  const handleOpenDirectChat = async (agent: Agent) => {
+    setOpeningDirectChatAgentId(agent.id);
+    setDirectChatError(null);
+
+    try {
+      const session = await openDirectSessionForAgent(agent.id, agent.name);
+      setIsDrawerOpen(false);
+      router.push(`/chat?sessionId=${encodeURIComponent(session.id)}`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '打开队友会话失败';
+      setDirectChatError(message);
+      console.error('打开队友会话失败:', err);
+    } finally {
+      setOpeningDirectChatAgentId(null);
     }
   };
 
-  const agentMessages = selectedAgent ? getAgentMessages(selectedAgent.id) : [];
-  const agentActivities = selectedAgent ? getAgentActivities(selectedAgent.id) : [];
-
-  const isLoading = isAgentsLoading || isTasksLoading || isStatsLoading;
-  const error = agentsError || tasksError || statsError;
+  const agentMessages = selectedAgent
+    ? messages.filter((message) => message.agentId === selectedAgent.id)
+    : [];
+  const agentActivities = selectedAgent
+    ? activities.filter((activity) => activity.agentId === selectedAgent.id)
+    : [];
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
-      <header className="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(244,244,245,0.95)_30%,_rgba(228,228,231,1)_100%)] px-4 py-6 text-neutral-950 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-7xl space-y-6">
+        <header className="overflow-hidden rounded-[32px] border border-white/40 bg-white/65 shadow-[0_24px_80px_rgba(15,15,15,0.08)] backdrop-blur-2xl">
+          <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.26em] text-neutral-500">
+                Swarm Control Surface
               </div>
-              <span className="text-xl font-bold text-gray-900 dark:text-white">Swarm Monitor</span>
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 lg:text-4xl">Team Lead 驱动的 Agent 集群</h1>
+                <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600 lg:text-base">
+                  面向单用户的通用办公 Agent 系统。创建会话后，Lead 会自动拉起队友并负责拆解任务、并行推进、动态发现改进方向。
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-4">
-              {isLoading && (
-                <div className="text-sm text-gray-500">
-                  <svg className="animate-spin inline-block h-4 w-4 mr-1" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  加载中...
-                </div>
-              )}
-              {error && (
-                <div className="text-sm text-red-500">
-                  错误: {error}
-                </div>
-              )}
+
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              {error ? <div className="text-sm text-red-600">错误: {error}</div> : null}
+              {isLoading ? <div className="text-sm text-neutral-500">正在同步会话状态...</div> : null}
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-black"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                创建Agent
+                创建 Swarm 会话
               </button>
             </div>
           </div>
-        </div>
-      </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="space-y-6">
-          <TeamOverview team={team} onTeamUpdate={() => {}} />
+          <div className="border-t border-black/10 bg-white/40 px-6 py-4 lg:px-8">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-500">Active Sessions</span>
+              {teams.length === 0 ? (
+                <span className="rounded-full border border-black/10 bg-white/70 px-3 py-1 text-sm text-neutral-500">尚未创建会话</span>
+              ) : (
+                teams.map((team) => (
+                  <button
+                    key={team.id}
+                    onClick={() => setCurrentTeamId(team.id)}
+                    className={`rounded-full px-4 py-2 text-sm transition ${
+                      currentTeamId === team.id
+                        ? 'bg-neutral-950 text-white'
+                        : 'border border-black/10 bg-white/75 text-neutral-700 hover:bg-white'
+                    }`}
+                  >
+                    {team.name}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        </header>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1">
-              <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
-                <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Agent列表</h2>
-                <AgentList
+        {currentTeamCard ? (
+          <>
+            <TeamOverview team={currentTeamCard} onTeamUpdate={() => {}} />
+
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
+              <div className="space-y-6">
+                <section className="rounded-[28px] border border-white/40 bg-white/65 p-6 shadow-[0_18px_60px_rgba(15,15,15,0.06)] backdrop-blur-2xl">
+                  <div className="mb-4 flex items-center justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-neutral-950">Teammates</h2>
+                      <p className="mt-1 text-sm text-neutral-500">Lead 自动编队，用户可随时点开任意队友并进入直接对话。</p>
+                    </div>
+                    <div className="rounded-full bg-black/5 px-3 py-1 text-xs text-neutral-600">{agents.length} agents</div>
+                  </div>
+                  <AgentList
+                    agents={agents}
+                    onAgentClick={handleAgentClick}
+                    selectedAgentId={selectedAgent?.id}
+                  />
+                </section>
+
+                <section className="rounded-[28px] border border-white/40 bg-neutral-950 p-6 text-white shadow-[0_18px_60px_rgba(15,15,15,0.12)]">
+                  <h2 className="text-lg font-semibold">系统设计对齐</h2>
+                  <div className="mt-4 space-y-3 text-sm text-white/72">
+                    <div>Lead 负责创建团队、协调任务和动态增减队员。</div>
+                    <div>Teammates 保持独立上下文，适合并行搜集、撰写、分析和编码。</div>
+                    <div>当前已支持从监控页直连任意 teammate；后续可以继续补 agent-native 身份和多依赖任务解锁。</div>
+                  </div>
+                </section>
+              </div>
+
+              <div className="space-y-6">
+                <RealTimeMonitor
+                  activities={activities}
+                  messages={messages}
+                  isConnected={isConnected}
+                />
+
+                <TaskAssignment
                   agents={agents}
-                  onAgentClick={handleAgentClick}
-                  selectedAgentId={selectedAgent?.id}
+                  tasks={tasks}
+                  onAssignTask={handleAssignTask}
+                  onUpdateTaskStatus={handleUpdateTaskStatus}
                 />
               </div>
             </div>
-
-            <div className="lg:col-span-2 space-y-6">
-              <RealTimeMonitor
-                activities={activities}
-                messages={messages}
-                isConnected={isConnected}
-              />
-
-              <TaskAssignment
-                agents={agents}
-                tasks={tasks}
-                onAssignTask={handleAssignTask}
-                onUpdateTaskStatus={handleUpdateTaskStatus}
-              />
+          </>
+        ) : (
+          <section className="rounded-[32px] border border-white/40 bg-white/65 px-8 py-14 text-center shadow-[0_18px_60px_rgba(15,15,15,0.06)] backdrop-blur-2xl">
+            <div className="mx-auto max-w-2xl">
+              <p className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">No Session Yet</p>
+              <h2 className="mt-3 text-3xl font-semibold text-neutral-950">先创建一个 Swarm 会话</h2>
+              <p className="mt-4 text-sm leading-7 text-neutral-600">
+                当前仓库已经有 Team、Agent、任务与监控基础结构。创建会话后，系统会自动生成 Team Lead 和默认 teammates，替代手动逐个创建 agent。
+              </p>
+              <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="mt-8 rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-black"
+              >
+                立即创建
+              </button>
             </div>
-          </div>
-        </div>
-      </main>
+          </section>
+        )}
+      </div>
 
-      <CreateAgentModal
+      <CreateSwarmSessionModal
         isOpen={isCreateModalOpen}
+        isSubmitting={isTeamLoading}
         onClose={() => setIsCreateModalOpen(false)}
-        onCreate={handleCreateAgent}
+        onCreate={handleCreateSwarmSession}
       />
 
       <AgentDetailDrawer
@@ -209,7 +295,8 @@ export const MonitorDashboard: React.FC = () => {
         onClose={() => setIsDrawerOpen(false)}
         messages={agentMessages}
         activities={agentActivities}
-        onSendMessage={handleSendMessage}
+        onOpenDirectChat={handleOpenDirectChat}
+        isOpeningDirectChat={selectedAgent?.id === openingDirectChatAgentId}
       />
     </div>
   );

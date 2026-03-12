@@ -62,11 +62,15 @@ export interface SystemNotification {
 
 export interface ChatMessagePayload {
   id: string;
-  agent_id: string;
-  agent_name: string;
   content: string;
-  type: 'message' | 'action' | 'error' | 'system';
+  type: 'text' | 'task_update' | 'agent_status' | 'system' | 'file' | 'broadcast';
+  sender_id: string;
+  sender_name?: string;
   conversation_id?: string;
+  status?: 'sent' | 'delivered' | 'read' | 'failed';
+  metadata?: Record<string, unknown>;
+  read_at?: string;
+  created_at?: string;
   timestamp: string;
 }
 
@@ -91,6 +95,6 @@ export interface ReadReceipt {
 }
 
 export interface WebSocketSubscription {
-  target: 'agent' | 'task' | 'all_agents' | 'all_tasks';
+  target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
   id?: string;
 }

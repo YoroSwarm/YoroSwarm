@@ -87,11 +87,17 @@ export interface TeamResponse {
   id: string;
   name: string;
   description?: string;
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+  createdAt?: string;
+  updatedAt?: string;
   created_by?: string;
-  config?: Record<string, unknown>;
-  agent_count: number;
+  createdBy?: string;
+  config?: Record<string, unknown> | string;
+  agent_count?: number;
+  agents?: unknown[];
+  tasks?: unknown[];
+  workflows?: unknown[];
 }
 
 // 团队列表响应
@@ -236,7 +242,14 @@ export const teamsApi = {
    * 获取团队列表
    */
   listTeams: async (params?: { skip?: number; limit?: number }): Promise<TeamListResponse> => {
-    return api.get<TeamListResponse>('/teams', { params });
+    const response = await api.get<TeamResponse[] | TeamListResponse>('/teams', { params });
+    if (Array.isArray(response)) {
+      return {
+        items: response,
+        total: response.length,
+      };
+    }
+    return response;
   },
 
   /**

@@ -10,6 +10,33 @@ import { randomUUID } from 'crypto'
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE || '104857600') // 100MB
 
+function serializeFile(file: {
+  id: string
+  filename: string
+  originalName: string
+  mimeType: string
+  size: number
+  path: string
+  sessionId: string
+  userId: string | null
+  createdAt: Date
+  metadata: string | null
+}) {
+  return {
+    id: file.id,
+    filename: file.filename,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    size: file.size,
+    path: file.path,
+    url: `/api/files/${file.id}`,
+    sessionId: file.sessionId,
+    userId: file.userId,
+    createdAt: file.createdAt.toISOString(),
+    metadata: file.metadata,
+  }
+}
+
 // GET - List files
 export async function GET() {
   try {
@@ -32,7 +59,7 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return successResponse(files)
+    return successResponse(files.map(serializeFile))
   } catch (error) {
     console.error('List files error:', error)
     return errorResponse('Internal server error', 500)
@@ -105,7 +132,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return successResponse(fileRecord, 'File uploaded successfully')
+    return successResponse(serializeFile(fileRecord), 'File uploaded successfully')
   } catch (error) {
     console.error('Upload file error:', error)
     return errorResponse('Internal server error', 500)

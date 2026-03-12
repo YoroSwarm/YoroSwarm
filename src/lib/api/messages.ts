@@ -14,6 +14,15 @@ export interface CreateMessageRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface FileMessageMetadata {
+  fileId?: string;
+  fileName?: string;
+  name?: string;
+  size?: number;
+  mimeType?: string;
+  url?: string;
+}
+
 // 创建广播消息请求
 export interface CreateBroadcastRequest {
   content: string;
@@ -28,6 +37,8 @@ export interface CreateConversationRequest {
   title?: string;
   participant_ids: string[];
   metadata?: Record<string, unknown>;
+  target_agent_id?: string;
+  target_agent_name?: string;
 }
 
 // 消息响应

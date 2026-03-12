@@ -5,21 +5,24 @@ import { cn } from '@/lib/utils';
 import { formatMessageGroup } from '@/lib/utils/date';
 import { MessageItem } from './MessageItem';
 import { Loader2 } from 'lucide-react';
-import { useMessages } from '@/hooks/use-messages';
+import type { Message } from '@/types/chat';
 
 interface MessageListProps {
   sessionId: string;
+  messages: Message[];
+  isLoading: boolean;
+  hasMore: boolean;
+  onLoadMore: () => void;
   className?: string;
 }
 
-export function MessageList({ sessionId, className }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
 
-  const { messages, isLoading, hasMore, loadMessages } = useMessages({
-    sessionId,
-    autoLoad: true,
-  });
+  useEffect(() => {
+    isFirstLoad.current = true;
+  }, [sessionId]);
 
   useEffect(() => {
     if (containerRef.current && isFirstLoad.current && !isLoading) {
@@ -32,9 +35,9 @@ export function MessageList({ sessionId, className }: MessageListProps) {
     if (!containerRef.current) return;
     const { scrollTop } = containerRef.current;
     if (scrollTop === 0 && hasMore && !isLoading) {
-      loadMessages(true);
+      onLoadMore();
     }
-  }, [hasMore, isLoading, loadMessages]);
+  }, [hasMore, isLoading, onLoadMore]);
 
   const groupMessages = useCallback(() => {
     const groups: { date: string; messages: typeof messages }[] = [];

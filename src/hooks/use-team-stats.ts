@@ -8,6 +8,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { teamsApi, type TeamStatusResponse } from '@/lib/api/teams';
+import { storage } from '@/utils/storage';
+
+const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
 
 interface UseTeamStatsOptions {
   teamId?: string;
@@ -15,29 +18,31 @@ interface UseTeamStatsOptions {
 }
 
 export function useTeamStats(options: UseTeamStatsOptions = {}) {
-  const { teamId = 'default', autoLoad = true } = options;
+  const { teamId, autoLoad = true } = options;
   const [stats, setStats] = useState<TeamStatusResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const resolvedTeamId = teamId || storage.get<string>(CURRENT_TEAM_STORAGE_KEY) || 'default';
 
   const loadStats = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await teamsApi.getTeamStatus(teamId);
+      const response = await teamsApi.getTeamStatus(resolvedTeamId);
       setStats(response);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载团队状态失败');
     } finally {
       setIsLoading(false);
     }
-  }, [teamId]);
+  }, [resolvedTeamId]);
 
   useEffect(() => {
-    if (autoLoad && teamId) {
+    if (autoLoad && resolvedTeamId) {
       loadStats();
     }
-  }, [autoLoad, teamId, loadStats]);
+  }, [autoLoad, resolvedTeamId, loadStats]);
 
   return {
     stats,

@@ -18,6 +18,7 @@ export async function GET() {
       teams: {
         'GET  /api/teams': 'List all teams',
         'POST /api/teams': 'Create new team',
+        'GET  /api/teams/{teamId}/status': 'Get team status summary',
       },
       agents: {
         'GET  /api/agents': 'List all agents',

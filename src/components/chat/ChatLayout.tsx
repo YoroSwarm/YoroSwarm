@@ -1,38 +1,73 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { SessionList } from './SessionList';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { useSessions } from '@/hooks/use-sessions';
+import { useMessages } from '@/hooks/use-messages';
+import { useWebSocket } from '@/hooks/use-websocket';
+import { useAgents } from '@/hooks/use-agents';
+import type { ChatMessagePayload, WebSocketMessage } from '@/types/websocket';
 import { PanelRightClose, PanelRightOpen, Menu, X } from 'lucide-react';
 
 interface ChatLayoutProps {
   className?: string;
+  initialSessionId?: string | null;
 }
 
-/**
- * 聊天界面三栏布局组件
- * 左侧：会话列表 | 中间：聊天区域 | 右侧：详情/工具面板
- */
-export function ChatLayout({ className }: ChatLayoutProps) {
+export function ChatLayout({ className, initialSessionId = null }: ChatLayoutProps) {
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSessionId);
 
   const { sessions } = useSessions();
+  const { agents } = useAgents();
 
-  // 获取当前会话标题
+  const resolvedSessionId = currentSessionId ?? initialSessionId ?? sessions[0]?.id ?? null;
+
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.id === resolvedSessionId) || null,
+    [resolvedSessionId, sessions]
+  );
+
+  const {
+    messages,
+    isLoading: isMessagesLoading,
+    hasMore,
+    loadMessages,
+    sendMessage,
+    appendRealtimeMessage,
+  } = useMessages({
+    sessionId: resolvedSessionId,
+    participants: currentSession?.participants,
+    autoLoad: true,
+  });
+
+  const wsUrl = useMemo(() => {
+    if (!resolvedSessionId || typeof window === 'undefined') return '';
+
+    const baseUrl = (process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001').replace(/\/$/, '');
+    return `${baseUrl}/ws/conversations/${resolvedSessionId}?conversationId=${resolvedSessionId}`;
+  }, [resolvedSessionId]);
+
+  useWebSocket({
+    url: wsUrl,
+    autoConnect: Boolean(wsUrl),
+    onMessage: (message: WebSocketMessage) => {
+      if (message.type !== 'chat_message') return;
+      appendRealtimeMessage(message.payload as ChatMessagePayload);
+    },
+  });
+
   const currentSessionTitle = useMemo(() => {
-    if (!currentSessionId) return null;
-    const session = sessions.find((s) => s.id === currentSessionId);
-    return session?.title || '未命名会话';
-  }, [currentSessionId, sessions]);
+    if (!resolvedSessionId) return null;
+    return currentSession?.title || '未命名会话';
+  }, [currentSession?.title, resolvedSessionId]);
 
   return (
     <div className={cn('flex h-screen w-full bg-background', className)}>
-      {/* 移动端遮罩 */}
       {isMobileMenuOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 lg:hidden"
@@ -40,7 +75,6 @@ export function ChatLayout({ className }: ChatLayoutProps) {
         />
       )}
 
-      {/* 左侧：会话列表 */}
       <aside
         className={cn(
           'fixed inset-y-0 left-0 z-50 w-72 transform border-r border-border bg-card transition-transform duration-300 ease-in-out lg:static lg:translate-x-0',
@@ -48,7 +82,7 @@ export function ChatLayout({ className }: ChatLayoutProps) {
         )}
       >
         <SessionList
-          currentSessionId={currentSessionId}
+          currentSessionId={resolvedSessionId}
           onSessionSelect={(id) => {
             setCurrentSessionId(id);
             setIsMobileMenuOpen(false);
@@ -57,25 +91,23 @@ export function ChatLayout({ className }: ChatLayoutProps) {
         />
       </aside>
 
-      {/* 中间：聊天区域 */}
-      <main className="flex flex-1 flex-col min-w-0">
-        {/* 顶部导航栏 */}
-        <header className="flex h-14 items-center justify-between border-b border-border px-4 bg-card/50 backdrop-blur-sm">
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-14 items-center justify-between border-b border-border bg-card/50 px-4 backdrop-blur-sm">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="p-2 -ml-2 rounded-md hover:bg-accent lg:hidden"
+              className="-ml-2 rounded-md p-2 hover:bg-accent lg:hidden"
             >
               <Menu className="h-5 w-5" />
             </button>
-            <h1 className="font-semibold text-lg truncate">
+            <h1 className="truncate text-lg font-semibold">
               {currentSessionTitle || '选择或创建一个会话'}
             </h1>
           </div>
 
           <button
             onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
-            className="p-2 rounded-md hover:bg-accent hidden md:flex"
+            className="hidden rounded-md p-2 hover:bg-accent md:flex"
             title={isRightPanelOpen ? '关闭右侧面板' : '打开右侧面板'}
           >
             {isRightPanelOpen ? (
@@ -86,30 +118,38 @@ export function ChatLayout({ className }: ChatLayoutProps) {
           </button>
         </header>
 
-        {/* 消息列表区域 */}
         <div className="flex-1 overflow-hidden">
-          {currentSessionId ? (
-            <MessageList sessionId={currentSessionId} />
+          {resolvedSessionId ? (
+            <MessageList
+              sessionId={resolvedSessionId}
+              messages={messages}
+              isLoading={isMessagesLoading}
+              hasMore={hasMore}
+              onLoadMore={() => {
+                void loadMessages(true);
+              }}
+            />
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
               <div className="mb-4 text-6xl">💬</div>
               <p className="text-lg">选择一个会话开始聊天</p>
-              <p className="text-sm mt-2">或创建一个新的会话</p>
+              <p className="mt-2 text-sm">或创建一个新的会话</p>
             </div>
           )}
         </div>
 
-        {/* 底部输入框 */}
-        <div className="border-t border-border bg-card/50 backdrop-blur-sm p-4">
+        <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
           <ChatInput
-            sessionId={currentSessionId}
-            disabled={!currentSessionId}
-            placeholder={currentSessionId ? '输入消息...' : '请先选择一个会话'}
+            sessionId={resolvedSessionId}
+            disabled={!resolvedSessionId}
+            placeholder={resolvedSessionId ? '输入消息...' : '请先选择一个会话'}
+            onSend={async (content, attachments) => {
+              await sendMessage(content, 'text', attachments);
+            }}
           />
         </div>
       </main>
 
-      {/* 右侧：详情/工具面板 */}
       <aside
         className={cn(
           'fixed inset-y-0 right-0 z-30 w-80 transform border-l border-border bg-card transition-transform duration-300 ease-in-out md:static',
@@ -121,22 +161,21 @@ export function ChatLayout({ className }: ChatLayoutProps) {
             <h2 className="font-semibold">详情</h2>
             <button
               onClick={() => setIsRightPanelOpen(false)}
-              className="p-2 rounded-md hover:bg-accent"
+              className="rounded-md p-2 hover:bg-accent"
             >
               <X className="h-5 w-5" />
             </button>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
-            {currentSessionId ? (
+            {resolvedSessionId ? (
               <div className="space-y-6">
-                {/* 会话信息 */}
                 <section>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-3">会话信息</h3>
+                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">会话信息</h3>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">会话ID</span>
-                      <span className="font-mono text-xs">{currentSessionId.slice(0, 8)}...</span>
+                      <span className="font-mono text-xs">{resolvedSessionId.slice(0, 8)}...</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">状态</span>
@@ -145,25 +184,40 @@ export function ChatLayout({ className }: ChatLayoutProps) {
                   </div>
                 </section>
 
-                {/* 参与者 */}
                 <section>
-                  <h3 className="text-sm font-medium text-muted-foreground mb-3">参与者</h3>
+                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">参与者</h3>
                   <div className="space-y-2">
-                    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors">
-                      <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-sm font-medium">
-                        我
+                    {(currentSession?.participants.length
+                      ? currentSession.participants
+                      : agents.map((agent) => ({
+                          id: agent.id,
+                          name: agent.name,
+                          role: agent.description || agent.type,
+                          status: agent.status,
+                        }))).map((participant) => (
+                      <div key={participant.id} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-medium">
+                          {participant.name.charAt(0)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">{participant.name}</p>
+                          <p className="text-xs text-muted-foreground">{participant.role}</p>
+                        </div>
+                        <div className={cn(
+                          'h-2 w-2 rounded-full',
+                          participant.status === 'offline'
+                            ? 'bg-neutral-300'
+                            : participant.status === 'busy'
+                              ? 'bg-amber-500'
+                              : 'bg-green-500'
+                        )} />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">当前用户</p>
-                        <p className="text-xs text-muted-foreground">在线</p>
-                      </div>
-                      <div className="h-2 w-2 rounded-full bg-green-500"></div>
-                    </div>
+                    ))}
                   </div>
                 </section>
               </div>
             ) : (
-              <div className="text-center text-muted-foreground py-8">
+              <div className="py-8 text-center text-muted-foreground">
                 选择一个会话查看详情
               </div>
             )}

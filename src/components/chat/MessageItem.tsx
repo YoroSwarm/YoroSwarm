@@ -35,6 +35,8 @@ export function MessageItem({
   const isSystem = message.sender.type === 'system';
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const primaryAttachment = message.attachments?.[0];
+  const attachmentUrl = primaryAttachment?.url || message.content;
 
   const handleCopy = async (text: string) => {
     await navigator.clipboard.writeText(text);
@@ -104,12 +106,12 @@ export function MessageItem({
         return (
           <div className="relative group/image">
             <Image
-              src={message.content}
+              src={attachmentUrl}
               alt="图片消息"
               width={800}
               height={600}
               className="max-w-full max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
-              onClick={() => window.open(message.content, '_blank')}
+              onClick={() => window.open(attachmentUrl, '_blank')}
             />
           </div>
         );
@@ -131,7 +133,7 @@ export function MessageItem({
               </p>
             </div>
             <a
-              href={message.content}
+              href={attachmentUrl}
               download
               className="p-2 rounded hover:bg-accent transition-colors"
             >

@@ -24,12 +24,12 @@ export default function DashboardPage() {
     totalTasks,
     completedTasks,
     isLoading: isStatsLoading,
-  } = useTeamStats({ teamId: "default" });
+  } = useTeamStats();
 
   const isLoading = isAgentsLoading || isTasksLoading || isStatsLoading;
 
   // 计算统计数据
-  const onlineAgents = agents.filter((a) => a.status === "online").length;
+  const onlineAgents = agents.filter((a) => a.status !== "offline" && a.status !== "error").length;
   const busyAgents = agents.filter((a) => a.status === "busy").length;
   const pendingTasks = tasks.filter((t) => t.status === "pending").length;
   const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;

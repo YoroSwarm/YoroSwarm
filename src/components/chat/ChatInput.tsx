@@ -18,7 +18,7 @@ interface ChatInputProps {
   sessionId: string | null;
   disabled?: boolean;
   placeholder?: string;
-  onSend?: (content: string, attachments?: File[]) => void;
+  onSend?: (content: string, attachments?: File[]) => Promise<void> | void;
 }
 
 export function ChatInput({
@@ -29,7 +29,7 @@ export function ChatInput({
   const [content, setContent] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
-  const [isUploading] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
@@ -144,15 +144,20 @@ export function ChatInput({
     }, 0);
   };
 
-  const handleSend = () => {
-    if ((!content.trim() && attachments.length === 0) || disabled) return;
+  const handleSend = async () => {
+    if ((!content.trim() && attachments.length === 0) || disabled || isSending) return;
 
-    onSend?.(content.trim(), attachments.length > 0 ? attachments : undefined);
+    try {
+      setIsSending(true);
+      await onSend?.(content.trim(), attachments.length > 0 ? attachments : undefined);
 
-    setContent('');
-    setAttachments([]);
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+      setContent('');
+      setAttachments([]);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = 'auto';
+      }
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -291,7 +296,7 @@ export function ChatInput({
 
         <button
           onClick={handleSend}
-          disabled={disabled || (!content.trim() && attachments.length === 0)}
+          disabled={disabled || isSending || (!content.trim() && attachments.length === 0)}
           className={cn(
             'flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all',
             content.trim() || attachments.length > 0
@@ -300,7 +305,7 @@ export function ChatInput({
           )}
           title="发送"
         >
-          {isUploading ? (
+          {isSending ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <Send className="h-5 w-5" />

@@ -4,6 +4,7 @@ import { verifyAccessToken } from '@/lib/auth/jwt'
 import { successResponse, errorResponse, unauthorizedResponse } from '@/lib/api/response'
 import { cookies } from 'next/headers'
 import { SharedTaskStatus } from '@prisma/client'
+import { mapApiStatusToDb, mapPriorityToNumber, serializeTask, getLeadAgent, resolveTeam } from '@/lib/server/swarm'
 
 // GET - List tasks
 export async function GET(request: NextRequest) {
@@ -26,6 +27,29 @@ export async function GET(request: NextRequest) {
     const assigneeId = searchParams.get('assigneeId')
     const teamId = searchParams.get('teamId')
 
+    if (teamId || assigneeId) {
+      const team = await resolveTeam(teamId)
+      const tasks = await prisma.teamLeadTask.findMany({
+        where: {
+          ...(team?.id ? { teamId: team.id } : {}),
+          ...(assigneeId ? { assigneeId } : {}),
+          ...(status ? { status: mapApiStatusToDb(status) } : {}),
+        },
+        include: {
+          assignee: true,
+          parent: true,
+          subtasks: true,
+        },
+        orderBy: [
+          { priority: 'desc' },
+          { createdAt: 'desc' },
+        ],
+      })
+
+      const items = tasks.map(serializeTask)
+      return successResponse({ items, total: items.length })
+    }
+
     const tasks = await prisma.sharedTask.findMany({
       where: {
         ...(status ? { status: status.toUpperCase() as SharedTaskStatus } : {}),
@@ -42,7 +66,7 @@ export async function GET(request: NextRequest) {
       ],
     })
 
-    return successResponse(tasks)
+    return successResponse({ items: tasks, total: tasks.length })
   } catch (error) {
     console.error('List tasks error:', error)
     return errorResponse('Internal server error', 500)
@@ -71,6 +95,39 @@ export async function POST(request: NextRequest) {
 
     if (!title) {
       return errorResponse('Task title is required', 400)
+    }
+
+    if (teamId) {
+      const team = await resolveTeam(teamId)
+      if (!team) {
+        return errorResponse('Team not found', 404)
+      }
+
+      const creator = await getLeadAgent(team.id)
+      if (!creator) {
+        return errorResponse('No creator agent available', 400)
+      }
+
+      const task = await prisma.teamLeadTask.create({
+        data: {
+          title,
+          description,
+          priority: mapPriorityToNumber(priority),
+          assigneeId,
+          creatorId: creator.id,
+          teamId: team.id,
+          parentId: parentId || null,
+          dueDate: dueDate ? new Date(dueDate) : null,
+          status: assigneeId ? 'ASSIGNED' : 'PENDING',
+        },
+        include: {
+          assignee: true,
+          parent: true,
+          subtasks: true,
+        },
+      })
+
+      return successResponse(serializeTask(task), 'Task created successfully')
     }
 
     const task = await prisma.sharedTask.create({
