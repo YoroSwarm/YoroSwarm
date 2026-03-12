@@ -1,0 +1,96 @@
+export type WebSocketMessageType =
+  | 'connected'
+  | 'disconnected'
+  | 'message'
+  | 'agent_status'
+  | 'task_update'
+  | 'chat_message'
+  | 'system'
+  | 'broadcast'
+  | 'presence'
+  | 'typing'
+  | 'read_receipt'
+  | 'ping'
+  | 'pong'
+  | 'ack'
+  | 'error'
+  | 'subscribed'
+  | 'unsubscribed'
+  | 'message_received';
+
+export interface WebSocketMessage {
+  type: WebSocketMessageType;
+  payload: unknown;
+  message_id?: string;
+  requires_ack?: boolean;
+}
+
+export type AgentStatus = 'created' | 'initializing' | 'idle' | 'running' | 'paused' | 'terminating' | 'terminated' | 'error';
+
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+
+export interface AgentStatusUpdate {
+  agent_id: string;
+  name: string;
+  status: AgentStatus;
+  current_task_id?: string;
+  total_tasks_completed: number;
+  total_tasks_failed: number;
+  last_active_at?: string;
+  timestamp: string;
+}
+
+export interface TaskStatusUpdate {
+  task_id: string;
+  title: string;
+  status: TaskStatus;
+  assignee_id?: string;
+  assignee_name?: string;
+  priority: 'low' | 'medium' | 'high' | 'critical';
+  progress?: number;
+  message?: string;
+  timestamp: string;
+}
+
+export interface SystemNotification {
+  level: 'info' | 'warning' | 'error' | 'success';
+  title: string;
+  message: string;
+  metadata?: Record<string, unknown>;
+  timestamp: string;
+}
+
+export interface ChatMessagePayload {
+  id: string;
+  agent_id: string;
+  agent_name: string;
+  content: string;
+  type: 'message' | 'action' | 'error' | 'system';
+  conversation_id?: string;
+  timestamp: string;
+}
+
+export interface PresenceUpdate {
+  user_id: string;
+  status: 'online' | 'away' | 'offline';
+  timestamp: string;
+}
+
+export interface TypingIndicator {
+  user_id: string;
+  conversation_id: string;
+  is_typing: boolean;
+  timestamp: string;
+}
+
+export interface ReadReceipt {
+  user_id: string;
+  message_id: string;
+  conversation_id: string;
+  read_at: string;
+}
+
+export interface WebSocketSubscription {
+  target: 'agent' | 'task' | 'all_agents' | 'all_tasks';
+  id?: string;
+}

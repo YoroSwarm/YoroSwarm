@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ============================================
+// 用户和认证模块
+// ============================================
+
+model User {
+  id             String    @id @default(uuid())
+  username       String    @unique
+  email          String    @unique
+  hashedPassword String    @map("hashed_password")
+  isActive       Boolean   @default(true) @map("is_active")
+  isSuperuser    Boolean   @default(false) @map("is_superuser")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastLogin      DateTime? @map("last_login")
+
+  // Relations
+  sessions      Session[]
+  sentMessages     Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  conversationMemberships ConversationParticipant[]
+  files         File[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  refreshToken String    @unique @map("refresh_token")
+  sessionId    String    @unique @map("session_id")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  isActive     Boolean   @default(true) @map("is_active")
+  expiresAt    DateTime  @map("expires_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastUsedAt   DateTime  @default(now()) @map("last_used_at")
+
+  // Relations
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  files File[]
+
+  @@map("sessions")
+}
+
+// ============================================
+// 文件模块
+// ============================================
+
+model File {
+  id           String   @id @default(uuid())
+  filename     String
+  originalName String   @map("original_name")
+  mimeType     String   @map("mime_type")
+  size         Int
+  path         String
+  sessionId    String   @map("session_id")
+  userId       String?  @map("user_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  metadata     String? // JSON string
+
+  // Relations
+  session   Session        @relation(fields: [sessionId], references: [id])
+  user      User?          @relation(fields: [userId], references: [id])
+  thumbnails FileThumbnail[]
+
+  @@map("files")
+}
+
+model FileThumbnail {
+  id      String @id @default(uuid())
+  fileId  String @map("file_id")
+  size    String // small, medium, large
+  width   Int
+  height  Int
+  path    String
+
+  // Relations
+  file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@map("file_thumbnails")
+}
+
+// ============================================
+// 消息模块
+// ============================================
+
+enum MessageType {
+  TEXT
+  TASK_UPDATE
+  AGENT_STATUS
+  SYSTEM
+  FILE
+  BROADCAST
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+enum ConversationType {
+  DIRECT
+  GROUP
+  BROADCAST
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  type           MessageType   @default(TEXT)
+  senderId       String        @map("sender_id")
+  recipientId    String?       @map("recipient_id")
+  conversationId String?       @map("conversation_id")
+  content        String
+  metadata       String? // JSON string
+  status         MessageStatus @default(SENT)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  readAt         DateTime?     @map("read_at")
+
+  // Relations
+  sender       User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  recipient    User?         @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+model Conversation {
+  id          String          @id @default(uuid())
+  type        ConversationType
+  title       String?
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+
+  // Relations
+  messages     Message[]
+  participants ConversationParticipant[]
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String    @id @default(uuid())
+  conversationId String    @map("conversation_id")
+  userId         String    @map("user_id")
+  joinedAt       DateTime  @default(now()) @map("joined_at")
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+// ============================================
+// Team Lead 模块
+// ============================================
+
+enum TeamLeadAgentStatus {
+  IDLE
+  BUSY
+  OFFLINE
+  ERROR
+}
+
+enum TeamLeadTaskStatus {
+  PENDING
+  ASSIGNED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkflowStatus {
+  CREATED
+  RUNNING
+  PAUSED
+  COMPLETED
+  FAILED
+  STOPPED
+}
+
+model Team {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   String?  @map("created_by")
+  config      String   @default("{}") // JSON string
+
+  // Relations
+  agents    Agent[]
+  tasks     TeamLeadTask[]
+  workflows Workflow[]
+
+  @@map("teams")
+}
+
+model Agent {
+  id          String              @id @default(uuid())
+  name        String
+  role        String
+  description String?
+  status      TeamLeadAgentStatus @default(IDLE)
+  teamId      String              @map("team_id")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  // Configuration
+  capabilities String? // JSON array
+  config       String  @default("{}") // JSON string
+
+  // Relations
+  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  tasks    TeamLeadTask[] @relation("AgentTasks")
+  createdTasks TeamLeadTask[] @relation("CreatedTasks")
+
+  @@map("agents")
+}
+
+model TeamLeadTask {
+  id          String             @id @default(uuid())
+  title       String
+  description String?
+  status      TeamLeadTaskStatus @default(PENDING)
+  priority    Int                @default(2) // 1-4: LOW, MEDIUM, HIGH, CRITICAL
+  assigneeId  String?            @map("assignee_id")
+  creatorId   String             @map("creator_id")
+  teamId      String?            @map("team_id")
+  parentId    String?            @map("parent_id")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  startedAt   DateTime?          @map("started_at")
+  completedAt DateTime?          @map("completed_at")
+  dueDate     DateTime?          @map("due_date")
+
+  // Relations
+  assignee   Agent?         @relation("AgentTasks", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creator    Agent          @relation("CreatedTasks", fields: [creatorId], references: [id], onDelete: Cascade)
+  team       Team?          @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  parent     TeamLeadTask?  @relation("TaskDependencies", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks   TeamLeadTask[] @relation("TaskDependencies")
+
+  @@map("team_lead_tasks")
+}
+
+model Workflow {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  status      WorkflowStatus @default(CREATED)
+  teamId      String         @map("team_id")
+  definition  String         @default("{}") // JSON string
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+  startedAt   DateTime?      @map("started_at")
+  completedAt DateTime?      @map("completed_at")
+
+  // Relations
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@map("workflows")
+}
+
+// ============================================
+// 共享任务列表模块 (Shared Task List)
+// ============================================
+
+enum SharedTaskStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+model SharedTask {
+  id          Int             @id @default(autoincrement())
+  title       String
+  description String?
+  status      SharedTaskStatus @default(PENDING)
+  priority    Int             @default(2) // 1-4
+  assigneeId  String?         @map("assignee_id")
+  creatorId   String          @map("creator_id")
+  teamId      String?         @map("team_id")
+  parentId    Int?            @map("parent_id")
+  createdAt   DateTime        @default(now()) @map("created_at")
+  updatedAt   DateTime        @updatedAt @map("updated_at")
+  startedAt   DateTime?       @map("started_at")
+  completedAt DateTime?       @map("completed_at")
+  dueDate     DateTime?       @map("due_date")
+
+  // Relations
+  parent   SharedTask?  @relation("SharedTaskDependencies", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks SharedTask[] @relation("SharedTaskDependencies")
+
+  @@map("shared_tasks")
+}
