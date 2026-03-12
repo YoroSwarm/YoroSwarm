@@ -68,7 +68,7 @@ export default function DashboardPage() {
           icon={Users}
           trend={`${onlineAgents} 在线`}
           trendUp={true}
-          href="/agents"
+          href="/chat"
         />
         <StatCard
           title="在线Agent"
@@ -76,7 +76,7 @@ export default function DashboardPage() {
           icon={Activity}
           trend={`${busyAgents} 忙碌`}
           trendUp={activeAgents > 0}
-          href="/agents"
+          href="/chat"
         />
         <StatCard
           title="进行中任务"
@@ -104,7 +104,7 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold">Agent 状态</h2>
               <Link
-                href="/agents"
+                href="/chat"
                 className="text-sm text-primary hover:underline"
               >
                 查看全部
@@ -156,12 +156,12 @@ export default function DashboardPage() {
               {agents.length === 0 && !isLoading && (
                 <div className="text-center py-8 text-muted-foreground">
                   <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                  <p>暂无 Agent</p>
+                  <p>暂无队友</p>
                   <Link
-                    href="/agents"
+                    href="/chat"
                     className="text-sm text-primary hover:underline mt-1 inline-block"
                   >
-                    创建第一个 Agent
+                    打开会话
                   </Link>
                 </div>
               )}
@@ -239,19 +239,19 @@ export default function DashboardPage() {
                 href="/chat"
                 icon={MessageSquare}
                 label="开始对话"
-                description="与Agent进行实时交流"
+                description="与 Lead 和队友进行实时交流"
               />
               <QuickActionButton
                 href="/tasks"
                 icon={Zap}
                 label="创建任务"
-                description="分配新任务给Agent"
+                description="分配新任务给队友"
               />
               <QuickActionButton
-                href="/agents"
+                href="/chat"
                 icon={Users}
-                label="管理Agent"
-                description="查看和管理所有Agent"
+                label="进入会话"
+                description="查看 Swarm 对话与协作状态"
               />
             </div>
           </div>
