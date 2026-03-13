@@ -42,6 +42,11 @@ export interface Message {
     codeLanguage?: string;
     replyTo?: string;
     edited?: boolean;
+    url?: string;
+    fileName?: string;
+    fileId?: string;
+    mimeType?: string;
+    size?: number;
   };
 }
 

@@ -1,5 +1,5 @@
 import { createReadStream } from 'fs'
-import { stat } from 'fs/promises'
+import { stat, unlink } from 'fs/promises'
 import { basename } from 'path'
 import { Readable } from 'stream'
 import prisma from '@/lib/db'
@@ -69,6 +69,66 @@ export async function GET(request: Request, context: RouteContext) {
     })
   } catch (error) {
     console.error('Get file error:', error)
+    return errorResponse('Internal server error', 500)
+  }
+}
+
+export async function DELETE(request: Request, context: RouteContext) {
+  try {
+    const cookieStore = await cookies()
+    const token = cookieStore.get('access_token')?.value
+
+    if (!token) {
+      return unauthorizedResponse('Authentication required')
+    }
+
+    let payload
+    try {
+      payload = verifyAccessToken(token)
+    } catch {
+      return unauthorizedResponse('Invalid token')
+    }
+
+    const { fileId } = await context.params
+    const file = await prisma.file.findFirst({
+      where: {
+        id: fileId,
+        userId: payload.userId,
+      },
+    })
+
+    if (!file) {
+      return notFoundResponse('File not found')
+    }
+
+    // Delete physical file
+    try {
+      await unlink(file.path)
+    } catch {
+      // File may already be deleted from disk, continue
+    }
+
+    // Delete related artifacts
+    await prisma.artifact.deleteMany({
+      where: { fileId },
+    })
+
+    // Delete thumbnails
+    await prisma.fileThumbnail.deleteMany({
+      where: { fileId },
+    })
+
+    // Delete file record
+    await prisma.file.delete({
+      where: { id: fileId },
+    })
+
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (error) {
+    console.error('Delete file error:', error)
     return errorResponse('Internal server error', 500)
   }
 }

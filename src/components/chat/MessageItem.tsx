@@ -17,8 +17,15 @@ import {
   Check as CheckIcon,
   MoreHorizontal,
   CornerUpLeft,
+  Download,
 } from 'lucide-react';
 import type { Message } from '@/types/chat';
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 interface MessageItemProps {
   message: Message;
@@ -116,31 +123,54 @@ export function MessageItem({
           </div>
         );
 
-      case 'file':
+      case 'file': {
+        const fileUrl = primaryAttachment?.url || message.metadata?.url;
+        const fileName = primaryAttachment?.name || message.metadata?.fileName || '文件';
+        const fileSize = primaryAttachment?.size || message.metadata?.size;
+        const fileMimeType = (message.metadata?.mimeType as string) || '';
+        const isImage = fileMimeType.startsWith('image/');
+
+        if (isImage && fileUrl) {
+          return (
+            <div className="relative group/image">
+              <img
+                src={fileUrl as string}
+                alt={fileName as string}
+                className="max-w-full max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
+                onClick={() => window.open(fileUrl as string, '_blank')}
+              />
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="truncate">{fileName as string}</span>
+                {fileSize && <span>({formatFileSize(fileSize as number)})</span>}
+              </div>
+            </div>
+          );
+        }
+
         return (
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-sm">
             <div className="flex h-10 w-10 items-center justify-center rounded bg-primary/10">
               <FileText className="h-5 w-5 text-primary" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">
-                {message.attachments?.[0]?.name || '文件'}
-              </p>
+              <p className="text-sm font-medium truncate">{fileName as string}</p>
               <p className="text-xs text-muted-foreground">
-                {message.attachments?.[0]?.size
-                  ? `${(message.attachments[0].size / 1024).toFixed(1)} KB`
-                  : '未知大小'}
+                {fileSize ? formatFileSize(fileSize as number) : '未知大小'}
               </p>
             </div>
-            <a
-              href={attachmentUrl}
-              download
-              className="p-2 rounded hover:bg-accent transition-colors"
-            >
-              <Copy className="h-4 w-4" />
-            </a>
+            {fileUrl && (
+              <a
+                href={`${fileUrl}?download=1`}
+                download={fileName as string}
+                className="p-2 rounded hover:bg-accent transition-colors"
+                title="下载文件"
+              >
+                <Download className="h-4 w-4" />
+              </a>
+            )}
           </div>
         );
+      }
 
       case 'system':
         return (

@@ -29,6 +29,28 @@ export const teammateTools: ToolDefinition[] = [
     },
   },
   {
+    name: 'write_file',
+    description: '创建一个文件并保存到系统中，用户可以下载。适用于创建代码文件、文档、报告等。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        filename: {
+          type: 'string',
+          description: '文件名（包含扩展名），如 "report.md", "analysis.py", "data.csv"',
+        },
+        content: {
+          type: 'string',
+          description: '文件的完整内容',
+        },
+        mime_type: {
+          type: 'string',
+          description: '文件MIME类型，如 "text/markdown", "text/plain", "application/json"。如不指定将根据扩展名自动推断。',
+        },
+      },
+      required: ['filename', 'content'],
+    },
+  },
+  {
     name: 'read_file',
     description: '读取一个已上传的文件内容。通过文件ID获取文件信息。',
     input_schema: {

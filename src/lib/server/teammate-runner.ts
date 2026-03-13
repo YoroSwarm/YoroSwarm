@@ -10,6 +10,8 @@ import { createInternalThread, sendInternalMessage } from './internal-bus'
 import { runLeadReEvaluation } from './lead-runner'
 import * as fs from 'fs'
 import * as path from 'path'
+import { randomUUID } from 'crypto'
+import { mkdir, writeFile as writeFileFs } from 'fs/promises'
 
 /**
  * 运行 Teammate Agent Loop
@@ -110,6 +112,40 @@ export async function runTeammateLoop(
           },
         })
 
+        // Also save artifact content as a downloadable file
+        const artFilename = `${(input.title as string).replace(/[^a-zA-Z0-9\u4e00-\u9fff._-]/g, '_')}.${getArtifactExtension(input.kind as string)}`
+        const artMimeType = getArtifactMimeType(input.kind as string)
+        const artContent = input.content as string
+        const UPLOAD_DIR_ART = process.env.UPLOAD_DIR || './uploads'
+        const artUniqueName = `${randomUUID()}${path.extname(artFilename)}`
+        const artFilePath = path.join(UPLOAD_DIR_ART, artUniqueName)
+
+        await mkdir(UPLOAD_DIR_ART, { recursive: true })
+        await writeFileFs(artFilePath, artContent, 'utf-8')
+
+        const artFileSession = await prisma.session.findFirst({
+          where: { userId: session.userId, isActive: true },
+        })
+
+        const artFileRecord = await prisma.file.create({
+          data: {
+            filename: artUniqueName,
+            originalName: artFilename,
+            mimeType: artMimeType,
+            size: Buffer.byteLength(artContent, 'utf-8'),
+            path: artFilePath,
+            sessionId: artFileSession?.id || '',
+            swarmSessionId,
+            userId: session.userId,
+          },
+        })
+
+        // Link file to artifact
+        await prisma.artifact.update({
+          where: { id: artifact.id },
+          data: { fileId: artFileRecord.id },
+        })
+
         publishRealtimeMessage(
           {
             type: 'internal_message',
@@ -132,6 +168,77 @@ export async function runTeammateLoop(
           artifact_id: artifact.id,
           title: artifact.title,
           kind: artifact.kind,
+          file_id: artFileRecord.id,
+        })
+      }
+
+      case 'write_file': {
+        const filename = input.filename as string
+        const content = input.content as string
+        const mimeType = (input.mime_type as string) || inferMimeType(filename)
+
+        const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
+        const ext = path.extname(filename) || ''
+        const uniqueName = `${randomUUID()}${ext}`
+        const filePath = path.join(UPLOAD_DIR, uniqueName)
+
+        await mkdir(UPLOAD_DIR, { recursive: true })
+        await writeFileFs(filePath, content, 'utf-8')
+
+        // Get the session to find userId
+        const fileSession = await prisma.session.findFirst({
+          where: { userId: session.userId, isActive: true },
+        })
+
+        const fileRecord = await prisma.file.create({
+          data: {
+            filename: uniqueName,
+            originalName: filename,
+            mimeType,
+            size: Buffer.byteLength(content, 'utf-8'),
+            path: filePath,
+            sessionId: fileSession?.id || '',
+            swarmSessionId,
+            userId: session.userId,
+          },
+        })
+
+        // Also create an artifact to link file to task
+        await prisma.artifact.create({
+          data: {
+            swarmSessionId,
+            ownerAgentId: teammateId,
+            sourceTaskId: taskId,
+            kind: 'generated_file',
+            fileId: fileRecord.id,
+            title: filename,
+            summary: `由 ${teammate.name} 生成的文件`,
+          },
+        })
+
+        publishRealtimeMessage(
+          {
+            type: 'internal_message',
+            payload: {
+              agent_id: teammateId,
+              agent_name: teammate.name,
+              action: 'file_created',
+              file_name: filename,
+              file_id: fileRecord.id,
+              swarm_session_id: swarmSessionId,
+              message: `${teammate.name} 创建了文件: ${filename}`,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
+
+        return JSON.stringify({
+          success: true,
+          file_id: fileRecord.id,
+          filename,
+          url: `/api/files/${fileRecord.id}`,
+          size: fileRecord.size,
         })
       }
 
@@ -358,11 +465,12 @@ ${caps.length > 0 ? `- 能力: ${caps.join(', ')}` : ''}
 
 ## 工作规则
 1. 专注于你被分配的任务，认真完成它
-2. 如果需要创建文档、代码或其他产出物，使用 write_artifact 工具
-3. 可以使用 update_task_progress 报告进展
-4. 可以使用 send_message_to_lead 与 Lead 沟通（如遇到问题或需要更多信息）
-5. 完成任务后，**必须**使用 report_task_completion 工具汇报结果
-6. 如果任务涉及文件，使用 read_file 工具读取文件内容
+2. 可以使用 update_task_progress 报告进展
+3. 可以使用 send_message_to_lead 与 Lead 沟通（如遇到问题或需要更多信息）
+4. 完成任务后，**必须**使用 report_task_completion 工具汇报结果
+5. 如果任务涉及文件，使用 read_file 工具读取文件内容
+6. 如果需要创建文件让用户下载（代码文件、报告等），使用 write_file 工具
+7. 如果需要创建文档、分析报告等工件，使用 write_artifact 工具（内容也会保存为可下载文件）
 
 ## 输出要求
 - 产出高质量的工作成果
@@ -494,4 +602,66 @@ async function triggerLeadReEvaluation(
   // Small delay to let DB writes settle
   await new Promise(resolve => setTimeout(resolve, 1000))
   await runLeadReEvaluation(swarmSessionId, leadAgentId, userId, taskTitle, report)
+}
+
+function inferMimeType(filename: string): string {
+  const ext = path.extname(filename).toLowerCase()
+  const mimeTypes: Record<string, string> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.json': 'application/json',
+    '.xml': 'application/xml',
+    '.csv': 'text/csv',
+    '.py': 'text/x-python',
+    '.java': 'text/x-java',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-c++',
+    '.go': 'text/x-go',
+    '.rs': 'text/x-rust',
+    '.rb': 'text/x-ruby',
+    '.php': 'text/x-php',
+    '.sh': 'text/x-shellscript',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.sql': 'text/x-sql',
+    '.r': 'text/x-r',
+    '.swift': 'text/x-swift',
+    '.kt': 'text/x-kotlin',
+    '.tex': 'text/x-latex',
+    '.log': 'text/plain',
+    '.svg': 'image/svg+xml',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.zip': 'application/zip',
+  }
+  return mimeTypes[ext] || 'application/octet-stream'
+}
+
+function getArtifactExtension(kind: string): string {
+  switch (kind) {
+    case 'code': return 'txt'
+    case 'document': return 'md'
+    case 'analysis': return 'md'
+    case 'report': return 'md'
+    case 'spreadsheet': return 'csv'
+    case 'outline': return 'md'
+    default: return 'txt'
+  }
+}
+
+function getArtifactMimeType(kind: string): string {
+  switch (kind) {
+    case 'code': return 'text/plain'
+    case 'spreadsheet': return 'text/csv'
+    default: return 'text/markdown'
+  }
 }

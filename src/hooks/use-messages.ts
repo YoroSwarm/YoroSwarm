@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { swarmSessionsApi, type ExternalMessageResponse } from '@/lib/api/swarm-sessions';
+import { swarmSessionsApi, type ExternalMessageResponse, type SendExternalMessageRequest } from '@/lib/api/swarm-sessions';
 import { filesApi } from '@/lib/api/files';
 import type { Agent, Message } from '@/types/chat';
 import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload } from '@/types/websocket';
@@ -131,43 +131,84 @@ export function useMessages(options: UseMessagesOptions) {
     if (!trimmed && files.length === 0) return;
 
     try {
-      if (trimmed) {
+      // Upload files first
+      const uploadedFiles: Array<{ id: string; originalName: string; mimeType: string; size: number; url: string }> = [];
+      for (const file of files) {
+        const uploaded = await filesApi.uploadFile(file, activeSessionId);
+        uploadedFiles.push({
+          id: uploaded.id,
+          originalName: uploaded.originalName,
+          mimeType: uploaded.mimeType,
+          size: uploaded.size,
+          url: uploaded.url,
+        });
+      }
+
+      // Send text message (with optional file attachments)
+      if (trimmed || uploadedFiles.length > 0) {
         const tempId = `temp-${Date.now()}`;
         optimisticIds.current.add(tempId);
+        
+        const displayContent = trimmed || uploadedFiles.map(f => f.originalName).join(', ');
+        
         setMessages((prev) => [...prev, {
           id: tempId,
           sessionId: activeSessionId,
-          type: 'text',
-          content: trimmed,
+          type: uploadedFiles.length > 0 && !trimmed ? 'file' : 'text',
+          content: displayContent,
           sender: { id: 'user', type: 'user', name: '我' },
           status: 'sending',
           createdAt: new Date().toISOString(),
+          attachments: uploadedFiles.map(f => ({
+            id: f.id,
+            name: f.originalName,
+            type: (f.mimeType.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
+            size: f.size,
+            url: f.url,
+          })),
         }]);
 
-        const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, {
-          content: trimmed,
-          message_type: 'text',
-        });
+        const messagePayload: SendExternalMessageRequest = {
+          content: displayContent,
+          message_type: trimmed ? 'text' : 'file',
+        };
 
+        if (uploadedFiles.length > 0) {
+          messagePayload.metadata = {
+            ...(trimmed ? {} : {
+              fileId: uploadedFiles[0].id,
+              fileName: uploadedFiles[0].originalName,
+              mimeType: uploadedFiles[0].mimeType,
+              size: uploadedFiles[0].size,
+              url: uploadedFiles[0].url,
+            }),
+            attachments: uploadedFiles.map(f => ({
+              fileId: f.id,
+              fileName: f.originalName,
+              mimeType: f.mimeType,
+            })),
+          };
+        }
+
+        const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);
         setMessages((prev) => prev.map((message) => message.id === tempId ? convertExternalMessage(response, participantMap) : message));
       }
 
-      for (const file of files) {
-        const uploaded = await filesApi.uploadFile(file, activeSessionId);
-        await swarmSessionsApi.sendExternalMessage(activeSessionId, {
-          content: uploaded.originalName,
-          message_type: 'file',
-          metadata: {
-            fileId: uploaded.id,
-            fileName: uploaded.originalName,
-            mimeType: uploaded.mimeType,
-            size: uploaded.size,
-            url: uploaded.url,
-          },
-        });
-      }
-
-      if (files.length > 0) {
+      // Send individual file messages for each uploaded file (for display purposes)
+      if (uploadedFiles.length > 0 && trimmed) {
+        for (const uploaded of uploadedFiles) {
+          await swarmSessionsApi.sendExternalMessage(activeSessionId, {
+            content: uploaded.originalName,
+            message_type: 'file',
+            metadata: {
+              fileId: uploaded.id,
+              fileName: uploaded.originalName,
+              mimeType: uploaded.mimeType,
+              size: uploaded.size,
+              url: uploaded.url,
+            },
+          });
+        }
         await loadMessages();
       }
     } catch (err) {

@@ -59,4 +59,13 @@ export const filesApi = {
       url: resolveFileUrl(payload.data),
     };
   },
+
+  async deleteFile(fileId: string): Promise<void> {
+    const response = await fetch(`/api/files/${fileId}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to delete file');
+    }
+  },
 };

@@ -31,6 +31,7 @@ export function ChatInput({
   const [isFocused, setIsFocused] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionQuery, setMentionQuery] = useState('');
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0);
@@ -179,6 +180,29 @@ export function ChatInput({
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setAttachments((prev) => [...prev, ...files]);
+    }
+  }, []);
+
   const getFileIcon = (file: File) => {
     if (file.type.startsWith('image/')) {
       return <ImageIcon className="h-4 w-4" />;
@@ -193,7 +217,21 @@ export function ChatInput({
   };
 
   return (
-    <div className="relative">
+    <div
+      className="relative"
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <Paperclip className="h-8 w-8" />
+            <span className="text-sm font-medium">拖放文件到这里</span>
+          </div>
+        </div>
+      )}
+
       {attachments.length > 0 && (
         <div className="mb-3 flex flex-wrap gap-2">
           {attachments.map((file, index) => (
@@ -201,7 +239,17 @@ export function ChatInput({
               key={index}
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm animate-fade-in"
             >
-              {getFileIcon(file)}
+              {file.type.startsWith('image/') ? (
+                <div className="h-10 w-10 rounded overflow-hidden shrink-0">
+                  <img
+                    src={URL.createObjectURL(file)}
+                    alt={file.name}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+              ) : (
+                getFileIcon(file)
+              )}
               <span className="max-w-[150px] truncate">{file.name}</span>
               <span className="text-xs text-muted-foreground">
                 {formatFileSize(file.size)}
