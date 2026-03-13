@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { useAgents } from "@/hooks/use-agents";
+import { useAgentWebSocket } from "@/hooks/use-agent-websocket";
+import { storage } from "@/utils/storage";
 import {
   Plus,
   Search,
@@ -12,15 +14,48 @@ import {
   Clock,
   AlertCircle,
   X,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { Task } from "@/types/agent";
 
+const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
+
 export default function TasksPage() {
-  const { tasks, isLoading, createTask, assignTask } = useTasks({ autoLoad: true });
-  const { agents } = useAgents({ autoLoad: true });
+  const { tasks, isLoading, createTask, assignTask, loadTasks } = useTasks({ autoLoad: true });
+  const { agents, loadAgents } = useAgents({ autoLoad: true });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Task["status"] | "all">("all");
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+
+  // Resolve session ID for WebSocket connection
+  const [swarmSessionId, setSwarmSessionId] = useState<string | undefined>();
+  useEffect(() => {
+    setSwarmSessionId(storage.get<string>(CURRENT_SESSION_STORAGE_KEY) || undefined);
+  }, []);
+
+  // Debounced refresh on WebSocket events
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedRefresh = useCallback(() => {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      void loadTasks();
+      void loadAgents();
+    }, 300);
+  }, [loadTasks, loadAgents]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    };
+  }, []);
+
+  const { isConnected, isConnecting } = useAgentWebSocket({
+    swarmSessionId,
+    autoConnect: !!swarmSessionId,
+    onTaskUpdate: debouncedRefresh,
+    onAgentStatus: debouncedRefresh,
+  });
 
   // 过滤任务
   const filteredTasks = tasks.filter((task) => {
@@ -42,11 +77,42 @@ export default function TasksPage() {
     <div className="flex flex-col gap-6 p-6">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">任务管理</h1>
-          <p className="text-muted-foreground mt-1">
-            管理任务列表、分配和跟踪进度
-          </p>
+        <div className="flex items-center gap-3">
+          <div>
+            <h1 className="text-3xl font-bold">任务管理</h1>
+            <p className="text-muted-foreground mt-1">
+              管理任务列表、分配和跟踪进度
+            </p>
+          </div>
+          {swarmSessionId && (
+            <span
+              title={
+                isConnected
+                  ? "实时连接已建立"
+                  : isConnecting
+                    ? "正在连接..."
+                    : "实时连接断开"
+              }
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border"
+            >
+              {isConnected ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+                  <Wifi className="h-3 w-3 text-green-600" />
+                </>
+              ) : isConnecting ? (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-yellow-500 animate-pulse" />
+                  <Wifi className="h-3 w-3 text-yellow-600" />
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-gray-400" />
+                  <WifiOff className="h-3 w-3 text-gray-400" />
+                </>
+              )}
+            </span>
+          )}
         </div>
         <button
           onClick={() => setIsCreateModalOpen(true)}
