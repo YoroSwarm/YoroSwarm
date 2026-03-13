@@ -3,6 +3,8 @@
 import { useEffect } from 'react';
 import { useThemeStore } from '@/stores/themeStore';
 import { StoreProvider } from '@/components/providers/StoreProvider';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { Toaster } from '@/components/ui/sonner';
 
 function ThemeInit() {
   const { initTheme } = useThemeStore();
@@ -18,7 +20,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <StoreProvider>
       <ThemeInit />
-      {children}
+      <TooltipProvider>
+        {children}
+      </TooltipProvider>
+      <Toaster position="bottom-right" />
     </StoreProvider>
   );
 }

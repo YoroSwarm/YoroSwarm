@@ -13,6 +13,20 @@ import {
   Sun,
   Monitor,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
@@ -61,9 +75,11 @@ export default function SettingsPage() {
         <div className="flex-1">
           {activeTab === "appearance" && (
             <div className="space-y-6">
-              <div className="rounded-xl border bg-card p-6">
-                <h2 className="text-lg font-semibold mb-4">主题设置</h2>
-                <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">主题设置</CardTitle>
+                </CardHeader>
+                <CardContent>
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">主题模式</p>
@@ -72,47 +88,52 @@ export default function SettingsPage() {
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <button
+                      <Button
+                        variant="outline"
                         onClick={() => setTheme("light")}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                        className={
                           theme === "light"
                             ? "border-primary bg-primary/10"
-                            : "hover:bg-accent"
-                        }`}
+                            : ""
+                        }
                       >
                         <Sun className="h-4 w-4" />
                         <span className="text-sm">浅色</span>
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="outline"
                         onClick={() => setTheme("dark")}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                        className={
                           theme === "dark"
                             ? "border-primary bg-primary/10"
-                            : "hover:bg-accent"
-                        }`}
+                            : ""
+                        }
                       >
                         <Moon className="h-4 w-4" />
                         <span className="text-sm">深色</span>
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="outline"
                         onClick={() => setTheme("system")}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors ${
+                        className={
                           theme === "system"
                             ? "border-primary bg-primary/10"
-                            : "hover:bg-accent"
-                        }`}
+                            : ""
+                        }
                       >
                         <Monitor className="h-4 w-4" />
                         <span className="text-sm">系统</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="rounded-xl border bg-card p-6">
-                <h2 className="text-lg font-semibold mb-4">界面设置</h2>
-                <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">界面设置</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="font-medium">紧凑模式</p>
@@ -120,11 +141,10 @@ export default function SettingsPage() {
                         减小界面元素间距
                       </p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input type="checkbox" className="sr-only peer" />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
+                    <Switch />
                   </div>
+
+                  <Separator />
 
                   <div className="flex items-center justify-between">
                     <div>
@@ -133,181 +153,154 @@ export default function SettingsPage() {
                         启用界面过渡动画
                       </p>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        defaultChecked
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
+                    <Switch defaultChecked />
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 
           {activeTab === "profile" && (
-            <div className="rounded-xl border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">个人资料</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    显示名称
-                  </label>
-                  <input
-                    type="text"
-                    defaultValue="当前用户"
-                    className="w-full px-3 py-2 rounded-lg border bg-background"
-                  />
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">个人资料</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1">
+                  <Label>显示名称</Label>
+                  <Input type="text" defaultValue="当前用户" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    邮箱
-                  </label>
-                  <input
-                    type="email"
-                    defaultValue="user@example.com"
-                    className="w-full px-3 py-2 rounded-lg border bg-background"
-                  />
+                <div className="space-y-1">
+                  <Label>邮箱</Label>
+                  <Input type="email" defaultValue="user@example.com" />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    个人简介
-                  </label>
-                  <textarea
+                <div className="space-y-1">
+                  <Label>个人简介</Label>
+                  <Textarea
                     rows={3}
-                    className="w-full px-3 py-2 rounded-lg border bg-background resize-none"
+                    className="resize-none"
                     placeholder="写点什么..."
                   />
                 </div>
                 <div className="flex justify-end">
-                  <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                    保存更改
-                  </button>
+                  <Button>保存更改</Button>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
 
           {activeTab === "notifications" && (
-            <div className="rounded-xl border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">通知设置</h2>
-              <div className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">通知设置</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 {[
                   { label: "任务完成通知", desc: "当任务完成时接收通知" },
                   { label: "Agent 消息", desc: "当 Agent 发送消息时通知" },
                   { label: "系统公告", desc: "接收系统更新和公告" },
                   { label: "邮件通知", desc: "通过邮件接收重要通知" },
-                ].map((item, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between"
-                  >
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {item.desc}
-                      </p>
+                ].map((item, index, arr) => (
+                  <div key={index}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="font-medium">{item.label}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {item.desc}
+                        </p>
+                      </div>
+                      <Switch defaultChecked={index < 2} />
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        className="sr-only peer"
-                        defaultChecked={index < 2}
-                      />
-                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                    </label>
+                    {index < arr.length - 1 && <Separator className="mt-4" />}
                   </div>
                 ))}
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
 
           {activeTab === "security" && (
             <div className="space-y-6">
-              <div className="rounded-xl border bg-card p-6">
-                <h2 className="text-lg font-semibold mb-4">修改密码</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      当前密码
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-3 py-2 rounded-lg border bg-background"
-                    />
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">修改密码</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-1">
+                    <Label>当前密码</Label>
+                    <Input type="password" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      新密码
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-3 py-2 rounded-lg border bg-background"
-                    />
+                  <div className="space-y-1">
+                    <Label>新密码</Label>
+                    <Input type="password" />
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">
-                      确认新密码
-                    </label>
-                    <input
-                      type="password"
-                      className="w-full px-3 py-2 rounded-lg border bg-background"
-                    />
+                  <div className="space-y-1">
+                    <Label>确认新密码</Label>
+                    <Input type="password" />
                   </div>
                   <div className="flex justify-end">
-                    <button className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
-                      更新密码
-                    </button>
+                    <Button>更新密码</Button>
                   </div>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="rounded-xl border bg-card p-6">
-                <h2 className="text-lg font-semibold mb-4">双因素认证</h2>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="font-medium">启用 2FA</p>
-                    <p className="text-sm text-muted-foreground">
-                      使用身份验证应用增强账户安全
-                    </p>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">双因素认证</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">启用 2FA</p>
+                      <p className="text-sm text-muted-foreground">
+                        使用身份验证应用增强账户安全
+                      </p>
+                    </div>
+                    <Switch />
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input type="checkbox" className="sr-only peer" />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
-                  </label>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 
           {activeTab === "language" && (
-            <div className="rounded-xl border bg-card p-6">
-              <h2 className="text-lg font-semibold mb-4">语言设置</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    界面语言
-                  </label>
-                  <select className="w-full px-3 py-2 rounded-lg border bg-background">
-                    <option value="zh-CN">简体中文</option>
-                    <option value="en">English</option>
-                    <option value="ja">日本語</option>
-                  </select>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">语言设置</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-1">
+                  <Label>界面语言</Label>
+                  <Select defaultValue="zh-CN">
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="zh-CN">简体中文</SelectItem>
+                      <SelectItem value="en">English</SelectItem>
+                      <SelectItem value="ja">日本語</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium mb-1">
-                    时区
-                  </label>
-                  <select className="w-full px-3 py-2 rounded-lg border bg-background">
-                    <option value="Asia/Shanghai">Asia/Shanghai (GMT+8)</option>
-                    <option value="UTC">UTC</option>
-                    <option value="America/New_York">America/New York</option>
-                  </select>
+                <Separator />
+                <div className="space-y-1">
+                  <Label>时区</Label>
+                  <Select defaultValue="Asia/Shanghai">
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Asia/Shanghai">
+                        Asia/Shanghai (GMT+8)
+                      </SelectItem>
+                      <SelectItem value="UTC">UTC</SelectItem>
+                      <SelectItem value="America/New_York">
+                        America/New York
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-            </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

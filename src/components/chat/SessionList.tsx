@@ -12,8 +12,21 @@ import {
   Archive,
   MessageSquare,
   X,
-  Loader2,
+  AlertCircle,
 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu';
 
 interface SessionListProps {
   sessions: Session[];
@@ -39,7 +52,6 @@ export function SessionList({
   onCloseMobile,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((session) => {
@@ -50,21 +62,17 @@ export function SessionList({
     });
   }, [sessions, searchQuery]);
 
-  const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteSession = async (sessionId: string) => {
     try {
       await onDeleteSession(sessionId);
-      setActiveMenuId(null);
     } catch (err) {
       console.error('删除会话失败:', err);
     }
   };
 
-  const handleArchiveSession = async (sessionId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleArchiveSession = async (sessionId: string) => {
     try {
       await onArchiveSession(sessionId);
-      setActiveMenuId(null);
     } catch (err) {
       console.error('归档会话失败:', err);
     }
@@ -78,21 +86,24 @@ export function SessionList({
           <h2 className="font-semibold text-lg">会话</h2>
         </div>
         <div className="flex items-center gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onCreateSession}
-            className="inline-flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium text-primary transition-colors hover:bg-accent"
             title="创建会话"
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">新建</span>
-          </button>
+          </Button>
           {onCloseMobile && (
-            <button
+            <Button
+              variant="ghost"
+              size="icon-sm"
               onClick={onCloseMobile}
-              className="p-2 rounded-md hover:bg-accent transition-colors lg:hidden"
+              className="lg:hidden"
             >
               <X className="h-5 w-5" />
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -100,27 +111,35 @@ export function SessionList({
       <div className="p-3 border-b border-border">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
+          <Input
             type="text"
             placeholder="搜索会话..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full rounded-md border border-input bg-background pl-9 pr-4 py-2 text-sm outline-none focus:ring-2 focus:ring-ring placeholder:text-muted-foreground"
+            className="pl-9"
           />
         </div>
       </div>
 
       {error && (
-        <div className="px-3 py-2 bg-destructive/10 text-destructive text-sm">
-          {error}
-        </div>
+        <Alert variant="destructive" className="mx-3 mt-2 rounded-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <ScrollArea className="flex-1">
         {isLoading ? (
-          <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <Loader2 className="h-8 w-8 animate-spin mb-2" />
-            <p className="text-sm">加载中...</p>
+          <div className="flex flex-col gap-3 p-3">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <Skeleton className="h-10 w-10 rounded-full" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-3 w-1/2" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
@@ -138,9 +157,11 @@ export function SessionList({
                   currentSessionId === session.id && 'bg-accent'
                 )}
               >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary font-medium">
-                  {session.title.charAt(0).toUpperCase()}
-                </div>
+                <Avatar size="lg">
+                  <AvatarFallback className="bg-primary/10 text-primary font-medium">
+                    {session.title.charAt(0).toUpperCase()}
+                  </AvatarFallback>
+                </Avatar>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2">
@@ -163,52 +184,41 @@ export function SessionList({
                 </div>
 
                 {session.unreadCount > 0 && (
-                  <div className="absolute right-10 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-medium text-primary-foreground">
+                  <Badge className="absolute right-10 top-3">
                     {session.unreadCount > 99 ? '99+' : session.unreadCount}
-                  </div>
+                  </Badge>
                 )}
 
-                <div className="relative">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveMenuId(activeMenuId === session.id ? null : session.id);
-                    }}
-                    className="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-accent transition-all"
-                  >
-                    <MoreVertical className="h-4 w-4" />
-                  </button>
-
-                  {activeMenuId === session.id && (
-                    <>
-                      <div
-                        className="fixed inset-0 z-40"
-                        onClick={() => setActiveMenuId(null)}
-                      />
-                      <div className="absolute right-0 top-8 z-50 w-40 rounded-md border border-border bg-popover shadow-lg animate-fade-in">
-                        <button
-                          onClick={(e) => handleArchiveSession(session.id, e)}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-accent transition-colors"
-                        >
-                          <Archive className="h-4 w-4" />
-                          归档
-                        </button>
-                        <button
-                          onClick={(e) => handleDeleteSession(session.id, e)}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-sm text-destructive hover:bg-destructive/10 transition-colors"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                          删除
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      className="opacity-0 group-hover:opacity-100 transition-all"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => handleArchiveSession(session.id)}>
+                      <Archive className="h-4 w-4" />
+                      归档
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      variant="destructive"
+                      onClick={() => handleDeleteSession(session.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      删除
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
           </div>
         )}
-      </div>
+      </ScrollArea>
 
       <div className="border-t border-border p-3 text-xs text-muted-foreground">
         共 {filteredSessions.length} 个会话

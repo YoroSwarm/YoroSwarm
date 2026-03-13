@@ -1,6 +1,16 @@
 'use client';
 
 import React from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Alert } from '@/components/ui/alert';
 
 interface CreateSwarmSessionModalProps {
   isOpen: boolean;
@@ -17,8 +27,6 @@ export const CreateSwarmSessionModal: React.FC<CreateSwarmSessionModalProps> = (
   onClose,
   onCreate,
 }) => {
-  if (!isOpen) return null;
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const shouldReset = await onCreate();
@@ -26,21 +34,26 @@ export const CreateSwarmSessionModal: React.FC<CreateSwarmSessionModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/30 bg-white/80 shadow-2xl shadow-black/10 backdrop-blur-2xl">
-        <div className="border-b border-black/10 bg-gradient-to-br from-white via-white to-neutral-100 px-7 py-6">
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-2xl gap-0 overflow-hidden rounded-[28px] border border-white/30 bg-white/80 p-0 shadow-2xl shadow-black/10 ring-0 backdrop-blur-2xl"
+      >
+        <DialogHeader className="gap-0 border-b border-black/10 bg-gradient-to-br from-white via-white to-neutral-100 px-7 py-6">
           <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-500">Swarm Session</p>
-          <h2 className="mt-2 text-2xl font-semibold text-neutral-950">开始一个新对话</h2>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-neutral-600">
+          <DialogTitle className="mt-2 text-2xl font-semibold text-neutral-950">
+            开始一个新对话
+          </DialogTitle>
+          <DialogDescription className="mt-2 max-w-xl text-sm leading-6 text-neutral-600">
             点击创建后会立即生成一个新的 Lead 会话。你直接开始对话，剩余的编队、拆解和协作由蜂群系统在后台完成。
-          </p>
-        </div>
+          </DialogDescription>
+        </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-5 px-7 py-7">
           {error ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <Alert variant="destructive" className="rounded-2xl border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
-            </div>
+            </Alert>
           ) : null}
 
           <div className="rounded-3xl border border-black/10 bg-neutral-950 px-5 py-4 text-sm text-white">
@@ -50,24 +63,25 @@ export const CreateSwarmSessionModal: React.FC<CreateSwarmSessionModalProps> = (
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <button
+          <DialogFooter className="mx-0 mb-0 flex-row justify-end gap-3 rounded-none border-0 bg-transparent p-0 pt-2">
+            <Button
               type="button"
+              variant="outline"
               onClick={onClose}
-              className="rounded-2xl border border-black/10 px-5 py-3 text-sm font-medium text-neutral-700 transition hover:bg-black/5"
+              className="h-auto rounded-2xl border-black/10 px-5 py-3 text-sm font-medium text-neutral-700 hover:bg-black/5"
             >
               取消
-            </button>
-            <button
+            </Button>
+            <Button
               type="submit"
               disabled={isSubmitting}
-              className="rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+              className="h-auto rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-medium text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
             >
               {isSubmitting ? '创建中...' : '立即开始'}
-            </button>
-          </div>
+            </Button>
+          </DialogFooter>
         </form>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 };
