@@ -60,6 +60,20 @@ export const filesApi = {
     };
   },
 
+  async listFiles(swarmSessionId?: string): Promise<UploadedFileResponse[]> {
+    const params = swarmSessionId ? `?swarmSessionId=${swarmSessionId}` : '';
+    const token = storage.get<string>('access_token');
+    const response = await fetch(`/api/files${params}`, {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    const payload = await response.json() as ApiEnvelope<UploadedFileResponse[]>;
+    if (!response.ok || !payload.success || !payload.data) {
+      throw new Error(payload.error || '获取文件列表失败');
+    }
+    return payload.data.map(f => ({ ...f, url: resolveFileUrl(f) }));
+  },
+
   async deleteFile(fileId: string): Promise<void> {
     const response = await fetch(`/api/files/${fileId}`, {
       method: 'DELETE',

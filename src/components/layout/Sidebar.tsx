@@ -8,6 +8,7 @@ import {
   CheckSquare,
   Settings,
   FileText,
+  Layers,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -47,6 +48,12 @@ const sidebarItems: SidebarItem[] = [
     label: '文件',
     icon: <FileText className="w-5 h-5" />,
     path: '/files',
+  },
+  {
+    id: 'artifacts',
+    label: '产出物',
+    icon: <Layers className="w-5 h-5" />,
+    path: '/artifacts',
   },
   {
     id: 'settings',
