@@ -4,7 +4,22 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { swarmSessionsApi, type ExternalMessageResponse } from '@/lib/api/swarm-sessions';
 import { filesApi } from '@/lib/api/files';
 import type { Agent, Message } from '@/types/chat';
-import type { ChatMessagePayload } from '@/types/websocket';
+import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload } from '@/types/websocket';
+
+export interface ToolCallState {
+  toolName: string;
+  status: 'calling' | 'completed' | 'error';
+  inputSummary?: string;
+  resultSummary?: string;
+  timestamp: string;
+}
+
+export interface StreamingState {
+  isThinking: boolean;
+  agentName: string;
+  thinkingContent: string[];
+  toolCalls: ToolCallState[];
+}
 
 interface UseMessagesOptions {
   sessionId: string | null;
@@ -47,6 +62,12 @@ export function useMessages(options: UseMessagesOptions) {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const optimisticIds = useRef(new Set<string>());
+  const [streamingState, setStreamingState] = useState<StreamingState>({
+    isThinking: false,
+    agentName: '',
+    thinkingContent: [],
+    toolCalls: [],
+  });
 
   const participantMap = useMemo(() => participants, [participants]);
 
@@ -155,6 +176,60 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }, [loadMessages, participantMap, sessionId]);
 
+  const handleStreamEvent = useCallback((type: string, payload: unknown) => {
+    if (type === 'agent_thinking') {
+      const data = payload as AgentThinkingPayload;
+      if (data.status === 'start') {
+        setStreamingState({
+          isThinking: true,
+          agentName: data.agent_name,
+          thinkingContent: [],
+          toolCalls: [],
+        });
+      } else if (data.status === 'thinking' && data.content) {
+        setStreamingState((prev) => ({
+          ...prev,
+          thinkingContent: [...prev.thinkingContent, data.content!],
+        }));
+      } else if (data.status === 'end') {
+        setStreamingState((prev) => ({
+          ...prev,
+          isThinking: false,
+        }));
+      }
+    } else if (type === 'tool_activity') {
+      const data = payload as ToolActivityPayload;
+      setStreamingState((prev) => {
+        const existingIndex = prev.toolCalls.findIndex(
+          (tc) => tc.toolName === data.tool_name && tc.status === 'calling'
+        );
+        if (data.status === 'calling') {
+          return {
+            ...prev,
+            toolCalls: [
+              ...prev.toolCalls,
+              {
+                toolName: data.tool_name,
+                status: 'calling',
+                inputSummary: data.input_summary,
+                timestamp: data.timestamp,
+              },
+            ],
+          };
+        } else if (existingIndex >= 0) {
+          const updated = [...prev.toolCalls];
+          updated[existingIndex] = {
+            ...updated[existingIndex],
+            status: data.status,
+            resultSummary: data.result_summary,
+          };
+          return { ...prev, toolCalls: updated };
+        }
+        return prev;
+      });
+    }
+  }, []);
+
   useEffect(() => {
     if (autoLoad && sessionId) {
       void loadMessages();
@@ -169,5 +244,7 @@ export function useMessages(options: UseMessagesOptions) {
     loadMessages,
     sendMessage,
     appendRealtimeMessage,
+    streamingState,
+    handleStreamEvent,
   };
 }

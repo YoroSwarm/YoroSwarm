@@ -86,6 +86,8 @@ export type WebSocketMessageType =
   | 'task_update'
   | 'chat_message'
   | 'internal_message'
+  | 'agent_thinking'
+  | 'tool_activity'
   | 'system'
   | 'broadcast'
   | 'presence'

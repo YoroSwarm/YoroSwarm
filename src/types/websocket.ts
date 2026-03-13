@@ -6,6 +6,8 @@ export type WebSocketMessageType =
   | 'task_update'
   | 'chat_message'
   | 'internal_message'
+  | 'agent_thinking'
+  | 'tool_activity'
   | 'system'
   | 'broadcast'
   | 'presence'
@@ -96,6 +98,26 @@ export interface ReadReceipt {
   message_id: string;
   swarm_session_id: string;
   read_at: string;
+}
+
+export interface AgentThinkingPayload {
+  agent_id: string;
+  agent_name: string;
+  swarm_session_id: string;
+  status: 'start' | 'thinking' | 'end';
+  content?: string;
+  timestamp: string;
+}
+
+export interface ToolActivityPayload {
+  agent_id: string;
+  agent_name: string;
+  swarm_session_id: string;
+  tool_name: string;
+  status: 'calling' | 'completed' | 'error';
+  input_summary?: string;
+  result_summary?: string;
+  timestamp: string;
 }
 
 export interface WebSocketSubscription {

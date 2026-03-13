@@ -4,8 +4,10 @@ import { useEffect, useRef, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { formatMessageGroup } from '@/lib/utils/date';
 import { MessageItem } from './MessageItem';
+import { ThinkingIndicator } from './ThinkingIndicator';
 import { Loader2 } from 'lucide-react';
 import type { Message } from '@/types/chat';
+import type { StreamingState } from '@/hooks/use-messages';
 
 interface MessageListProps {
   sessionId: string;
@@ -13,10 +15,11 @@ interface MessageListProps {
   isLoading: boolean;
   hasMore: boolean;
   onLoadMore: () => void;
+  streamingState?: StreamingState;
   className?: string;
 }
 
-export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, className }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState, className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
 
@@ -30,6 +33,13 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
       isFirstLoad.current = false;
     }
   }, [messages, isLoading]);
+
+  // Auto-scroll when streaming state changes
+  useEffect(() => {
+    if (containerRef.current && streamingState?.isThinking) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    }
+  }, [streamingState]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -118,6 +128,17 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
           <div className="mb-4 text-6xl">💬</div>
           <p className="text-lg">还没有消息</p>
           <p className="text-sm mt-2">发送一条消息开始对话</p>
+        </div>
+      )}
+
+      {streamingState && (streamingState.isThinking || streamingState.toolCalls.length > 0 || streamingState.thinkingContent.length > 0) && (
+        <div className="mt-4">
+          <ThinkingIndicator
+            agentName={streamingState.agentName}
+            isThinking={streamingState.isThinking}
+            thinkingContent={streamingState.thinkingContent}
+            toolCalls={streamingState.toolCalls}
+          />
         </div>
       )}
 

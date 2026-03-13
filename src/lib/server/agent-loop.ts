@@ -61,6 +61,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   )
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // Broadcast thinking start
+    publishRealtimeMessage(
+      {
+        type: 'agent_thinking',
+        payload: {
+          agent_id: agentId,
+          agent_name: agentName,
+          swarm_session_id: swarmSessionId,
+          status: 'start',
+          timestamp: new Date().toISOString(),
+        },
+      },
+      { sessionId: swarmSessionId }
+    )
+
     let response: LLMResponse
     try {
       response = await callLLM({
@@ -72,6 +87,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown LLM error'
       console.error(`[AgentLoop][${agentName}] LLM call failed at iteration ${iteration}:`, errMsg)
+
+      // Broadcast thinking end on error
+      publishRealtimeMessage(
+        {
+          type: 'agent_thinking',
+          payload: {
+            agent_id: agentId,
+            agent_name: agentName,
+            swarm_session_id: swarmSessionId,
+            status: 'end',
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
 
       // Record error in context
       await appendAgentContextEntry({
@@ -93,6 +123,24 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const textContent = extractTextContent(response)
     const toolUseBlocks = extractToolUseBlocks(response)
 
+    // Broadcast thinking content if LLM returned text alongside tool calls
+    if (textContent) {
+      publishRealtimeMessage(
+        {
+          type: 'agent_thinking',
+          payload: {
+            agent_id: agentId,
+            agent_name: agentName,
+            swarm_session_id: swarmSessionId,
+            status: 'thinking',
+            content: textContent,
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
+    }
+
     // If LLM wants to use tools
     if (response.stopReason === 'tool_use' && toolUseBlocks.length > 0) {
       // Add assistant message with all content blocks
@@ -104,7 +152,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         totalToolCalls++
         console.log(`[AgentLoop][${agentName}] Tool call #${totalToolCalls}: ${toolUse.name}`)
 
-        // Broadcast tool usage
+        const inputSummary = JSON.stringify(toolUse.input).slice(0, 100)
+
+        // Broadcast tool activity - calling
+        publishRealtimeMessage(
+          {
+            type: 'tool_activity',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              tool_name: toolUse.name,
+              status: 'calling',
+              input_summary: inputSummary,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
+
+        // Broadcast tool usage (existing internal_message)
         publishRealtimeMessage(
           {
             type: 'internal_message',
@@ -130,6 +197,23 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           result = `工具执行失败: ${error instanceof Error ? error.message : 'Unknown error'}`
           console.error(`[AgentLoop][${agentName}] Tool ${toolUse.name} failed:`, result)
         }
+
+        // Broadcast tool activity - completed or error
+        publishRealtimeMessage(
+          {
+            type: 'tool_activity',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              tool_name: toolUse.name,
+              status: isError ? 'error' : 'completed',
+              result_summary: result.slice(0, 100),
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
 
         toolResults.push({
           type: 'tool_result',
@@ -165,6 +249,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           content: textContent,
         })
       }
+
+      // Broadcast thinking end
+      publishRealtimeMessage(
+        {
+          type: 'agent_thinking',
+          payload: {
+            agent_id: agentId,
+            agent_name: agentName,
+            swarm_session_id: swarmSessionId,
+            status: 'end',
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
 
       // Broadcast agent idle
       publishRealtimeMessage(

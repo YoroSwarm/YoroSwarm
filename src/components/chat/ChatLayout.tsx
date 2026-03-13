@@ -76,6 +76,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     loadMessages,
     sendMessage,
     appendRealtimeMessage,
+    streamingState,
+    handleStreamEvent,
   } = useMessages({
     sessionId: resolvedSessionId,
     participants: currentSession?.participants,
@@ -93,8 +95,13 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     url: wsUrl,
     autoConnect: Boolean(wsUrl),
     onMessage: (message) => {
-      if (message.type !== 'chat_message') return;
-      appendRealtimeMessage(message.payload as ChatMessagePayload);
+      if (message.type === 'chat_message') {
+        appendRealtimeMessage(message.payload as ChatMessagePayload);
+        return;
+      }
+      if (message.type === 'agent_thinking' || message.type === 'tool_activity') {
+        handleStreamEvent(message.type, message.payload);
+      }
     },
   });
 
@@ -207,6 +214,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               onLoadMore={() => {
                 void loadMessages(true);
               }}
+              streamingState={streamingState}
             />
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
