@@ -58,13 +58,21 @@ export const MonitorDashboard: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
 
-  const { isConnected, tasks: liveTasks, agents: liveAgents } = useAgentWebSocket({
+  const {
+    isConnected,
+    tasks: liveTasks,
+    agents: liveAgents,
+    internalMessages: liveInternalMessages,
+  } = useAgentWebSocket({
     swarmSessionId: currentTeamId || undefined,
     autoConnect: Boolean(currentTeamId),
   });
 
+  // 合并所有实时消息：任务更新、agent 状态、内部消息
   const messages = useMemo(() => {
-    if (liveTasks.size === 0 && liveAgents.size === 0) {
+    const hasLiveData = liveTasks.size > 0 || liveAgents.size > 0 || liveInternalMessages.length > 0;
+
+    if (!hasLiveData && !currentTeamId) {
       return defaultMessages;
     }
 
@@ -81,15 +89,24 @@ export const MonitorDashboard: React.FC = () => {
       id: `agent-message-${update.agent_id}-${update.timestamp}`,
       agentId: update.agent_id,
       agentName: update.name,
-      content: `${update.name} 当前状态为 ${update.status}`,
+      content: update.message || `${update.name} 状态: ${update.status}`,
       type: 'system' as const,
       timestamp: update.timestamp,
     }));
 
-    return [...taskMessages, ...agentMessages]
+    const internalMsgs = liveInternalMessages.map((msg) => ({
+      id: `internal-message-${msg.message_id}-${msg.timestamp}`,
+      agentId: msg.sender_id,
+      agentName: msg.sender_name,
+      content: `[内部] ${msg.recipient_name ? `→ ${msg.recipient_name}: ` : ''}${msg.content.slice(0, 100)}${msg.content.length > 100 ? '...' : ''}`,
+      type: 'message' as const,
+      timestamp: msg.timestamp,
+    }));
+
+    return [...taskMessages, ...agentMessages, ...internalMsgs]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-      .slice(0, 12);
-  }, [liveAgents, liveTasks]);
+      .slice(0, 15);
+  }, [liveAgents, liveTasks, liveInternalMessages, currentTeamId]);
 
   const leadAgent = useMemo(
     () => agents.find((agent) => agent.type === 'leader') || null,
@@ -110,7 +127,7 @@ export const MonitorDashboard: React.FC = () => {
         agentId: update.assignee_id || 'team-lead',
         agentName: update.assignee_name || 'Team Lead',
         action: 'task_update',
-        details: update.message || `${update.title} 已变更为 ${update.status}`,
+        details: update.message || `${update.title} 状态: ${update.status}`,
         timestamp: update.timestamp,
       })),
       ...Array.from(liveAgents.values()).map((update) => ({
@@ -118,13 +135,21 @@ export const MonitorDashboard: React.FC = () => {
         agentId: update.agent_id,
         agentName: update.name,
         action: 'agent_status',
-        details: `${update.name} 当前状态：${update.status}`,
+        details: update.message || `${update.name} 状态: ${update.status}`,
         timestamp: update.timestamp,
+      })),
+      ...liveInternalMessages.map((msg) => ({
+        id: `internal-activity-${msg.message_id}-${msg.timestamp}`,
+        agentId: msg.sender_id,
+        agentName: msg.sender_name,
+        action: 'internal_message',
+        details: `内部消息${msg.recipient_name ? ` → ${msg.recipient_name}` : ''}: ${msg.content.slice(0, 60)}${msg.content.length > 60 ? '...' : ''}`,
+        timestamp: msg.timestamp,
       })),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (liveActivities.length > 0) {
-      return liveActivities.slice(0, 12);
+      return liveActivities.slice(0, 15);
     }
 
     return [
@@ -137,7 +162,7 @@ export const MonitorDashboard: React.FC = () => {
         timestamp: new Date().toISOString(),
       },
     ];
-  }, [currentTeam, leadAgent, liveAgents, liveTasks]);
+  }, [currentTeam, leadAgent, liveAgents, liveTasks, liveInternalMessages]);
 
   const isLoading = isTeamLoading || isTasksLoading;
   const error = teamError || tasksError;

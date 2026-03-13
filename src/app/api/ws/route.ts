@@ -245,6 +245,21 @@ export function ensureWebSocketServer() {
             }, { scope })
             return
           }
+          case 'internal_message': {
+            const payload = getPayloadObject(message.payload)
+            const scope: DeliveryScope = {
+              sessionId: typeof payload.swarm_session_id === 'string' ? payload.swarm_session_id : undefined,
+              agentId: typeof payload.sender_id === 'string' ? payload.sender_id : undefined,
+            }
+            broadcast({
+              type: 'internal_message',
+              payload: {
+                ...payload,
+                timestamp: new Date().toISOString(),
+              },
+            }, { scope })
+            return
+          }
           default:
             sendToClient(clientId, {
               type: 'error',

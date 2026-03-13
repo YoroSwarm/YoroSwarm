@@ -5,6 +5,8 @@ import prisma from '@/lib/db';
 import { appendExternalUserMessage, listExternalMessages } from '@/lib/server/external-chat';
 import { serializeExternalMessage } from '@/lib/server/swarm-session-view';
 import { publishRealtimeMessage } from '@/app/api/ws/route';
+import { getLeadAgentForSession } from '@/lib/server/swarm-session';
+import { runLeadLoop } from '@/lib/server/lead-runner';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -55,6 +57,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return errorResponse('Message content is required', 400);
     }
 
+    // 1. 保存用户消息
     const { message } = await appendExternalUserMessage({
       swarmSessionId: id,
       userId: payload.userId,
@@ -64,6 +67,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
 
     const serialized = serializeExternalMessage(message);
+
+    // 2. 广播用户消息到 WebSocket
     publishRealtimeMessage({
       type: 'chat_message',
       payload: {
@@ -72,6 +77,43 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     }, {
       sessionId: id,
+    });
+
+    // 3. 获取 Lead Agent
+    const lead = await getLeadAgentForSession(id);
+    if (!lead) {
+      return errorResponse('Lead agent not found', 500);
+    }
+
+    // 4. 触发 Lead Agent Loop（异步，不阻塞响应）
+    const attachments = body.attachments || [];
+
+    runLeadLoop({
+      swarmSessionId: id,
+      userId: payload.userId,
+      leadAgentId: lead.id,
+      userMessage: content,
+      attachments: attachments.map((a: { fileId?: string; fileName?: string; mimeType?: string }) => ({
+        fileId: a.fileId || '',
+        fileName: a.fileName || '',
+        mimeType: a.mimeType || '',
+      })),
+    }).catch(err => {
+      console.error('Lead agent loop error:', err);
+      // Broadcast error to user via WebSocket
+      publishRealtimeMessage({
+        type: 'chat_message',
+        payload: {
+          id: `error-${Date.now()}`,
+          swarm_session_id: id,
+          sender_type: 'system',
+          sender_name: 'System',
+          content: `处理消息时出错: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          message_type: 'system',
+          created_at: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+        },
+      }, { sessionId: id });
     });
 
     return successResponse(serialized, 'Message sent successfully');

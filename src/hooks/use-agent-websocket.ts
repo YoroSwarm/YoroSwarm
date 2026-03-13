@@ -10,8 +10,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWebSocket, type WebSocketMessage } from './use-websocket';
 import type { AgentMessage } from '@/types/agent';
 
-export type AgentStatus = 'created' | 'initializing' | 'idle' | 'running' | 'paused' | 'terminating' | 'terminated' | 'error';
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type AgentStatus = 'idle' | 'busy' | 'offline' | 'error';
+export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
 export interface AgentStatusUpdate {
   agent_id: string;
@@ -22,6 +22,7 @@ export interface AgentStatusUpdate {
   total_tasks_failed: number;
   last_active_at?: string;
   swarm_session_id?: string;
+  message?: string;
   timestamp: string;
 }
 
@@ -46,6 +47,19 @@ export interface SystemNotification {
   timestamp: string;
 }
 
+export interface InternalMessageUpdate {
+  message_id: string;
+  thread_id: string;
+  sender_id: string;
+  sender_name: string;
+  recipient_id?: string;
+  recipient_name?: string;
+  message_type: string;
+  content: string;
+  swarm_session_id?: string;
+  timestamp: string;
+}
+
 export interface UseAgentWebSocketOptions {
   clientId?: string;
   token?: string;
@@ -57,6 +71,7 @@ export interface UseAgentWebSocketOptions {
   onTaskUpdate?: (update: TaskStatusUpdate) => void;
   onChatMessage?: (message: AgentMessage) => void;
   onSystemNotification?: (notification: SystemNotification) => void;
+  onInternalMessage?: (message: InternalMessageUpdate) => void;
   onConnect?: () => void;
   onDisconnect?: (code?: number, reason?: string) => void;
   autoConnect?: boolean;
@@ -70,6 +85,7 @@ export interface UseAgentWebSocketReturn {
   tasks: Map<string, TaskStatusUpdate>;
   messages: AgentMessage[];
   notifications: SystemNotification[];
+  internalMessages: InternalMessageUpdate[];
   subscribeToAgent: (agentId: string) => void;
   subscribeToTask: (taskId: string) => void;
   subscribeToAllAgents: () => void;
@@ -94,6 +110,7 @@ export function useAgentWebSocket({
   onTaskUpdate,
   onChatMessage,
   onSystemNotification,
+  onInternalMessage,
   onConnect,
   onDisconnect,
   autoConnect = true,
@@ -102,6 +119,7 @@ export function useAgentWebSocket({
   const [tasks, setTasks] = useState<Map<string, TaskStatusUpdate>>(new Map());
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
+  const [internalMessages, setInternalMessages] = useState<InternalMessageUpdate[]>([]);
 
   const agentsRef = useRef(agents);
   const tasksRef = useRef(tasks);
@@ -144,6 +162,13 @@ export function useAgentWebSocket({
         break;
       }
 
+      case 'internal_message': {
+        const internalMsg = message.payload as InternalMessageUpdate;
+        setInternalMessages(prev => [...prev.slice(-99), internalMsg]);
+        onInternalMessage?.(internalMsg);
+        break;
+      }
+
       case 'broadcast': {
         const payload = message.payload as { type: string; data: unknown };
         if (payload.type === 'agent_status') {
@@ -158,7 +183,7 @@ export function useAgentWebSocket({
         break;
       }
     }
-  }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification]);
+  }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification, onInternalMessage]);
 
   const query = new URLSearchParams();
   if (token) query.set('token', token);
@@ -277,6 +302,7 @@ export function useAgentWebSocket({
     tasks,
     messages,
     notifications,
+    internalMessages,
     subscribeToAgent,
     subscribeToTask,
     subscribeToAllAgents,

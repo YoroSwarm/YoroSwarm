@@ -5,6 +5,7 @@ export type WebSocketMessageType =
   | 'agent_status'
   | 'task_update'
   | 'chat_message'
+  | 'internal_message'
   | 'system'
   | 'broadcast'
   | 'presence'
@@ -38,6 +39,7 @@ export interface AgentStatusUpdate {
   total_tasks_failed: number;
   last_active_at?: string;
   swarm_session_id?: string;
+  message?: string;
   timestamp: string;
 }
 

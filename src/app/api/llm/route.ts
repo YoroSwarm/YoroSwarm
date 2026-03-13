@@ -2,8 +2,8 @@ import { NextRequest } from 'next/server'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { successResponse, errorResponse, unauthorizedResponse } from '@/lib/api/response'
 import { cookies } from 'next/headers'
+import { callLLM, extractTextContent } from '@/lib/server/llm/client'
 
-// Simple LLM service interface
 interface LLMMessage {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -15,24 +15,6 @@ interface LLMRequest {
   temperature?: number
   maxTokens?: number
   stream?: boolean
-}
-
-// Mock LLM response (replace with actual LLM integration)
-async function* mockLLMStream(messages: LLMMessage[]) {
-  const lastMessage = messages[messages.length - 1]
-  const response = `I received your message: "${lastMessage?.content || 'No content'}". This is a mock response from the LLM service.`
-  
-  // Simulate streaming by yielding chunks
-  const words = response.split(' ')
-  for (const word of words) {
-    await new Promise(resolve => setTimeout(resolve, 50))
-    yield word + ' '
-  }
-}
-
-async function mockLLMComplete(messages: LLMMessage[]): Promise<string> {
-  const lastMessage = messages[messages.length - 1]
-  return `I received your message: "${lastMessage?.content || 'No content'}". This is a mock response from the LLM service.`
 }
 
 // POST - Send message to LLM
@@ -52,20 +34,48 @@ export async function POST(request: NextRequest) {
     }
 
     const body: LLMRequest = await request.json()
-    const { messages, stream = false } = body
+    const { messages, model, temperature, maxTokens, stream = false } = body
 
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return errorResponse('Messages array is required', 400)
     }
 
-    // For streaming responses
+    // Extract system message if present
+    const systemMessages = messages.filter(m => m.role === 'system')
+    const nonSystemMessages = messages.filter(m => m.role !== 'system')
+    const systemPrompt = systemMessages.map(m => m.content).join('\n') || 'You are a helpful assistant.'
+
+    // Convert to Anthropic message format
+    const anthropicMessages = nonSystemMessages.map(m => ({
+      role: m.role as 'user' | 'assistant',
+      content: m.content,
+    }))
+
+    // Ensure first message is from user
+    if (anthropicMessages.length === 0 || anthropicMessages[0].role !== 'user') {
+      anthropicMessages.unshift({ role: 'user', content: '你好' })
+    }
+
     if (stream) {
+      // For streaming, use a simple approach
+      const response = await callLLM({
+        systemPrompt,
+        messages: anthropicMessages,
+        model,
+        maxTokens,
+        temperature,
+      })
+
+      const text = extractTextContent(response)
       const encoder = new TextEncoder()
+      const words = text.split(' ')
+
       const readable = new ReadableStream({
         async start(controller) {
           try {
-            for await (const chunk of mockLLMStream(messages)) {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`))
+            for (const word of words) {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: word + ' ' })}\n\n`))
+              await new Promise(resolve => setTimeout(resolve, 20))
             }
             controller.enqueue(encoder.encode('data: [DONE]\n\n'))
             controller.close()
@@ -84,20 +94,29 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // For non-streaming responses
-    const response = await mockLLMComplete(messages)
+    // Non-streaming
+    const response = await callLLM({
+      systemPrompt,
+      messages: anthropicMessages,
+      model,
+      maxTokens,
+      temperature,
+    })
+
+    const content = extractTextContent(response)
 
     return successResponse({
-      content: response,
-      model: 'mock-llm',
+      content,
+      model: response.model,
       usage: {
-        prompt_tokens: JSON.stringify(messages).length,
-        completion_tokens: response.length,
-        total_tokens: JSON.stringify(messages).length + response.length,
+        prompt_tokens: response.usage.inputTokens,
+        completion_tokens: response.usage.outputTokens,
+        total_tokens: response.usage.inputTokens + response.usage.outputTokens,
       },
     })
   } catch (error) {
     console.error('LLM request error:', error)
-    return errorResponse('Internal server error', 500)
+    const message = error instanceof Error ? error.message : 'Internal server error'
+    return errorResponse(message, 500)
   }
 }
