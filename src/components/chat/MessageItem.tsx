@@ -39,12 +39,14 @@ interface MessageItemProps {
   message: Message;
   showAvatar: boolean;
   isConsecutive: boolean;
+  showTime?: boolean;
 }
 
 export function MessageItem({
   message,
   showAvatar,
   isConsecutive,
+  showTime = true,
 }: MessageItemProps) {
   const isUser = message.sender.type === 'user';
   const isSystem = message.sender.type === 'system';
@@ -159,13 +161,13 @@ export function MessageItem({
         }
 
         return (
-          <div className="flex items-center gap-3 p-3 bg-muted rounded-lg max-w-sm">
-            <div className="flex h-10 w-10 items-center justify-center rounded bg-primary/10">
-              <FileText className="h-5 w-5 text-primary" />
+          <div className={cn("flex items-center gap-3 p-3 rounded-lg max-w-sm", isUser ? "bg-primary/20" : "bg-muted")}>
+            <div className={cn("flex h-10 w-10 items-center justify-center rounded", isUser ? "bg-primary/20" : "bg-primary/10")}>
+              <FileText className={cn("h-5 w-5", isUser ? "text-primary-foreground" : "text-primary")} />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">{fileName as string}</p>
-              <p className="text-xs text-muted-foreground">
+              <p className={cn("text-sm font-medium truncate", isUser ? "text-primary-foreground" : "text-foreground")}>{fileName as string}</p>
+              <p className={cn("text-xs", isUser ? "text-primary-foreground/70" : "text-muted-foreground")}>
                 {fileSize ? formatFileSize(fileSize as number) : '未知大小'}
               </p>
             </div>
@@ -173,7 +175,7 @@ export function MessageItem({
               <a
                 href={`${fileUrl}?download=1`}
                 download={fileName as string}
-                className="p-2 rounded hover:bg-accent transition-colors"
+                className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 text-primary-foreground" : "hover:bg-accent")}
                 title="下载文件"
               >
                 <Download className="h-4 w-4" />
@@ -303,7 +305,7 @@ export function MessageItem({
               : 'bg-card text-foreground border-border',
             message.type === 'code' && 'p-0 overflow-hidden bg-muted border-border',
             message.type === 'image' && 'p-1 bg-card border-border',
-            message.type === 'file' && 'p-2 bg-card border-border'
+            message.type === 'file' && 'p-2'
           )}
           style={{
             borderRadius: "12px",
@@ -365,15 +367,17 @@ export function MessageItem({
           {renderContent()}
         </div>
 
-        <div
-          className={cn(
-            'mt-1 flex items-center gap-1.5 text-xs text-muted-foreground',
-            isUser ? 'flex-row-reverse' : 'flex-row'
-          )}
-        >
-          <span>{formatMessageTime(message.createdAt)}</span>
-          {isUser && renderStatus()}
-        </div>
+        {(showTime || isUser) && (
+          <div
+            className={cn(
+              'mt-1 flex items-center gap-1.5 text-xs text-muted-foreground',
+              isUser ? 'flex-row-reverse' : 'flex-row'
+            )}
+          >
+            {showTime && <span>{formatMessageTime(message.createdAt)}</span>}
+            {isUser && renderStatus()}
+          </div>
+        )}
       </div>
 
       <div

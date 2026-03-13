@@ -52,6 +52,17 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }
   }, [initialSessionId]);
 
+  // 清理无效的当前会话ID
+  useEffect(() => {
+    if (currentSessionId) {
+      const sessionExists = sessions.some((s) => s.id === currentSessionId);
+      if (!sessionExists) {
+        setCurrentSessionId(null);
+        storage.remove(CURRENT_SESSION_STORAGE_KEY);
+      }
+    }
+  }, [currentSessionId, sessions]);
+
   const resolvedSessionId = currentSessionId ?? initialSessionId ?? sessions[0]?.id ?? null;
 
   useEffect(() => {
@@ -287,7 +298,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-muted-foreground p-6 text-center">
               <div className="mb-6 rounded-full bg-secondary p-8 border border-border">
-                <Plus className="h-12 w-12 text-primary" /> border-border
+                <Plus className="h-12 w-12 text-primary" />
               </div>
               <h2 className="text-3xl font-bold font-heading mb-2 text-foreground">开始新旅程</h2>
               <p className="text-lg max-w-md font-body">

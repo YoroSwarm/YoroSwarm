@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { useAgents } from '@/hooks/use-agents';
 import {
@@ -240,11 +241,13 @@ export function ChatInput({
               className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted text-sm animate-fade-in"
             >
               {file.type.startsWith('image/') ? (
-                <div className="h-10 w-10 rounded overflow-hidden shrink-0">
-                  <img
+                <div className="relative h-10 w-10 rounded overflow-hidden shrink-0">
+                  <Image
                     src={URL.createObjectURL(file)}
                     alt={file.name}
-                    className="h-full w-full object-cover"
+                    fill
+                    sizes="40px"
+                    className="object-cover"
                   />
                 </div>
               ) : (
@@ -267,7 +270,7 @@ export function ChatInput({
 
       <div
         className={cn(
-          'relative flex items-end gap-2 rounded-2xl border bg-background p-3 transition-all',
+          'relative flex items-center gap-2 rounded-2xl border bg-background p-2 transition-all',
           isFocused && 'border-primary ring-2 ring-primary/20',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -290,7 +293,7 @@ export function ChatInput({
           aria-label="上传文件"
         />
 
-        <div className="relative flex-1 min-w-0">
+        <div className="relative flex-1 min-w-0 flex items-center">
           <textarea
             ref={textareaRef}
             value={content}
@@ -301,8 +304,8 @@ export function ChatInput({
             disabled={disabled}
             placeholder={placeholder}
             rows={1}
-            className="w-full resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed max-h-50"
-            style={{ minHeight: '36px' }}
+            className="w-full resize-none bg-transparent py-1 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed max-h-50 leading-normal"
+            style={{ minHeight: '24px' }}
           />
 
           {showMentions && filteredMentions.length > 0 && (

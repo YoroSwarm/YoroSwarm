@@ -108,6 +108,11 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                 const prevMessage = group.messages[messageIndex - 1];
                 const showAvatar =
                   !prevMessage || prevMessage.sender.id !== message.sender.id;
+                
+                // 判断是否需要显示时间：5分钟内连续消息不显示时间
+                const showTime = !prevMessage || 
+                  new Date(message.createdAt).getTime() - 
+                  new Date(prevMessage.createdAt).getTime() > 5 * 60 * 1000;
 
                 return (
                   <MessageItem
@@ -115,6 +120,7 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                     message={message}
                     showAvatar={showAvatar}
                     isConsecutive={!showAvatar}
+                    showTime={showTime}
                   />
                 );
               })}

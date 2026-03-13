@@ -93,12 +93,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return notFoundResponse('Swarm session not found');
     }
 
-    await prisma.swarmSession.update({
+    await prisma.swarmSession.delete({
       where: { id },
-      data: {
-        status: 'ARCHIVED',
-        archivedAt: new Date(),
-      },
     });
 
     return successResponse({ deleted: true });
