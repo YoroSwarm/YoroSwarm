@@ -47,11 +47,13 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
     sender: {
       id: message.sender_id || (isUser ? 'user' : lead?.id || 'lead'),
       type: isUser ? 'user' : 'agent',
-      name: isUser ? '我' : lead?.name || 'Lead',
+      name: isUser ? '我' : lead?.name || 'Swarm',
     },
     status: 'received',
     createdAt: message.created_at,
     metadata: message.metadata as Message['metadata'],
+    toolCalls: (message.metadata as any)?.toolCalls,
+    thinkingContent: (message.metadata as any)?.thinkingContent,
   };
 }
 
@@ -102,11 +104,13 @@ export function useMessages(options: UseMessagesOptions) {
         type: incoming.sender_type === 'user' ? 'user' : 'agent',
         name: incoming.sender_type === 'user'
           ? '我'
-          : participantMap.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Lead',
+          : participantMap.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Swarm',
       },
       status: 'received',
       createdAt: incoming.created_at || incoming.timestamp,
       metadata: incoming.metadata as Message['metadata'],
+      toolCalls: (incoming.metadata as any)?.toolCalls,
+      thinkingContent: (incoming.metadata as any)?.thinkingContent,
     };
 
     setMessages((prev) => {

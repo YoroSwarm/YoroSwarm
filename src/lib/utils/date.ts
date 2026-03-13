@@ -1,5 +1,13 @@
-import { format, isToday, isYesterday, isSameWeek, isSameYear } from 'date-fns';
+import { format, isToday, isYesterday, isSameWeek, isSameYear, formatDistanceToNow } from 'date-fns';
 import { zhCN } from 'date-fns/locale';
+
+/**
+ * 格式化相对时间 (e.g., "5分钟前")
+ */
+export function formatTimeAgo(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  return formatDistanceToNow(d, { addSuffix: true, locale: zhCN });
+}
 
 /**
  * 格式化消息时间

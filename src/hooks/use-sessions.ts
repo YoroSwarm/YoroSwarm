@@ -39,7 +39,7 @@ function convertSession(session: SwarmSessionResponse): Session {
           sender: {
             id: session.last_message.sender_id || lead?.id || 'lead',
             type: session.last_message.sender_type === 'user' ? 'user' : 'agent',
-            name: session.last_message.sender_type === 'user' ? '我' : lead?.name || 'Lead',
+            name: session.last_message.sender_type === 'user' ? '我' : lead?.name || 'Swarm',
           },
           status: 'received',
           createdAt: session.last_message.created_at,
@@ -99,7 +99,7 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const ensureLeadSession = useCallback(async ({ leadAgentId, leadAgentName }: { leadAgentId: string; leadAgentName?: string }) => {
     const existing = sessions.find((session) => session.participants.some((participant) => participant.id === leadAgentId));
     if (existing) return existing;
-    return createSession(leadAgentName ? `${leadAgentName} 会话` : 'Lead 会话');
+    return createSession(leadAgentName ? `${leadAgentName} 会话` : 'Swarm 会话');
   }, [createSession, sessions]);
 
   const openDirectSessionForAgent = useCallback(async (_agentId: string, _agentName?: string) => {

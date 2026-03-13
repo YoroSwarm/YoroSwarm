@@ -37,37 +37,20 @@ export const useThemeStore = create<ThemeStore>()(
       resolvedTheme: 'light',
 
       setTheme: (theme) => {
-        const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
-        applyTheme(resolvedTheme);
-        set({ theme, resolvedTheme });
+        // Force light mode
+        applyTheme('light');
+        set({ theme: 'light', resolvedTheme: 'light' });
       },
 
       toggleTheme: () => {
-        const { resolvedTheme } = get();
-        const newTheme = resolvedTheme === 'light' ? 'dark' : 'light';
-        applyTheme(newTheme);
-        set({ theme: newTheme, resolvedTheme: newTheme });
+        // No-op or force light
+        applyTheme('light');
+        set({ theme: 'light', resolvedTheme: 'light' });
       },
 
       initTheme: () => {
-        const { theme } = get();
-        const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
-        applyTheme(resolvedTheme);
-        set({ resolvedTheme });
-
-        // Listen for system theme changes
-        if (typeof window !== 'undefined') {
-          const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-          const handleChange = (e: MediaQueryListEvent) => {
-            const { theme: currentTheme } = get();
-            if (currentTheme === 'system') {
-              const newResolvedTheme = e.matches ? 'dark' : 'light';
-              applyTheme(newResolvedTheme);
-              set({ resolvedTheme: newResolvedTheme });
-            }
-          };
-          mediaQuery.addEventListener('change', handleChange);
-        }
+        applyTheme('light');
+        set({ theme: 'light', resolvedTheme: 'light' });
       },
     }),
     {

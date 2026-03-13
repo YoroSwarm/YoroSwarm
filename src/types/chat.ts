@@ -47,7 +47,11 @@ export interface Message {
     fileId?: string;
     mimeType?: string;
     size?: number;
+    toolCalls?: any[];
+    thinkingContent?: string[];
   };
+  toolCalls?: any[];
+  thinkingContent?: string[];
 }
 
 export interface Session {

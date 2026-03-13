@@ -2,6 +2,8 @@
 
 import Image from 'next/image';
 import { useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '@/lib/utils';
@@ -18,6 +20,12 @@ import {
   MoreHorizontal,
   CornerUpLeft,
   Download,
+  Brain,
+  ChevronDown,
+  ChevronUp,
+  Wrench,
+  X,
+  Loader2,
 } from 'lucide-react';
 import type { Message } from '@/types/chat';
 
@@ -42,6 +50,7 @@ export function MessageItem({
   const isSystem = message.sender.type === 'system';
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
+  const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
   const primaryAttachment = message.attachments?.[0];
   const attachmentUrl = primaryAttachment?.url || message.content;
 
@@ -95,17 +104,19 @@ export function MessageItem({
                 )}
               </button>
             </div>
-            <SyntaxHighlighter
-              language={message.metadata?.codeLanguage || 'typescript'}
-              style={vscDarkPlus}
-              customStyle={{
-                margin: 0,
-                borderRadius: '0 0 0.5rem 0.5rem',
-                fontSize: '0.875rem',
-              }}
-            >
-              {message.content}
-            </SyntaxHighlighter>
+            <div className="overflow-x-auto">
+              <SyntaxHighlighter
+                language={message.metadata?.codeLanguage || 'typescript'}
+                style={vscDarkPlus}
+                customStyle={{
+                  margin: 0,
+                  borderRadius: '0 0 0.5rem 0.5rem',
+                  fontSize: '0.875rem',
+                }}
+              >
+                {message.content}
+              </SyntaxHighlighter>
+            </div>
           </div>
         );
 
@@ -183,12 +194,45 @@ export function MessageItem({
 
       default:
         return (
-          <div className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.content.split('\n').map((line, i) => (
-              <p key={i} className={line.trim() === '' ? 'h-4' : ''}>
-                {line}
-              </p>
-            ))}
+          <div className="text-sm leading-relaxed max-w-full overflow-hidden break-words font-body">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                code({ node, inline, className, children, ...props }: any) {
+                  const match = /language-(\w+)/.exec(className || '');
+                  return !inline && match ? (
+                    <div className="overflow-x-auto rounded-lg my-2 border border-border/50">
+                      <SyntaxHighlighter
+                        style={vscDarkPlus}
+                        language={match[1]}
+                        PreTag="div"
+                        customStyle={{
+                          margin: 0,
+                          fontSize: '0.875rem',
+                        }}
+                        {...props}
+                      >
+                        {String(children).replace(/\n$/, '')}
+                      </SyntaxHighlighter>
+                    </div>
+                  ) : (
+                    <code className={cn("bg-muted px-1 py-0.5 rounded font-mono text-xs", className)} {...props}>
+                      {children}
+                    </code>
+                  );
+                },
+                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+                ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+                a: ({ href, children }) => (
+                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                    {children}
+                  </a>
+                ),
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
           </div>
         );
     }
@@ -241,7 +285,7 @@ export function MessageItem({
 
       <div
         className={cn(
-          'flex max-w-[80%] flex-col',
+          'flex max-w-[85%] md:max-w-[70%] flex-col',
           isUser ? 'items-end' : 'items-start'
         )}
       >
@@ -253,15 +297,74 @@ export function MessageItem({
 
         <div
           className={cn(
-            'relative rounded-2xl px-4 py-2.5',
+            'relative px-4 py-2.5 border-2',
             isUser
-              ? 'bg-primary text-primary-foreground rounded-br-md'
-              : 'bg-muted text-foreground rounded-bl-md',
-            message.type === 'code' && 'p-0 overflow-hidden bg-muted',
-            message.type === 'image' && 'p-1 bg-muted',
-            message.type === 'file' && 'p-2 bg-muted'
+              ? 'bg-primary text-primary-foreground border-primary'
+              : 'bg-white text-foreground border-border',
+            message.type === 'code' && 'p-0 overflow-hidden bg-muted border-border',
+            message.type === 'image' && 'p-1 bg-white border-border',
+            message.type === 'file' && 'p-2 bg-white border-border'
           )}
+          style={{
+            borderRadius: isUser 
+              ? "255px 15px 225px 15px / 15px 225px 15px 255px" 
+              : "15px 225px 15px 255px / 255px 15px 225px 15px",
+            boxShadow: isUser ? "2px 2px 0px 0px rgba(0,0,0,0.2)" : "2px 2px 0px 0px rgba(0,0,0,0.1)"
+          }}
         >
+          {/* Thinking Process Section */}
+          {((message.toolCalls && message.toolCalls.length > 0) || (message.thinkingContent && message.thinkingContent.length > 0)) && (
+            <div className="mb-4 rounded-lg bg-muted/30 p-3 text-xs border-2 border-dashed border-border/40">
+              <button
+                onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
+                className="flex w-full items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
+              >
+                <Brain className="h-4 w-4 text-primary/70 group-hover:scale-110 transition-transform" />
+                <span className="flex-1 text-left font-bold">
+                  思考过程 ({message.toolCalls?.length || 0} 步骤)
+                </span>
+                <div className={`transition-transform duration-200 ${isThinkingExpanded ? 'rotate-180' : ''}`}>
+                   {isThinkingExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </div>
+              </button>
+
+              {isThinkingExpanded && (
+                <div className="mt-3 space-y-3 pt-2 animate-fade-in">
+                  {message.toolCalls?.map((tc: any, i: number) => (
+                    <div key={i} className="flex flex-col gap-1 p-2 bg-background/50 rounded border border-border/20">
+                      <div className="flex items-center gap-2 font-medium">
+                        {tc.status === 'calling' ? (
+                          <Loader2 className="h-3 w-3 animate-spin text-amber-500" />
+                        ) : tc.status === 'completed' ? (
+                          <Check className="h-3 w-3 text-green-500" />
+                        ) : (
+                          <X className="h-3 w-3 text-destructive" />
+                        )}
+                        <span className="text-foreground">{tc.toolName}</span>
+                      </div>
+                      {tc.inputSummary && (
+                        <div className="pl-5 text-muted-foreground break-words font-mono text-[10px]">
+                          输入: {tc.inputSummary}
+                        </div>
+                      )}
+                      {tc.resultSummary && (
+                        <div className="pl-5 text-muted-foreground break-words font-mono text-[10px] border-l-2 border-primary/20">
+                          输出: {tc.resultSummary}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+
+                  {message.thinkingContent?.map((text: string, i: number) => (
+                    <div key={i} className="pl-2 border-l-2 border-primary/20 text-muted-foreground italic leading-relaxed">
+                      {text}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {renderContent()}
         </div>
 

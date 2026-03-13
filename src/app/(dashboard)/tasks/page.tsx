@@ -6,27 +6,24 @@ import { useAgents } from "@/hooks/use-agents";
 import { useAgentWebSocket } from "@/hooks/use-agent-websocket";
 import { storage } from "@/utils/storage";
 import {
-  Plus,
   Search,
   Filter,
-  MoreHorizontal,
   CheckCircle2,
   Clock,
   AlertCircle,
-  X,
   Wifi,
   WifiOff,
+  Loader2,
 } from "lucide-react";
 import { Task } from "@/types/agent";
 
 const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
 export default function TasksPage() {
-  const { tasks, isLoading, createTask, assignTask, loadTasks } = useTasks({ autoLoad: true });
+  const { tasks, isLoading, loadTasks } = useTasks({ autoLoad: true });
   const { agents, loadAgents } = useAgents({ autoLoad: true });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Task["status"] | "all">("all");
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // Resolve session ID for WebSocket connection
   const [swarmSessionId, setSwarmSessionId] = useState<string | undefined>();
@@ -53,7 +50,7 @@ export default function TasksPage() {
   const { isConnected, isConnecting } = useAgentWebSocket({
     swarmSessionId,
     autoConnect: !!swarmSessionId,
-    onTaskUpdate: debouncedRefresh,
+    onTaskUpdate: debouncedRefresh, 
     onAgentStatus: debouncedRefresh,
   });
 
@@ -79,9 +76,9 @@ export default function TasksPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold">任务管理</h1>
-            <p className="text-muted-foreground mt-1">
-              管理任务列表、分配和跟踪进度
+            <h1 className="text-3xl font-bold font-heading">任务管理</h1>
+            <p className="text-muted-foreground mt-1 font-body">
+              查看任务列表、分配和跟踪进度 (只读)
             </p>
           </div>
           {swarmSessionId && (
@@ -93,7 +90,7 @@ export default function TasksPage() {
                     ? "正在连接..."
                     : "实时连接断开"
               }
-              className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border"
+              className="flex items-center gap-1 text-xs px-2 py-1 rounded-full border border-border bg-white"
             >
               {isConnected ? (
                 <>
@@ -114,13 +111,6 @@ export default function TasksPage() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => setIsCreateModalOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          创建任务
-        </button>
       </div>
 
       {/* 统计卡片 */}
@@ -140,7 +130,7 @@ export default function TasksPage() {
             placeholder="搜索任务..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 rounded-lg border bg-background"
+            className="w-full pl-10 pr-4 py-2 rounded-lg border-2 border-border bg-background input-hand"
           />
         </div>
         <div className="flex items-center gap-2">
@@ -148,7 +138,8 @@ export default function TasksPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as Task["status"] | "all")}
-            className="px-3 py-2 rounded-lg border bg-background"
+            className="px-3 py-2 rounded-lg border-2 border-border bg-background font-body text-sm"
+            style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
           >
             <option value="all">全部状态</option>
             <option value="pending">待处理</option>
@@ -160,37 +151,37 @@ export default function TasksPage() {
       </div>
 
       {/* 任务列表 */}
-      <div className="rounded-xl border bg-card">
+      <div className="rounded-xl border-2 border-border bg-card overflow-hidden wobbly-box-md">
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full font-body">
             <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-4 py-3 text-left text-sm font-medium">任务</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">优先级</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">分配</th>
-                <th className="px-4 py-3 text-left text-sm font-medium">操作</th>
+              <tr className="border-b-2 border-border bg-muted/20">
+                <th className="px-4 py-3 text-left text-sm font-bold font-heading">任务</th>
+                <th className="px-4 py-3 text-left text-sm font-bold font-heading">状态</th>
+                <th className="px-4 py-3 text-left text-sm font-bold font-heading">优先级</th>
+                <th className="px-4 py-3 text-left text-sm font-bold font-heading">分配</th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                     加载中...
                   </td>
                 </tr>
               ) : filteredTasks.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                  <td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">
                     暂无任务
                   </td>
                 </tr>
               ) : (
                 filteredTasks.map((task) => (
-                  <tr key={task.id} className="border-b last:border-b-0 hover:bg-muted/50">
+                  <tr key={task.id} className="border-b border-border/50 last:border-b-0 hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
                       <div>
-                        <p className="font-medium">{task.title}</p>
+                        <p className="font-bold">{task.title}</p>
                         <p className="text-sm text-muted-foreground truncate max-w-[300px]">
                           {task.description || "无描述"}
                         </p>
@@ -204,31 +195,12 @@ export default function TasksPage() {
                     </td>
                     <td className="px-4 py-3">
                       {task.assignedTo ? (
-                        <span className="text-sm">
+                        <span className="text-sm font-bold px-2 py-1 bg-white border border-border rounded-md inline-block transform rotate-1">
                           {agents.find((a) => a.id === task.assignedTo)?.name || "Unknown"}
                         </span>
                       ) : (
                         <span className="text-sm text-muted-foreground">未分配</span>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <select
-                          value={task.assignedTo || ""}
-                          onChange={(e) => assignTask(task.id, e.target.value || undefined)}
-                          className="text-sm px-2 py-1 rounded border bg-background"
-                        >
-                          <option value="">未分配</option>
-                          {agents.map((agent) => (
-                            <option key={agent.id} value={agent.id}>
-                              {agent.name}
-                            </option>
-                          ))}
-                        </select>
-                        <button className="p-1 rounded hover:bg-accent">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </button>
-                      </div>
                     </td>
                   </tr>
                 ))
@@ -237,14 +209,6 @@ export default function TasksPage() {
           </table>
         </div>
       </div>
-
-      {/* 创建任务模态框 */}
-      {isCreateModalOpen && (
-        <CreateTaskModal
-          onClose={() => setIsCreateModalOpen(false)}
-          onCreate={createTask}
-        />
-      )}
     </div>
   );
 }
@@ -261,21 +225,21 @@ function StatCard({
   color: "blue" | "yellow" | "green" | "red";
 }) {
   const colorClasses = {
-    blue: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    yellow: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-    green: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
-    red: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+    blue: "bg-blue-100 text-blue-700 border-blue-200",
+    yellow: "bg-yellow-100 text-yellow-700 border-yellow-200",
+    green: "bg-green-100 text-green-700 border-green-200",
+    red: "bg-red-100 text-red-700 border-red-200",
   };
 
   return (
-    <div className="rounded-xl border bg-card p-4">
+    <div className="card-hand p-4 transition-transform hover:-translate-y-1">
       <div className="flex items-center gap-3">
-        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
+        <div className={`h-10 w-10 rounded-lg flex items-center justify-center border-2 ${colorClasses[color]}`} style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="text-2xl font-bold">{value}</p>
+          <p className="text-sm font-bold text-muted-foreground font-body">{title}</p>
+          <p className="text-2xl font-bold font-heading">{value}</p>
         </div>
       </div>
     </div>
@@ -284,16 +248,16 @@ function StatCard({
 
 function TaskStatusBadge({ status }: { status: Task["status"] }) {
   const config = {
-    pending: { label: "待处理", className: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400" },
-    in_progress: { label: "进行中", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    completed: { label: "已完成", className: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" },
-    failed: { label: "失败", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
-    cancelled: { label: "已取消", className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400" },
+    pending: { label: "待处理", className: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+    in_progress: { label: "进行中", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    completed: { label: "已完成", className: "bg-green-100 text-green-700 border-green-200" },
+    failed: { label: "失败", className: "bg-red-100 text-red-700 border-red-200" },
+    cancelled: { label: "已取消", className: "bg-gray-100 text-gray-700 border-gray-200" },
   };
 
   const { label, className } = config[status];
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${className}`}>
+    <span className={`px-2 py-1 rounded-full text-xs font-bold border-2 ${className}`}>
       {label}
     </span>
   );
@@ -301,109 +265,15 @@ function TaskStatusBadge({ status }: { status: Task["status"] }) {
 
 function TaskPriorityBadge({ priority }: { priority: Task["priority"] }) {
   const config = {
-    low: { label: "低", className: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400" },
-    medium: { label: "中", className: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400" },
-    high: { label: "高", className: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" },
+    low: { label: "低", className: "bg-gray-100 text-gray-700 border-gray-200" },
+    medium: { label: "中", className: "bg-blue-100 text-blue-700 border-blue-200" },
+    high: { label: "高", className: "bg-red-100 text-red-700 border-red-200" },
   };
 
   const { label, className } = config[priority];
   return (
-    <span className={`px-2 py-1 rounded-full text-xs font-medium ${className}`}>
+    <span className={`px-2 py-0.5 rounded-sm text-[10px] font-bold uppercase tracking-wider ${className}`}>
       {label}
     </span>
-  );
-}
-
-function CreateTaskModal({
-  onClose,
-  onCreate,
-}: {
-  onClose: () => void;
-  onCreate: (data: { title: string; description: string; priority: "low" | "medium" | "high" }) => Promise<unknown>;
-}) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      await onCreate({ title, description, priority });
-      onClose();
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold">创建新任务</h2>
-          <button onClick={onClose} className="p-1 rounded hover:bg-accent">
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1">任务标题</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="输入任务标题..."
-              className="w-full px-3 py-2 rounded-lg border bg-background"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">描述</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="输入任务描述..."
-              rows={3}
-              className="w-full px-3 py-2 rounded-lg border bg-background resize-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">优先级</label>
-            <select
-              value={priority}
-              onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
-              className="w-full px-3 py-2 rounded-lg border bg-background"
-            >
-              <option value="low">低</option>
-              <option value="medium">中</option>
-              <option value="high">高</option>
-            </select>
-          </div>
-
-          <div className="flex justify-end gap-2 pt-4">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-lg border hover:bg-accent transition-colors"
-            >
-              取消
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting || !title.trim()}
-              className="px-4 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {isSubmitting ? "创建中..." : "创建"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

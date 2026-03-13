@@ -12,8 +12,10 @@ import {
   MessageSquare,
   TrendingUp,
   AlertCircle,
+  Settings,
 } from "lucide-react";
 import Link from "next/link";
+import { formatTimeAgo } from "@/lib/utils/date";
 
 export default function DashboardPage() {
   const { agents, isLoading: isAgentsLoading } = useAgents({ autoLoad: true });
@@ -34,21 +36,25 @@ export default function DashboardPage() {
   const pendingTasks = tasks.filter((t) => t.status === "pending").length;
   const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
 
-  // 最近活动
-  const recentActivities = [
-    { id: 1, type: "agent", message: "Agent Worker-1 完成了任务 #1234", time: "2分钟前", icon: CheckCircle2 },
-    { id: 2, type: "task", message: '新任务 "数据分析" 已创建', time: "5分钟前", icon: Zap },
-    { id: 3, type: "message", message: "Leader 发送了团队消息", time: "10分钟前", icon: MessageSquare },
-    { id: 4, type: "agent", message: "Agent Specialist-2 上线", time: "15分钟前", icon: Activity },
-  ];
+  // Real Recent Activity from Tasks
+  const recentActivities = tasks
+    .sort((a, b) => new Date(b.updatedAt || b.createdAt).getTime() - new Date(a.updatedAt || a.createdAt).getTime())
+    .slice(0, 5)
+    .map((task) => ({
+      id: task.id,
+      type: 'task',
+      message: `任务 "${task.title}" ${task.status === 'completed' ? '已完成' : task.status === 'in_progress' ? '进行中' : '已创建'}`,
+      time: formatTimeAgo(task.updatedAt || task.createdAt),
+      icon: task.status === 'completed' ? CheckCircle2 : task.status === 'in_progress' ? Clock : Zap
+    }));
 
   return (
     <div className="flex flex-col gap-6 p-6">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-3xl font-bold font-heading">Dashboard</h1>
+          <p className="text-muted-foreground mt-1 font-body">
             欢迎来到 Swarm Agent集群系统
           </p>
         </div>
@@ -61,21 +67,13 @@ export default function DashboardPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="总Agent数"
           value={totalAgents}
           icon={Users}
-          trend={`${onlineAgents} 在线`}
-          trendUp={true}
-          href="/chat"
-        />
-        <StatCard
-          title="在线Agent"
-          value={activeAgents}
-          icon={Activity}
           trend={`${busyAgents} 忙碌`}
-          trendUp={activeAgents > 0}
+          trendUp={busyAgents > 0}
           href="/chat"
         />
         <StatCard
@@ -100,21 +98,16 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Agent 状态 */}
         <div className="lg:col-span-2 space-y-6">
-          <div className="rounded-xl border bg-card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Agent 状态</h2>
-              <Link
-                href="/chat"
-                className="text-sm text-primary hover:underline"
-              >
-                查看全部
-              </Link>
+          <div className="card-hand p-6">
+            <div className="flex items-center justify-between mb-4 border-b-2 border-dashed border-border pb-2">
+              <h2 className="text-lg font-bold font-heading">Agent 状态</h2>
             </div>
             <div className="space-y-3">
               {agents.slice(0, 5).map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  className="flex items-center justify-between p-3 border-2 border-border/10 bg-muted/30 hover:bg-muted/50 transition-colors"
+                  style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -122,21 +115,26 @@ export default function DashboardPage() {
                         agent.status === "online"
                           ? "bg-green-500"
                           : agent.status === "busy"
-                          ? "bg-yellow-500"
+                          ? "bg-amber-500"
                           : agent.status === "offline"
                           ? "bg-gray-500"
                           : "bg-blue-500"
                       }`}
                     />
                     <div>
-                      <p className="font-medium">{agent.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {agent.type} · {agent.description?.slice(0, 30) || "无描述"}
+                      <div className="flex items-center gap-2">
+                         <p className="font-bold font-heading">{agent.name}</p>
+                         <span className="text-[10px] px-1.5 py-0.5 bg-white border border-border rounded-full font-mono">
+                           {agent.type === 'leader' ? 'LEAD' : 'WORKER'}
+                         </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground font-body">
+                        {agent.description?.slice(0, 30) || "无描述"}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">
+                    <p className="text-sm font-bold font-body">
                       {agent.status === "online"
                         ? "在线"
                         : agent.status === "busy"
@@ -145,11 +143,10 @@ export default function DashboardPage() {
                         ? "离线"
                         : "空闲"}
                     </p>
-                    {agent.currentTask && (
-                      <p className="text-xs text-muted-foreground truncate max-w-[150px]">
-                        {agent.currentTask}
-                      </p>
-                    )}
+                    {/* Placeholder for Session info if available */}
+                    <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                       {agent.currentTask || '空闲中'}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -169,12 +166,12 @@ export default function DashboardPage() {
           </div>
 
           {/* 任务概览 */}
-          <div className="rounded-xl border bg-card p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">最近任务</h2>
+          <div className="card-hand p-6">
+            <div className="flex items-center justify-between mb-4 border-b-2 border-dashed border-border pb-2">
+              <h2 className="text-lg font-bold font-heading">最近任务</h2>
               <Link
                 href="/tasks"
-                className="text-sm text-primary hover:underline"
+                className="text-sm text-primary hover:underline font-bold"
               >
                 查看全部
               </Link>
@@ -183,24 +180,25 @@ export default function DashboardPage() {
               {tasks.slice(0, 5).map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
+                  className="flex items-center justify-between p-3 border-2 border-border/10 bg-muted/30 hover:bg-muted/50 transition-colors"
+                  style={{ borderRadius: "15px 225px 15px 255px / 255px 15px 225px 15px" }}
                 >
                   <div>
-                    <p className="font-medium">{task.title}</p>
+                    <p className="font-bold font-body">{task.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {task.description?.slice(0, 50) || "无描述"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`px-2 py-1 rounded-full text-xs ${
+                      className={`px-2 py-1 rounded-full text-xs font-bold border-2 ${
                         task.status === "completed"
-                          ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                          ? "bg-green-100 text-green-800 border-green-200"
                           : task.status === "in_progress"
-                          ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          ? "bg-blue-100 text-blue-800 border-blue-200"
                           : task.status === "pending"
-                          ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
-                          : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                          ? "bg-yellow-100 text-yellow-800 border-yellow-200"
+                          : "bg-gray-100 text-gray-800 border-gray-200"
                       }`}
                     >
                       {task.status === "completed"
@@ -211,11 +209,6 @@ export default function DashboardPage() {
                         ? "待处理"
                         : task.status}
                     </span>
-                    {task.assignedTo && (
-                      <span className="text-xs text-muted-foreground">
-                        已分配
-                      </span>
-                    )}
                   </div>
                 </div>
               ))}
@@ -232,70 +225,73 @@ export default function DashboardPage() {
         {/* 侧边栏 */}
         <div className="space-y-6">
           {/* 快速操作 */}
-          <div className="rounded-xl border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">快速操作</h2>
+          <div className="card-hand p-6">
+            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">快速操作</h2>
             <div className="space-y-2">
               <QuickActionButton
                 href="/chat"
                 icon={MessageSquare}
                 label="开始对话"
-                description="与 Lead 和队友进行实时交流"
+                description="新建或继续会话"
               />
               <QuickActionButton
-                href="/tasks"
-                icon={Zap}
-                label="创建任务"
-                description="分配新任务给队友"
-              />
-              <QuickActionButton
-                href="/chat"
+                href="/profile"
                 icon={Users}
-                label="进入会话"
-                description="查看 Swarm 对话与协作状态"
+                label="个人资料"
+                description="查看个人信息"
+              />
+              <QuickActionButton
+                href="/settings"
+                icon={Settings}
+                label="偏好设置"
+                description="调整系统设置"
               />
             </div>
           </div>
 
           {/* 最近活动 */}
-          <div className="rounded-xl border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">最近活动</h2>
+          <div className="card-hand p-6">
+            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">最近活动</h2>
             <div className="space-y-4">
-              {recentActivities.map((activity) => (
-                <div key={activity.id} className="flex gap-3">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              {recentActivities.length > 0 ? recentActivities.map((activity) => (
+                <div key={activity.id} className="flex gap-3 items-center">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-black/10">
                     <activity.icon className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm">{activity.message}</p>
+                    <p className="text-sm font-bold font-body">{activity.message}</p>
                     <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="text-center py-4 text-muted-foreground text-sm">暂无活动</div>
+              )}
             </div>
           </div>
 
           {/* 系统状态 */}
-          <div className="rounded-xl border bg-card p-6">
-            <h2 className="text-lg font-semibold mb-4">系统状态</h2>
+          <div className="card-hand p-6">
+            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">系统状态</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">API 连接</span>
-                <span className="flex items-center gap-1 text-sm text-green-600">
-                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="flex items-center gap-1 text-sm text-green-600 font-bold">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                   正常
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">WebSocket</span>
-                <span className="flex items-center gap-1 text-sm text-green-600">
-                  <span className="h-2 w-2 rounded-full bg-green-500" />
+                <span className="flex items-center gap-1 text-sm text-green-600 font-bold">
+                  <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                   已连接
                 </span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">系统负载</span>
-                <span className="text-sm font-medium">
-                  {Math.round((onlineAgents / (totalAgents || 1)) * 100)}%
+                <span className="text-sm font-bold">
+                  {/* Mock Real Load based on busy agents */}
+                  {Math.round((busyAgents / (totalAgents || 1)) * 100)}%
                 </span>
               </div>
             </div>
@@ -323,22 +319,22 @@ function StatCard({
   href: string;
 }) {
   return (
-    <Link href={href} className="block">
-      <div className="rounded-xl border bg-card p-6 hover:shadow-md transition-shadow">
+    <Link href={href} className="block group">
+      <div className="card-hand p-6 transition-all hover:shadow-hard-sm hover:-translate-y-1">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-bold mt-2">{value}</p>
+            <p className="text-sm font-bold text-muted-foreground font-body uppercase tracking-wider">{title}</p>
+            <p className="text-3xl font-bold mt-2 font-heading">{value}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center border-2 border-black/5" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
             <Icon className="h-5 w-5 text-primary" />
           </div>
         </div>
         <div className="mt-4 flex items-center gap-2">
           <TrendingUp
-            className={`h-4 w-4 ${trendUp ? "text-green-500" : "text-gray-400"}`}
+            className={`h-4 w-4 ${trendUp ? "text-green-600" : "text-gray-400"}`}
           />
-          <span className="text-sm text-muted-foreground">{trend}</span>
+          <span className="text-sm text-muted-foreground font-body">{trend}</span>
         </div>
       </div>
     </Link>

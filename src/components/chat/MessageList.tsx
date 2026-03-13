@@ -121,6 +121,26 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
             </div>
           </div>
         ))}
+        
+        {/* Loading/Thinking Placeholder when waiting for response */}
+        {isLoading && !streamingState?.isThinking && messages.length > 0 && (
+          <div className="flex gap-3 animate-slide-up flex-row">
+            <div className="w-8 shrink-0 flex items-center justify-center">
+               <div className="h-8 w-8 rounded-full bg-secondary border-2 border-border shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-xs font-bold"
+                    style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
+                  S
+               </div>
+            </div>
+            <div className="relative px-4 py-3 bg-white border-2 border-border text-foreground shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)]"
+                 style={{ borderRadius: "15px 225px 15px 255px / 255px 15px 225px 15px" }}>
+               <div className="flex items-center gap-1">
+                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
+                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
+                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
+               </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {messages.length === 0 && !isLoading && (
@@ -128,6 +148,26 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
           <div className="mb-4 text-6xl">💬</div>
           <p className="text-lg">还没有消息</p>
           <p className="text-sm mt-2">发送一条消息开始对话</p>
+        </div>
+      )}
+
+      {/* Loading/Thinking Placeholder when waiting for response */}
+      {messages.length > 0 && messages[messages.length - 1].sender.type === 'user' && 
+       (!streamingState || (!streamingState.isThinking && streamingState.toolCalls.length === 0 && streamingState.thinkingContent.length === 0)) && (
+        <div className="mt-4 flex gap-3 animate-slide-up flex-row">
+          <div className="w-8 shrink-0 flex items-center justify-center">
+             <div className="h-8 w-8 rounded-full bg-secondary border-2 border-border shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] flex items-center justify-center text-xs font-bold"
+                  style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
+                S
+             </div>
+          </div>
+          <div className="relative px-4 py-3 bg-white border-2 border-border text-foreground rounded-[15px_225px_15px_255px_/_255px_15px_225px_15px] shadow-[2px_2px_0px_0px_rgba(0,0,0,0.1)]">
+             <div className="flex items-center gap-1">
+               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
+               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
+               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
+             </div>
+          </div>
         </div>
       )}
 

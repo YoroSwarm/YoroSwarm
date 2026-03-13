@@ -98,9 +98,9 @@ export function SessionList({
           {onCloseMobile && (
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
               onClick={onCloseMobile}
-              className="lg:hidden"
+              className="lg:hidden h-8 w-8"
             >
               <X className="h-5 w-5" />
             </Button>
@@ -193,9 +193,11 @@ export function SessionList({
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="ghost"
-                      size="icon-xs"
-                      className="opacity-0 group-hover:opacity-100 transition-all"
-                      onClick={(e) => e.stopPropagation()}
+                      size="icon"
+                      className="opacity-0 group-hover:opacity-100 transition-all h-6 w-6"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                      }}
                     >
                       <MoreVertical className="h-4 w-4" />
                     </Button>

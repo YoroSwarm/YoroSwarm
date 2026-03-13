@@ -1,16 +1,30 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Kalam, Patrick_Hand, ZCOOL_KuaiLe, Ma_Shan_Zheng } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const kalam = Kalam({
+  weight: ["300", "400", "700"],
   subsets: ["latin"],
+  variable: "--font-heading",
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const patrickHand = Patrick_Hand({
+  weight: "400",
   subsets: ["latin"],
+  variable: "--font-body",
+});
+
+const zcoolKuaiLe = ZCOOL_KuaiLe({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-chinese-heading",
+});
+
+const maShanZheng = Ma_Shan_Zheng({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-chinese-body",
 });
 
 export const metadata: Metadata = {
@@ -26,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${kalam.variable} ${patrickHand.variable} ${zcoolKuaiLe.variable} ${maShanZheng.variable} antialiased font-body bg-background text-foreground`}
       >
         <Providers>
           {children}
