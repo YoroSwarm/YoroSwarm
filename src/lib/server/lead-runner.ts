@@ -311,6 +311,19 @@ function buildLeadContextMessages(
     }
   }
 
+  // Check for recovery status — tasks interrupted by server restart
+  const interruptedTasks = context.tasks.filter(t =>
+    t.errorSummary?.includes('服务器重启')
+  )
+  if (interruptedTasks.length > 0) {
+    statusParts.push('\n## ⚠️ 中断恢复通知')
+    statusParts.push(`以下 ${interruptedTasks.length} 个任务因服务器重启被中断，已重置为待分配状态：`)
+    for (const t of interruptedTasks) {
+      statusParts.push(`- **${t.title}** (ID: ${t.id})`)
+    }
+    statusParts.push('请重新分配这些任务给合适的队友。')
+  }
+
   // Session attachments
   if (context.attachments && context.attachments.length > 0) {
     statusParts.push('\n## 会话文件')
@@ -333,6 +346,8 @@ function buildLeadContextMessages(
   // Add conversation history from context entries
   const historyEntries = [...context.contextEntries].reverse() // chronological
   for (const entry of historyEntries) {
+    const metadata = entry.metadata ? JSON.parse(entry.metadata as string) : null
+
     if (entry.entryType === 'user_input' || entry.entryType === 'user_goal') {
       messages.push({ role: 'user', content: entry.content })
     } else if (entry.entryType === 'assistant_response') {
@@ -342,6 +357,28 @@ function buildLeadContextMessages(
         role: 'user',
         content: `[队友汇报] ${entry.content}`,
       })
+    } else if (entry.entryType === 'tool_call' && metadata?.toolUseId) {
+      messages.push({
+        role: 'assistant',
+        content: [{
+          type: 'tool_use' as const,
+          id: metadata.toolUseId,
+          name: metadata.toolName,
+          input: metadata.toolInput || {},
+        }],
+      })
+    } else if (entry.entryType === 'tool_result' && metadata?.toolUseId) {
+      messages.push({
+        role: 'user',
+        content: [{
+          type: 'tool_result' as const,
+          tool_use_id: metadata.toolUseId,
+          content: metadata.resultContent || entry.content,
+          is_error: metadata.isError || false,
+        }],
+      })
+    } else if (entry.entryType === 'progress_update') {
+      messages.push({ role: 'user', content: `[进度更新] ${entry.content}` })
     }
   }
 
@@ -367,10 +404,20 @@ function normalizeMessages(messages: LLMMessage[]): LLMMessage[] {
   for (const msg of messages) {
     const last = normalized[normalized.length - 1]
     if (last && last.role === msg.role) {
-      // Merge consecutive same-role messages
-      const lastContent = typeof last.content === 'string' ? last.content : JSON.stringify(last.content)
-      const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-      last.content = `${lastContent}\n\n${msgContent}`
+      // Both are strings → merge
+      if (typeof last.content === 'string' && typeof msg.content === 'string') {
+        last.content = `${last.content}\n\n${msg.content}`
+      }
+      // Both are arrays → concatenate
+      else if (Array.isArray(last.content) && Array.isArray(msg.content)) {
+        last.content = [...last.content, ...msg.content]
+      }
+      // Mixed: convert string to text block and merge into array
+      else if (Array.isArray(last.content) && typeof msg.content === 'string') {
+        last.content = [...last.content, { type: 'text' as const, text: msg.content }]
+      } else if (typeof last.content === 'string' && Array.isArray(msg.content)) {
+        last.content = [{ type: 'text' as const, text: last.content }, ...msg.content]
+      }
     } else {
       normalized.push({ ...msg })
     }

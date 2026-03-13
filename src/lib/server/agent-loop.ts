@@ -222,8 +222,21 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           is_error: isError,
         } satisfies ToolResultBlock)
 
-        // Record tool call in context
+        // Record tool call and result in context for persistence/recovery
         const entryId = `tool-${toolUse.name}-${Date.now()}`
+        await appendAgentContextEntry({
+          swarmSessionId,
+          agentId,
+          sourceType: 'tool',
+          sourceId: toolUse.name,
+          entryType: 'tool_call',
+          content: `调用工具: ${toolUse.name}`,
+          metadata: {
+            toolUseId: toolUse.id,
+            toolName: toolUse.name,
+            toolInput: toolUse.input,
+          },
+        })
         await appendAgentContextEntry({
           swarmSessionId,
           agentId,
@@ -231,7 +244,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           sourceId: toolUse.name,
           entryType: 'tool_result',
           content: `[工具: ${toolUse.name}] ${isError ? '失败' : '成功'}: ${result.slice(0, 500)}`,
-          metadata: { toolName: toolUse.name, isError },
+          metadata: {
+            toolUseId: toolUse.id,
+            toolName: toolUse.name,
+            isError,
+            resultContent: result.slice(0, 2000),
+          },
         })
         contextEntriesAdded.push(entryId)
       }

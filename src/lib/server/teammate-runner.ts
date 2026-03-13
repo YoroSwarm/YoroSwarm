@@ -382,6 +382,8 @@ async function buildTeammateContextMessages(
   const chronological = [...entries].reverse()
 
   for (const entry of chronological) {
+    const metadata = entry.metadata ? JSON.parse(entry.metadata as string) : null
+
     if (entry.entryType === 'task_assignment' || entry.entryType === 'system_bootstrap') {
       messages.push({
         role: 'user',
@@ -389,6 +391,28 @@ async function buildTeammateContextMessages(
       })
     } else if (entry.entryType === 'assistant_response') {
       messages.push({ role: 'assistant', content: entry.content })
+    } else if (entry.entryType === 'tool_call' && metadata?.toolUseId) {
+      messages.push({
+        role: 'assistant',
+        content: [{
+          type: 'tool_use' as const,
+          id: metadata.toolUseId,
+          name: metadata.toolName,
+          input: metadata.toolInput || {},
+        }],
+      })
+    } else if (entry.entryType === 'tool_result' && metadata?.toolUseId) {
+      messages.push({
+        role: 'user',
+        content: [{
+          type: 'tool_result' as const,
+          tool_use_id: metadata.toolUseId,
+          content: metadata.resultContent || entry.content,
+          is_error: metadata.isError || false,
+        }],
+      })
+    } else if (entry.entryType === 'progress_update') {
+      messages.push({ role: 'user', content: `[进度更新] ${entry.content}` })
     }
   }
 
@@ -431,9 +455,20 @@ function normalizeMessages(messages: LLMMessage[]): LLMMessage[] {
   for (const msg of messages) {
     const last = normalized[normalized.length - 1]
     if (last && last.role === msg.role) {
-      const lastContent = typeof last.content === 'string' ? last.content : JSON.stringify(last.content)
-      const msgContent = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content)
-      last.content = `${lastContent}\n\n${msgContent}`
+      // Both are strings → merge
+      if (typeof last.content === 'string' && typeof msg.content === 'string') {
+        last.content = `${last.content}\n\n${msg.content}`
+      }
+      // Both are arrays → concatenate
+      else if (Array.isArray(last.content) && Array.isArray(msg.content)) {
+        last.content = [...last.content, ...msg.content]
+      }
+      // Mixed: convert string to text block and merge into array
+      else if (Array.isArray(last.content) && typeof msg.content === 'string') {
+        last.content = [...last.content, { type: 'text' as const, text: msg.content }]
+      } else if (typeof last.content === 'string' && Array.isArray(msg.content)) {
+        last.content = [{ type: 'text' as const, text: last.content }, ...msg.content]
+      }
     } else {
       normalized.push({ ...msg })
     }
