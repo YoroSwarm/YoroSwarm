@@ -14,6 +14,9 @@ type SubscriptionTarget = 'all' | 'session' | 'agent' | 'task' | 'all_agents' | 
 
 let wsServerInitializationPromise: Promise<void> | null = null;
 
+// 全局连接锁，防止 StrictMode 下的重复连接
+const globalConnectingLocks = new Map<string, boolean>();
+
 function resolveWebSocketUrl(rawUrl: string): string {
   if (!rawUrl || typeof window === 'undefined') {
     return rawUrl;
@@ -221,6 +224,12 @@ export function useWebSocket({
       return;
     }
 
+    // 使用全局锁防止同一 URL 的重复连接（StrictMode 防护）
+    if (globalConnectingLocks.get(url)) {
+      return;
+    }
+    globalConnectingLocks.set(url, true);
+
     isConnectingRef.current = true;
     setIsConnecting(true);
     isManualDisconnectRef.current = false;
@@ -291,6 +300,8 @@ export function useWebSocket({
         };
 
         ws.onclose = (event) => {
+          globalConnectingLocks.delete(url);
+
           if (wsRef.current === ws) {
             wsRef.current = null;
           }
@@ -328,6 +339,7 @@ export function useWebSocket({
           onError?.(error);
         };
       } catch (error) {
+        globalConnectingLocks.delete(url);
         console.error('Failed to connect WebSocket:', { url: resolvedUrl, error });
         isConnectingRef.current = false;
         setIsConnecting(false);
@@ -368,7 +380,8 @@ export function useWebSocket({
     wsRef.current = null;
     setIsConnecting(false);
     setIsConnected(false);
-  }, [clearReconnect, clearHeartbeat]);
+    globalConnectingLocks.delete(url);
+  }, [clearReconnect, clearHeartbeat, url]);
 
   const sendMessage = useCallback((message: Omit<WebSocketMessage, 'message_id'> & { message_id?: string }): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {

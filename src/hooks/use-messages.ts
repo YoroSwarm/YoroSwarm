@@ -195,26 +195,19 @@ export function useMessages(options: UseMessagesOptions) {
         }
 
         const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);
-        setMessages((prev) => prev.map((message) => message.id === tempId ? convertExternalMessage(response, participantMap) : message));
+        const serverMessage = convertExternalMessage(response, participantMap);
+        
+        setMessages((prev) => {
+          // 如果 WebSocket 已经推送了这条消息，直接删除临时消息
+          if (prev.some((m) => m.id === serverMessage.id)) {
+            return prev.filter((m) => m.id !== tempId);
+          }
+          // 否则用服务器消息替换临时消息
+          return prev.map((m) => m.id === tempId ? serverMessage : m);
+        });
       }
 
-      // Send individual file messages for each uploaded file (for display purposes)
-      if (uploadedFiles.length > 0 && trimmed) {
-        for (const uploaded of uploadedFiles) {
-          await swarmSessionsApi.sendExternalMessage(activeSessionId, {
-            content: uploaded.originalName,
-            message_type: 'file',
-            metadata: {
-              fileId: uploaded.id,
-              fileName: uploaded.originalName,
-              mimeType: uploaded.mimeType,
-              size: uploaded.size,
-              url: uploaded.url,
-            },
-          });
-        }
-        await loadMessages();
-      }
+      // 文件消息已作为附件包含在主消息中，无需单独发送
     } catch (err) {
       setError(err instanceof Error ? err.message : '发送消息失败');
       throw err;
@@ -280,6 +273,34 @@ export function useMessages(options: UseMessagesOptions) {
       void loadMessages();
     }
   }, [autoLoad, loadMessages, sessionId]);
+
+  // 确保消息列表去重（防止竞态条件导致的重复消息）
+  const prevMessagesRef = useRef<Message[]>([]);
+  useEffect(() => {
+    const seenIds = new Set<string>();
+    const duplicates: string[] = [];
+    messages.forEach((m) => {
+      if (seenIds.has(m.id)) {
+        duplicates.push(m.id);
+      } else {
+        seenIds.add(m.id);
+      }
+    });
+    if (duplicates.length > 0) {
+      console.warn('Detected duplicate message IDs:', duplicates);
+      const seen = new Set<string>();
+      const deduped = messages.filter((m) => {
+        if (seen.has(m.id)) return false;
+        seen.add(m.id);
+        return true;
+      });
+      // 只有当去重后的列表与当前列表不同时才更新
+      if (deduped.length !== messages.length) {
+        setMessages(deduped);
+      }
+    }
+    prevMessagesRef.current = messages;
+  }, [messages]);
 
   return {
     messages,

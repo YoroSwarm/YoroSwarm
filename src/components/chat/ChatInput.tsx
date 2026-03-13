@@ -40,6 +40,7 @@ export function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mentionStartRef = useRef<number>(-1);
+  const sendingRef = useRef(false);
 
   const { agents } = useAgents({
     swarmSessionId: sessionId || undefined,
@@ -121,7 +122,7 @@ export function ChatInput({
       return;
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSend();
     }
@@ -151,9 +152,10 @@ export function ChatInput({
   };
 
   const handleSend = async () => {
-    if ((!content.trim() && attachments.length === 0) || disabled || isSending) return;
+    if ((!content.trim() && attachments.length === 0) || disabled || isSending || sendingRef.current) return;
 
     try {
+      sendingRef.current = true;
       setIsSending(true);
       await onSend?.(content.trim(), attachments.length > 0 ? attachments : undefined);
 
@@ -164,6 +166,7 @@ export function ChatInput({
       }
     } finally {
       setIsSending(false);
+      sendingRef.current = false;
     }
   };
 
