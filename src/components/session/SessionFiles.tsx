@@ -168,7 +168,7 @@ export function SessionFiles({ sessionId }: SessionFilesProps) {
             </Button>
           </div>
         ) : filteredFiles.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
             <FolderOpen className="h-12 w-12 mb-3 opacity-50" />
             <p className="font-medium">暂无文件</p>
             <p className="text-sm mt-1">上传的文件将显示在这里</p>

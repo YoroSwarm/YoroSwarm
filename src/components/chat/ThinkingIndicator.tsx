@@ -20,8 +20,7 @@ export function ThinkingIndicator({ agentName, isThinking, thinkingContent, tool
   return (
     <div className="flex gap-3 animate-slide-up font-body">
       <div 
-        className="flex h-8 w-8 shrink-0 items-center justify-center bg-secondary text-secondary-foreground text-xs font-bold border-2 border-border shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-        style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}
+        className="flex h-8 w-8 shrink-0 items-center justify-center bg-secondary text-secondary-foreground text-xs font-bold border border-border rounded-full"
       >
         {agentName.charAt(0).toUpperCase()}
       </div>
@@ -30,8 +29,7 @@ export function ThinkingIndicator({ agentName, isThinking, thinkingContent, tool
         <span className="mb-1 text-xs text-muted-foreground font-bold">{agentName}</span>
 
         <div 
-          className="bg-muted px-4 py-3 text-foreground w-full border-2 border-border"
-          style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
+          className="bg-muted px-4 py-3 text-foreground w-full border border-border rounded-xl"
         >
           <button
             onClick={() => setIsExpanded(!isExpanded)}
@@ -61,7 +59,7 @@ export function ThinkingIndicator({ agentName, isThinking, thinkingContent, tool
           )}
 
           {toolCalls.length > 0 && (
-            <div className="mt-3 space-y-2 border-t-2 border-dashed border-border/20 pt-2">
+            <div className="mt-3 space-y-2 border-t border-border/20 pt-2">
               {toolCalls.map((tc, i) => (
                 <div key={i} className="flex items-center gap-2 text-xs font-medium">
                   {tc.status === 'calling' ? (
@@ -82,7 +80,7 @@ export function ThinkingIndicator({ agentName, isThinking, thinkingContent, tool
           )}
 
           {isExpanded && thinkingContent.length > 0 && (
-            <div className="mt-3 border-t-2 border-dashed border-border/20 pt-3">
+            <div className="mt-3 border-t border-border/20 pt-3">
               <div className="text-xs text-muted-foreground leading-relaxed space-y-1 max-h-48 overflow-y-auto font-medium">
                 {thinkingContent.map((text, i) => (
                   <p key={i} className="pl-2 border-l-2 border-primary/20">{text}</p>

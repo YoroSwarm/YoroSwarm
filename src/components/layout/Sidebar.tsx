@@ -86,11 +86,11 @@ export function Sidebar() {
       {/* 1. Logo (Return to Dashboard) */}
       <div className="h-16 flex items-center justify-center border-b border-border px-4 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-secondary flex items-center justify-center flex-shrink-0 border-2 border-transparent group-hover:border-border transition-all shadow-hard-sm group-hover:shadow-hard">
-            <span className="text-white font-bold text-sm font-heading">S</span>
+          <div className="w-8 h-8 rounded-lg bg-linear-to-br from-primary to-secondary flex items-center justify-center shrink-0 border border-transparent group-hover:border-border transition-all shadow-md group-hover:shadow-lg">
+            <span className="text-primary-foreground font-semibold text-sm">S</span>
           </div>
           {!collapsed && (
-            <span className="font-bold text-xl text-foreground font-heading group-hover:translate-x-1 transition-transform">Swarm</span>
+            <span className="font-semibold text-xl text-foreground group-hover:translate-x-1 transition-transform">Swarm</span>
           )}
         </Link>
       </div>
@@ -102,13 +102,12 @@ export function Sidebar() {
             href="/tasks"
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-bold transition-all border-2 border-transparent',
-              'hover:bg-accent hover:text-accent-foreground hover:border-border hover:shadow-hard-sm',
+              'hover:bg-accent hover:text-accent-foreground hover:border-border',
               pathname === '/tasks'
-                ? 'bg-primary/5 text-primary border-border shadow-hard-sm'
+                ? 'bg-primary/5 text-primary border-border shadow-sm'
                 : 'text-muted-foreground',
               collapsed && 'justify-center px-2'
             )}
-            style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
           >
             <CheckSquare className="w-5 h-5 shrink-0" />
             {!collapsed && <span>任务管理</span>}
@@ -130,7 +129,7 @@ export function Sidebar() {
         </div>
 
         {/* 4. Chat List */}
-        <ScrollArea className="flex-1 [&>[data-slot=scroll-area-viewport]>div]:!block">
+        <ScrollArea className="flex-1 [&>[data-slot=scroll-area-viewport]>div]:block!">
           <div className="space-y-1 p-2">
             {!collapsed && sessions.length === 0 && !isLoading && (
                <div className="text-center text-muted-foreground text-sm py-4">
@@ -148,14 +147,14 @@ export function Sidebar() {
                     ? 'justify-center px-2 rounded-lg border-2 border-border' 
                     : 'border-2 border-border rounded-lg hover:bg-accent/50',
                   !collapsed && currentSessionId === session.id
-                    ? 'bg-accent shadow-hard-sm'
+                    ? 'bg-accent shadow-sm'
                     : collapsed && currentSessionId === session.id
                       ? 'bg-accent/20'
                       : ''
                 )}
               >
                 <Avatar className="h-8 w-8 shrink-0 border border-border">
-                   <AvatarFallback className="bg-white text-primary font-bold font-heading">
+                   <AvatarFallback className="bg-muted text-foreground font-semibold">
                      {session.title.slice(0, 1).toUpperCase()}
                    </AvatarFallback>
                 </Avatar>
@@ -163,7 +162,7 @@ export function Sidebar() {
                 {!collapsed && (
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-0.5">
-                       <span className={cn("font-bold text-sm truncate font-heading", currentSessionId === session.id ? "text-foreground" : "text-muted-foreground")}>
+                       <span className={cn("font-semibold text-sm truncate", currentSessionId === session.id ? "text-foreground" : "text-muted-foreground")}>
                          {session.title || '未命名会话'}
                        </span>
                        {session.updatedAt && (
@@ -172,7 +171,7 @@ export function Sidebar() {
                          </span>
                        )}
                     </div>
-                    <p className="text-xs text-muted-foreground truncate font-body">
+                    <p className="text-xs text-muted-foreground truncate">
                       {session.lastMessage?.content || session.description || '无预览'}
                     </p>
                   </div>
@@ -188,7 +187,7 @@ export function Sidebar() {
                           <MoreVertical className="w-4 h-4 text-muted-foreground" />
                         </button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40 font-body">
+                      <DropdownMenuContent align="end" className="w-40">
                         <DropdownMenuItem onClick={(e) => handleArchiveSession(e, session.id)}>
                           <Archive className="w-4 h-4 mr-2" />
                           归档
@@ -218,9 +217,8 @@ export function Sidebar() {
                   'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all',
                   collapsed 
                     ? 'justify-center px-2' 
-                    : 'border-2 border-transparent hover:bg-accent hover:border-border hover:shadow-hard-sm'
+                    : 'border border-transparent hover:bg-accent hover:border-border'
                 )}
-                style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
               >
                 <Avatar className="h-8 w-8 border border-border">
                   <AvatarFallback className="bg-secondary text-secondary-foreground font-bold">
@@ -230,8 +228,8 @@ export function Sidebar() {
                 
                 {!collapsed && (
                   <div className="flex-1 text-left min-w-0">
-                    <p className="text-sm font-bold truncate font-heading">{user?.username || 'User'}</p>
-                    <p className="text-xs text-muted-foreground truncate font-body">{user?.email || 'user@example.com'}</p>
+                    <p className="text-sm font-semibold truncate">{user?.username || 'User'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{user?.email || 'user@example.com'}</p>
                   </div>
                 )}
                 
@@ -239,7 +237,7 @@ export function Sidebar() {
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-56 p-2" side="right" align="end">
-              <div className="space-y-1 font-body">
+              <div className="space-y-1">
                 <Button variant="ghost" className="w-full justify-start font-bold" onClick={() => router.push('/settings')}>
                    <Settings className="w-4 h-4 mr-2" />
                    偏好设置

@@ -87,7 +87,7 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
       </div>
 
       {tasks.length > 0 && executableAgents.length === 0 ? (
-        <div className="mt-4 rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+        <div className="mt-4 rounded-lg border border-border px-4 py-3 text-sm text-muted-foreground">
           当前没有可执行任务的 teammate。按照原始架构，应由 Lead 先动态创建合适队员，再进行分配。
         </div>
       ) : null}

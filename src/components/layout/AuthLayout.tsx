@@ -15,11 +15,11 @@ export function AuthLayout({ children }: AuthLayoutProps) {
   }, [initTheme]);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted flex items-center justify-center p-4">
+    <div className="min-h-screen bg-linear-to-br from-background to-muted flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
+          <div className="w-12 h-12 rounded-xl bg-linear-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
             <span className="text-white font-bold text-xl">S</span>
           </div>
           <span className="text-2xl font-bold text-foreground">Swarm</span>

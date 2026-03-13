@@ -59,8 +59,7 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as Task["status"] | "all")}
-            className="px-3 py-2 rounded-md border-2 border-border bg-background font-body text-sm h-10 w-32 focus:outline-none focus:ring-2 focus:ring-ring"
-            style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm h-10 w-32 focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="all">全部状态</option>
             <option value="pending">待处理</option>
@@ -77,7 +76,7 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : filteredTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
             <Clock className="h-12 w-12 mb-3 opacity-50" />
             <p className="font-medium">暂无任务</p>
             <p className="text-sm mt-1">任务将由 Agent 自动创建</p>
@@ -85,10 +84,10 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
         ) : (
           <div className="space-y-3">
             {filteredTasks.map((task) => (
-              <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:shadow-hard-sm transition-all">
+              <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:shadow-md transition-all">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
-                    <p className="font-bold text-lg font-heading truncate">{task.title}</p>
+                    <p className="font-semibold text-lg truncate">{task.title}</p>
                     <TaskPriorityBadge priority={task.priority} />
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-2">

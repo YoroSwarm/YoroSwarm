@@ -5,7 +5,6 @@ import { useTasks } from "@/hooks/use-tasks";
 import { useTeamStats } from "@/hooks/use-team-stats";
 import {
   Users,
-  Activity,
   CheckCircle2,
   Clock,
   Zap,
@@ -22,7 +21,6 @@ export default function DashboardPage() {
   const { tasks, isLoading: isTasksLoading } = useTasks({ autoLoad: true });
   const {
     totalAgents,
-    activeAgents,
     totalTasks,
     completedTasks,
     isLoading: isStatsLoading,
@@ -31,7 +29,6 @@ export default function DashboardPage() {
   const isLoading = isAgentsLoading || isTasksLoading || isStatsLoading;
 
   // 计算统计数据
-  const onlineAgents = agents.filter((a) => a.status !== "offline" && a.status !== "error").length;
   const busyAgents = agents.filter((a) => a.status === "busy").length;
   const pendingTasks = tasks.filter((t) => t.status === "pending").length;
   const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
@@ -53,8 +50,8 @@ export default function DashboardPage() {
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold font-heading">Dashboard</h1>
-          <p className="text-muted-foreground mt-1 font-body">
+          <h1 className="text-3xl font-semibold">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">
             欢迎来到 Swarm Agent集群系统
           </p>
         </div>
@@ -99,15 +96,14 @@ export default function DashboardPage() {
         {/* Agent 状态 */}
         <div className="lg:col-span-2 space-y-6">
           <div className="card-hand p-6">
-            <div className="flex items-center justify-between mb-4 border-b-2 border-dashed border-border pb-2">
-              <h2 className="text-lg font-bold font-heading">Agent 状态</h2>
+            <div className="flex items-center justify-between mb-4 border-b border-border/50 pb-2">
+              <h2 className="text-lg font-semibold">Agent 状态</h2>
             </div>
             <div className="space-y-3">
               {agents.slice(0, 5).map((agent) => (
                 <div
                   key={agent.id}
-                  className="flex items-center justify-between p-3 border-2 border-border/10 bg-muted/30 hover:bg-muted/50 transition-colors"
-                  style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
+                  className="flex items-center justify-between p-3 border border-border/50 bg-muted/30 hover:bg-muted/50 transition-colors rounded-lg"
                 >
                   <div className="flex items-center gap-3">
                     <div
@@ -123,18 +119,18 @@ export default function DashboardPage() {
                     />
                     <div>
                       <div className="flex items-center gap-2">
-                         <p className="font-bold font-heading">{agent.name}</p>
-                         <span className="text-[10px] px-1.5 py-0.5 bg-white border border-border rounded-full font-mono">
+                         <p className="font-semibold">{agent.name}</p>
+                         <span className="text-[10px] px-1.5 py-0.5 bg-muted border border-border rounded-full font-mono">
                            {agent.type === 'leader' ? 'LEAD' : 'WORKER'}
                          </span>
                       </div>
-                      <p className="text-xs text-muted-foreground font-body">
+                      <p className="text-xs text-muted-foreground">
                         {agent.description?.slice(0, 30) || "无描述"}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold font-body">
+                    <p className="text-sm font-medium">
                       {agent.status === "online"
                         ? "在线"
                         : agent.status === "busy"
@@ -144,7 +140,7 @@ export default function DashboardPage() {
                         : "空闲"}
                     </p>
                     {/* Placeholder for Session info if available */}
-                    <p className="text-xs text-muted-foreground truncate max-w-[150px]">
+                    <p className="text-xs text-muted-foreground truncate max-w-37.5">
                        {agent.currentTask || '空闲中'}
                     </p>
                   </div>
@@ -167,8 +163,8 @@ export default function DashboardPage() {
 
           {/* 任务概览 */}
           <div className="card-hand p-6">
-            <div className="flex items-center justify-between mb-4 border-b-2 border-dashed border-border pb-2">
-              <h2 className="text-lg font-bold font-heading">最近任务</h2>
+            <div className="flex items-center justify-between mb-4 border-b border-border/50 pb-2">
+              <h2 className="text-lg font-semibold">最近任务</h2>
               <Link
                 href="/tasks"
                 className="text-sm text-primary hover:underline font-bold"
@@ -180,11 +176,10 @@ export default function DashboardPage() {
               {tasks.slice(0, 5).map((task) => (
                 <div
                   key={task.id}
-                  className="flex items-center justify-between p-3 border-2 border-border/10 bg-muted/30 hover:bg-muted/50 transition-colors"
-                  style={{ borderRadius: "15px 225px 15px 255px / 255px 15px 225px 15px" }}
+                  className="flex items-center justify-between p-3 border border-border/50 bg-muted/30 hover:bg-muted/50 transition-colors rounded-lg"
                 >
                   <div>
-                    <p className="font-bold font-body">{task.title}</p>
+                    <p className="font-medium">{task.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {task.description?.slice(0, 50) || "无描述"}
                     </p>
@@ -226,7 +221,7 @@ export default function DashboardPage() {
         <div className="space-y-6">
           {/* 快速操作 */}
           <div className="card-hand p-6">
-            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">快速操作</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b border-border/50 pb-2">快速操作</h2>
             <div className="space-y-2">
               <QuickActionButton
                 href="/chat"
@@ -251,15 +246,15 @@ export default function DashboardPage() {
 
           {/* 最近活动 */}
           <div className="card-hand p-6">
-            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">最近活动</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b border-border/50 pb-2">最近活动</h2>
             <div className="space-y-4">
               {recentActivities.length > 0 ? recentActivities.map((activity) => (
                 <div key={activity.id} className="flex gap-3 items-center">
-                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-black/10">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-border/50">
                     <activity.icon className="h-4 w-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold font-body">{activity.message}</p>
+                    <p className="text-sm font-medium">{activity.message}</p>
                     <p className="text-xs text-muted-foreground">{activity.time}</p>
                   </div>
                 </div>
@@ -271,7 +266,7 @@ export default function DashboardPage() {
 
           {/* 系统状态 */}
           <div className="card-hand p-6">
-            <h2 className="text-lg font-bold font-heading mb-4 border-b-2 border-dashed border-border pb-2">系统状态</h2>
+            <h2 className="text-lg font-semibold mb-4 border-b border-border/50 pb-2">系统状态</h2>
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-sm text-muted-foreground">API 连接</span>
@@ -320,13 +315,13 @@ function StatCard({
 }) {
   return (
     <Link href={href} className="block group">
-      <div className="card-hand p-6 transition-all hover:shadow-hard-sm hover:-translate-y-1">
+      <div className="card-hand p-6 transition-all hover:shadow-lg hover:-translate-y-1">
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-sm font-bold text-muted-foreground font-body uppercase tracking-wider">{title}</p>
-            <p className="text-3xl font-bold mt-2 font-heading">{value}</p>
+            <p className="text-sm font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+            <p className="text-3xl font-semibold mt-2">{value}</p>
           </div>
-          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center border-2 border-black/5" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+          <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center border border-border/50">
             <Icon className="h-5 w-5 text-primary" />
           </div>
         </div>
@@ -334,7 +329,7 @@ function StatCard({
           <TrendingUp
             className={`h-4 w-4 ${trendUp ? "text-green-600" : "text-gray-400"}`}
           />
-          <span className="text-sm text-muted-foreground font-body">{trend}</span>
+          <span className="text-sm text-muted-foreground">{trend}</span>
         </div>
       </div>
     </Link>

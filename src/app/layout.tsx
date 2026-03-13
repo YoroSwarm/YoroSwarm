@@ -1,30 +1,11 @@
 import type { Metadata } from "next";
-import { Kalam, Patrick_Hand, ZCOOL_KuaiLe, Ma_Shan_Zheng } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 
-const kalam = Kalam({
-  weight: ["300", "400", "700"],
+const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-heading",
-});
-
-const patrickHand = Patrick_Hand({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-body",
-});
-
-const zcoolKuaiLe = ZCOOL_KuaiLe({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-chinese-heading",
-});
-
-const maShanZheng = Ma_Shan_Zheng({
-  weight: "400",
-  subsets: ["latin"],
-  variable: "--font-chinese-body",
+  variable: "--font-sans",
 });
 
 export const metadata: Metadata = {
@@ -40,7 +21,7 @@ export default function RootLayout({
   return (
     <html lang="zh-CN" suppressHydrationWarning>
       <body
-        className={`${kalam.variable} ${patrickHand.variable} ${zcoolKuaiLe.variable} ${maShanZheng.variable} antialiased font-body bg-background text-foreground`}
+        className={`${inter.variable} font-sans antialiased bg-background text-foreground`}
       >
         <Providers>
           {children}

@@ -180,7 +180,7 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
             </Button>
           </div>
         ) : filteredArtifacts.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border-2 border-dashed border-border rounded-xl">
+          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
             <Layers className="h-12 w-12 mb-3 opacity-50" />
             <p className="font-medium">暂无产出物</p>
             <p className="text-sm mt-1">Agent 完成任务后，产出物会显示在这里</p>
@@ -193,16 +193,16 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
               return (
                 <div
                   key={artifact.id}
-                  className="card-hand p-4 flex flex-col gap-3 relative group hover:shadow-hard-sm transition-all"
+                  className="card-hand p-4 flex flex-col gap-3 relative group hover:shadow-md transition-all"
                 >
                   <div className="flex items-start gap-3">
-                    <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border-2 border-black/5", config.color)} style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                    <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center shrink-0 border border-border/50", config.color)}>
                       {config.icon}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h3 className="font-bold text-sm truncate font-heading">{artifact.title}</h3>
+                      <h3 className="font-semibold text-sm truncate">{artifact.title}</h3>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] px-2 py-0.5 rounded-full border border-black/10 bg-white">
+                        <span className="text-[10px] px-2 py-0.5 rounded-full border border-border/50 bg-muted">
                           {config.label}
                         </span>
                         <span className="text-xs text-muted-foreground">
@@ -218,7 +218,7 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
                     </p>
                   )}
 
-                  <div className="mt-auto pt-2 border-t-2 border-dashed border-border/20 flex items-center justify-between">
+                  <div className="mt-auto pt-2 border-t border-border/20 flex items-center justify-between">
                     <div className="flex items-center gap-2">
                         {artifact.hasContent && (
                         <button
@@ -260,11 +260,11 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-3">
-                  <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center border-2 border-black/5", getKindConfig(selectedArtifact.kind).color)} style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                  <div className={cn("h-10 w-10 rounded-lg flex items-center justify-center border border-border/50", getKindConfig(selectedArtifact.kind).color)}>
                     {getKindConfig(selectedArtifact.kind).icon}
                   </div>
                   <div>
-                    <DialogTitle className="font-heading text-xl">{selectedArtifact.title}</DialogTitle>
+                    <DialogTitle className="text-xl font-semibold">{selectedArtifact.title}</DialogTitle>
                     <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-muted-foreground">
                             {getKindConfig(selectedArtifact.kind).label}
@@ -281,11 +281,11 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
 
               <ScrollArea className="max-h-[50vh] mt-4">
                 {selectedArtifact.content ? (
-                  <pre className="text-sm whitespace-pre-wrap font-mono bg-muted/50 rounded-lg p-4 border-2 border-dashed border-border">
+                  <pre className="text-sm whitespace-pre-wrap font-mono bg-muted/50 rounded-lg p-4 border border-border">
                     {selectedArtifact.content}
                   </pre>
                 ) : (
-                  <p className="text-sm text-muted-foreground py-8 text-center border-2 border-dashed border-border rounded-lg">
+                    <p className="text-sm text-muted-foreground py-8 text-center border border-border rounded-lg">
                     此产出物没有文本内容
                   </p>
                 )}

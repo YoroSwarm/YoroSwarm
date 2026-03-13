@@ -183,13 +183,13 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as TabType)}
                       className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition-all border-2",
+                        "flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition-all border",
                         isActive 
-                          ? "bg-accent text-accent-foreground border-border -rotate-1 shadow-hard-sm" 
+                          ? "bg-accent text-accent-foreground border-border shadow-sm" 
                           : "bg-transparent text-muted-foreground border-transparent hover:bg-accent/20 hover:text-foreground hover:border-border/50"
                       )}
                       style={{
-                        borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px",
+                        borderRadius: "8px",
                       }}
                     >
                       <Icon className="h-4 w-4" />
@@ -204,8 +204,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           <div className="flex items-center gap-2">
             <button
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
-              className="hidden rounded-md p-2 hover:bg-accent md:flex border-2 border-transparent hover:border-border hover:shadow-hard-sm transition-all"
-              style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
+              className="hidden rounded-lg p-2 hover:bg-accent md:flex border border-transparent hover:border-border transition-all"
               title={isRightPanelOpen ? '关闭右侧面板' : '打开右侧面板'}
             >
               {isRightPanelOpen ? (
@@ -232,12 +231,11 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={cn(
-                      "flex flex-col items-center gap-1 p-2 text-xs font-bold border-2 transition-all",
+                      "flex flex-col items-center gap-1 p-2 text-xs font-bold border transition-all rounded-lg",
                       isActive 
-                        ? "bg-accent/20 text-accent-foreground border-border shadow-hard-sm" 
+                        ? "bg-accent/20 text-accent-foreground border-border shadow-sm" 
                         : "text-muted-foreground border-transparent"
                     )}
-                    style={{ borderRadius: "15px 225px 15px 255px / 255px 15px 225px 15px" }}
                   >
                     <Icon className="h-5 w-5" />
                     {tab.label}
@@ -264,7 +262,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         streamingState={streamingState}
                         />
                     </div>
-                    <div className="border-t-2 border-dashed border-border bg-card/50 p-4 backdrop-blur-sm">
+                    <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
                         <ChatInput
                             sessionId={resolvedSessionId}
                             disabled={isCreatingSession}
@@ -288,8 +286,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center text-muted-foreground p-6 text-center">
-              <div className="mb-6 rounded-full bg-secondary p-8 border-4 border-dashed border-border animate-jiggle">
-                <Plus className="h-12 w-12 text-primary" />
+              <div className="mb-6 rounded-full bg-secondary p-8 border border-border">
+                <Plus className="h-12 w-12 text-primary" /> border-border
               </div>
               <h2 className="text-3xl font-bold font-heading mb-2 text-foreground">开始新旅程</h2>
               <p className="text-lg max-w-md font-body">

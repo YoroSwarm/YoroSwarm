@@ -201,9 +201,9 @@ export const MonitorDashboard: React.FC = () => {
     : [];
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.9),_rgba(244,244,245,0.95)_30%,_rgba(228,228,231,1)_100%)] px-4 py-6 text-neutral-950 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.9),rgba(244,244,245,0.95)_30%,rgba(228,228,231,1)_100%)] px-4 py-6 text-neutral-950 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="overflow-hidden rounded-[32px] border border-white/40 bg-white/65 shadow-[0_24px_80px_rgba(15,15,15,0.08)] backdrop-blur-2xl">
+        <header className="overflow-hidden rounded-4xl border border-white/40 bg-white/65 shadow-[0_24px_80px_rgba(15,15,15,0.08)] backdrop-blur-2xl">
           <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.26em] text-neutral-500">
@@ -229,11 +229,11 @@ export const MonitorDashboard: React.FC = () => {
             </div>
           </div>
 
-          <div className="border-t border-black/10 bg-white/40 px-6 py-4 lg:px-8">
+          <div className="border-t border-border bg-muted/30 px-6 py-4 lg:px-8">
             <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs font-medium uppercase tracking-[0.24em] text-neutral-500">Active Sessions</span>
+              <span className="text-xs font-medium uppercase tracking-[0.24em] text-muted-foreground">Active Sessions</span>
               {teams.length === 0 ? (
-                <span className="rounded-full border border-black/10 bg-white/70 px-3 py-1 text-sm text-neutral-500">尚未创建会话</span>
+                <span className="rounded-full border border-border bg-muted px-3 py-1 text-sm text-muted-foreground">尚未创建会话</span>
               ) : (
                 teams.map((team) => (
                   <button
@@ -241,8 +241,8 @@ export const MonitorDashboard: React.FC = () => {
                     onClick={() => setCurrentTeamId(team.id)}
                     className={`rounded-full px-4 py-2 text-sm transition ${
                       currentTeamId === team.id
-                        ? 'bg-neutral-950 text-white'
-                        : 'border border-black/10 bg-white/75 text-neutral-700 hover:bg-white'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'border border-border bg-card text-foreground hover:bg-muted'
                     }`}
                   >
                     {team.title}
@@ -259,13 +259,13 @@ export const MonitorDashboard: React.FC = () => {
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="space-y-6">
-                <section className="rounded-[28px] border border-white/40 bg-white/65 p-6 shadow-[0_18px_60px_rgba(15,15,15,0.06)] backdrop-blur-2xl">
+                <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-neutral-950">Lead</h2>
-                      <p className="mt-1 text-sm text-neutral-500">用户只与 Lead 对话。Lead 负责创建团队、协调任务和管理整体进度。</p>
+                      <h2 className="text-lg font-semibold text-foreground">Lead</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">用户只与 Lead 对话。Lead 负责创建团队、协调任务和管理整体进度。</p>
                     </div>
-                    <div className="rounded-full bg-black/5 px-3 py-1 text-xs text-neutral-600">1 lead</div>
+                    <div className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">1 lead</div>
                   </div>
                   {leadAgent ? (
                     <AgentList
@@ -274,22 +274,22 @@ export const MonitorDashboard: React.FC = () => {
                       selectedAgentId={selectedAgent?.id}
                     />
                   ) : (
-                    <div className="rounded-3xl border border-dashed border-black/10 bg-white/50 px-5 py-10 text-center text-sm text-neutral-500">
+                    <div className="rounded-2xl border border-border bg-muted/50 px-5 py-10 text-center text-sm text-muted-foreground">
                       Lead 初始化中。
                     </div>
                   )}
                 </section>
 
-                <section className="rounded-[28px] border border-white/40 bg-white/65 p-6 shadow-[0_18px_60px_rgba(15,15,15,0.06)] backdrop-blur-2xl">
+                <section className="rounded-2xl border border-border bg-card p-6 shadow-sm">
                   <div className="mb-4 flex items-center justify-between">
                     <div>
-                      <h2 className="text-lg font-semibold text-neutral-950">Teammates</h2>
-                      <p className="mt-1 text-sm text-neutral-500">队友由 Lead 按需动态创建。用户在监控页查看状态，但外部沟通只通过该会话 Lead。</p>
+                      <h2 className="text-lg font-semibold text-foreground">Teammates</h2>
+                      <p className="mt-1 text-sm text-muted-foreground">队友由 Lead 按需动态创建。用户在监控页查看状态，但外部沟通只通过该会话 Lead。</p>
                     </div>
-                    <div className="rounded-full bg-black/5 px-3 py-1 text-xs text-neutral-600">{teammates.length} teammates</div>
+                    <div className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">{teammates.length} teammates</div>
                   </div>
                   {teammates.length === 0 ? (
-                    <div className="rounded-3xl border border-dashed border-black/10 bg-white/50 px-5 py-10 text-center text-sm text-neutral-500">
+                    <div className="rounded-2xl border border-border bg-muted/50 px-5 py-10 text-center text-sm text-muted-foreground">
                       当前仅有 Lead 会话上下文，尚未创建 teammate。
                     </div>
                   ) : (
@@ -301,9 +301,9 @@ export const MonitorDashboard: React.FC = () => {
                   )}
                 </section>
 
-                <section className="rounded-[28px] border border-white/40 bg-neutral-950 p-6 text-white shadow-[0_18px_60px_rgba(15,15,15,0.12)]">
-                  <h2 className="text-lg font-semibold">系统设计对齐</h2>
-                  <div className="mt-4 space-y-3 text-sm text-white/72">
+                <section className="rounded-2xl border border-border bg-muted p-6 shadow-sm">
+                  <h2 className="text-lg font-semibold text-foreground">系统设计对齐</h2>
+                  <div className="mt-4 space-y-3 text-sm text-muted-foreground">
                     <div>Lead 负责创建团队、协调任务和动态增减队员。</div>
                     <div>Teammates 保持独立上下文，适合并行搜集、撰写、分析和编码。</div>
                     <div>用户外部消息统一进入 Lead，上下文传播通过任务 brief 和内部消息完成。</div>
@@ -328,16 +328,16 @@ export const MonitorDashboard: React.FC = () => {
             </div>
           </>
         ) : (
-          <section className="rounded-[32px] border border-white/40 bg-white/65 px-8 py-14 text-center shadow-[0_18px_60px_rgba(15,15,15,0.06)] backdrop-blur-2xl">
+          <section className="rounded-2xl border border-border bg-card px-8 py-14 text-center shadow-sm">
             <div className="mx-auto max-w-2xl">
-              <p className="text-xs font-medium uppercase tracking-[0.3em] text-neutral-500">No Session Yet</p>
-              <h2 className="mt-3 text-3xl font-semibold text-neutral-950">开始一个新对话</h2>
-              <p className="mt-4 text-sm leading-7 text-neutral-600">
+              <p className="text-xs font-medium uppercase tracking-[0.3em] text-muted-foreground">No Session Yet</p>
+              <h2 className="mt-3 text-3xl font-semibold text-foreground">开始一个新对话</h2>
+              <p className="mt-4 text-sm leading-7 text-muted-foreground">
                 交互上接近传统 AI Chat。先创建一个 Lead 会话，然后直接发送首条消息，后续协作与扩编由蜂群系统在后台完成。
               </p>
               <button
                 onClick={() => setIsCreateModalOpen(true)}
-                className="mt-8 rounded-2xl bg-neutral-950 px-5 py-3 text-sm font-medium text-white transition hover:bg-black"
+                className="mt-8 rounded-2xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
               >
                 立即开始
               </button>

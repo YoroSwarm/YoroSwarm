@@ -76,8 +76,8 @@ export default function TasksPage() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div>
-            <h1 className="text-3xl font-bold font-heading">任务管理</h1>
-            <p className="text-muted-foreground mt-1 font-body">
+            <h1 className="text-3xl font-semibold">任务管理</h1>
+            <p className="text-muted-foreground mt-1">
               查看任务列表、分配和跟踪进度 (只读)
             </p>
           </div>
@@ -138,8 +138,7 @@ export default function TasksPage() {
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as Task["status"] | "all")}
-            className="px-3 py-2 rounded-lg border-2 border-border bg-background font-body text-sm"
-            style={{ borderRadius: "255px 15px 225px 15px / 15px 225px 15px 255px" }}
+            className="px-3 py-2 rounded-lg border border-border bg-background text-sm"
           >
             <option value="all">全部状态</option>
             <option value="pending">待处理</option>
@@ -151,15 +150,15 @@ export default function TasksPage() {
       </div>
 
       {/* 任务列表 */}
-      <div className="rounded-xl border-2 border-border bg-card overflow-hidden wobbly-box-md">
+      <div className="rounded-xl border border-border bg-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full font-body">
+          <table className="w-full">
             <thead>
               <tr className="border-b-2 border-border bg-muted/20">
-                <th className="px-4 py-3 text-left text-sm font-bold font-heading">任务</th>
-                <th className="px-4 py-3 text-left text-sm font-bold font-heading">状态</th>
-                <th className="px-4 py-3 text-left text-sm font-bold font-heading">优先级</th>
-                <th className="px-4 py-3 text-left text-sm font-bold font-heading">分配</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">任务</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">状态</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">优先级</th>
+                <th className="px-4 py-3 text-left text-sm font-semibold">分配</th>
               </tr>
             </thead>
             <tbody>
@@ -182,7 +181,7 @@ export default function TasksPage() {
                     <td className="px-4 py-3">
                       <div>
                         <p className="font-bold">{task.title}</p>
-                        <p className="text-sm text-muted-foreground truncate max-w-[300px]">
+                        <p className="text-sm text-muted-foreground truncate max-w-75">
                           {task.description || "无描述"}
                         </p>
                       </div>
@@ -238,8 +237,8 @@ function StatCard({
           <Icon className="h-5 w-5" />
         </div>
         <div>
-          <p className="text-sm font-bold text-muted-foreground font-body">{title}</p>
-          <p className="text-2xl font-bold font-heading">{value}</p>
+          <p className="text-sm font-medium text-muted-foreground">{title}</p>
+          <p className="text-2xl font-semibold">{value}</p>
         </div>
       </div>
     </div>

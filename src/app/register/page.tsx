@@ -89,10 +89,10 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-background to-muted p-4">
       <div className="w-full max-w-md space-y-6 rounded-xl border bg-card p-8 shadow-lg">
         <div className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-secondary">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-linear-to-br from-primary to-secondary">
             <Zap className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-2xl font-bold">创建账户</h1>

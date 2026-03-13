@@ -30,11 +30,11 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted p-4">
+    <div className="flex min-h-screen items-center justify-center bg-linear-to-br from-background to-muted p-4">
       <div className="w-full max-w-md space-y-6 rounded-xl border bg-card p-8 shadow-lg">
         {/* Logo */}
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 rounded-xl bg-gradient-to-br from-primary to-secondary flex items-center justify-center mb-4">
+          <div className="mx-auto h-12 w-12 rounded-xl bg-linear-to-br from-primary to-secondary flex items-center justify-center mb-4">
             <Zap className="h-6 w-6 text-white" />
           </div>
           <h1 className="text-2xl font-bold">Swarm</h1>

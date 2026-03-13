@@ -36,30 +36,30 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
     <Sheet open={isOpen} onOpenChange={(open) => { if (!open) onClose(); }}>
       <SheetContent
         side="right"
-        className="w-full max-w-xl sm:max-w-xl border-l border-white/20 bg-white/80 shadow-[0_24px_80px_rgba(15,15,15,0.18)] backdrop-blur-2xl p-0 gap-0"
+        className="w-full max-w-xl sm:max-w-xl border-l border-border bg-card shadow-lg backdrop-blur-2xl p-0 gap-0"
       >
-        <SheetHeader className="border-b border-black/10 px-6 py-6 space-y-0 gap-0">
+        <SheetHeader className="border-b border-border px-6 py-6 space-y-0 gap-0">
           <div className="flex items-center gap-4 pr-8">
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-neutral-950 text-lg font-semibold text-white shadow-lg">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-primary text-lg font-semibold text-primary-foreground shadow-lg">
               {agent.name.charAt(0)}
             </div>
             <div>
-              <SheetTitle className="text-2xl font-semibold tracking-tight text-neutral-950">
+              <SheetTitle className="text-2xl font-semibold tracking-tight text-foreground">
                 {agent.name}
               </SheetTitle>
-              <SheetDescription className="mt-1 text-sm text-neutral-500">
+              <SheetDescription className="mt-1 text-sm text-muted-foreground">
                 {agent.type}
               </SheetDescription>
               <Badge
                 variant="outline"
-                className="mt-3 h-auto rounded-full border-black/10 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.22em] text-neutral-500"
+                className="mt-3 h-auto rounded-full border-border bg-muted px-3 py-1 text-xs uppercase tracking-[0.22em] text-muted-foreground"
               >
                 {agent.status}
               </Badge>
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-black/10 bg-white/70 px-4 py-2.5 text-sm text-neutral-500">
+          <div className="mt-6 rounded-2xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
             该抽屉仅用于监控当前 agent 在该 SwarmSession 内的状态、活动与摘要。用户外部沟通统一通过该会话的 Lead 完成。
           </div>
         </SheetHeader>
@@ -67,7 +67,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
         <Tabs defaultValue="overview" className="flex flex-1 flex-col gap-0 min-h-0">
           <TabsList
             variant="line"
-            className="w-full shrink-0 rounded-none border-b border-black/10 bg-transparent h-auto p-0"
+            className="w-full shrink-0 rounded-none border-b border-border bg-transparent h-auto p-0"
           >
             <TabsTrigger value="overview" className="flex-1 rounded-none py-3 text-sm font-medium">
               概览
@@ -82,47 +82,47 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 
           <ScrollArea className="flex-1">
             <TabsContent value="overview" className="mt-0 space-y-6 p-6">
-              <section className="rounded-[28px] border border-black/10 bg-white/70 p-5 shadow-sm">
-                <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-neutral-500">Profile</h3>
-                <p className="mt-4 text-sm leading-7 text-neutral-700">{agent.description || '暂无描述'}</p>
+              <section className="rounded-2xl border border-border bg-muted/50 p-5 shadow-sm">
+                <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-muted-foreground">Profile</h3>
+                <p className="mt-4 text-sm leading-7 text-foreground">{agent.description || '暂无描述'}</p>
               </section>
 
               <section className="grid grid-cols-2 gap-4">
-                <div className="rounded-[24px] border border-black/10 bg-neutral-950 p-5 text-white">
+                <div className="rounded-2xl border border-border bg-primary p-5 text-primary-foreground">
                   <div className="text-3xl font-semibold">{agent.messageCount}</div>
-                  <div className="mt-2 text-sm text-white/70">消息数</div>
+                  <div className="mt-2 text-sm text-primary-foreground/70">消息数</div>
                 </div>
-                <div className="rounded-[24px] border border-black/10 bg-white/75 p-5">
-                  <div className="text-3xl font-semibold text-neutral-950">{agent.completedTasks}</div>
-                  <div className="mt-2 text-sm text-neutral-500">完成任务</div>
+                <div className="rounded-2xl border border-border bg-muted p-5">
+                  <div className="text-3xl font-semibold text-foreground">{agent.completedTasks}</div>
+                  <div className="mt-2 text-sm text-muted-foreground">完成任务</div>
                 </div>
               </section>
 
-              <section className="rounded-[28px] border border-black/10 bg-white/70 p-5 shadow-sm">
+              <section className="rounded-2xl border border-border bg-muted/50 p-5 shadow-sm">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-neutral-500">Workload</h3>
-                  <span className="text-sm text-neutral-700">{agent.load}%</span>
+                  <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-muted-foreground">Workload</h3>
+                  <span className="text-sm text-foreground">{agent.load}%</span>
                 </div>
-                <div className="mt-4 h-2 rounded-full bg-black/8">
-                  <div className="h-2 rounded-full bg-neutral-950 transition-all" style={{ width: `${agent.load}%` }} />
+                <div className="mt-4 h-2 rounded-full bg-muted">
+                  <div className="h-2 rounded-full bg-primary transition-all" style={{ width: `${agent.load}%` }} />
                 </div>
-                <p className="mt-4 text-sm text-neutral-600">
+                <p className="mt-4 text-sm text-muted-foreground">
                   {agent.currentTask ? `当前任务：${agent.currentTask}` : '当前没有活跃任务，Lead 可随时派发新工作项。'}
                 </p>
               </section>
 
-              <section className="rounded-[28px] border border-black/10 bg-white/70 p-5 shadow-sm">
-                <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-neutral-500">Expertise</h3>
+              <section className="rounded-2xl border border-border bg-muted/50 p-5 shadow-sm">
+                <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-muted-foreground">Expertise</h3>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {expertise.length > 0 ? expertise.map((skill) => (
                     <Badge
                       key={skill}
                       variant="outline"
-                      className="h-auto rounded-full border-black/10 bg-black/5 px-3 py-1.5 text-xs text-neutral-700"
+                      className="h-auto rounded-full border-border bg-muted px-3 py-1.5 text-xs text-foreground"
                     >
                       {skill}
                     </Badge>
-                  )) : <span className="text-sm text-neutral-500">暂无专长标签</span>}
+                  )) : <span className="text-sm text-muted-foreground">暂无专长标签</span>}
                 </div>
               </section>
             </TabsContent>
@@ -138,14 +138,14 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
 
                 <div className="space-y-3">
                   {messages.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-neutral-500">
+                    <div className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted-foreground">
                       暂无监控消息。
                     </div>
                   ) : (
                     messages.map((message) => (
-                      <div key={message.id} className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-                        <div className="text-sm leading-6 text-neutral-800">{message.content}</div>
-                        <div className="mt-2 text-xs text-neutral-400">{new Date(message.timestamp).toLocaleString()}</div>
+                      <div key={message.id} className="rounded-2xl border border-border bg-muted/30 p-4">
+                        <div className="text-sm leading-6 text-foreground">{message.content}</div>
+                        <div className="mt-2 text-xs text-muted-foreground">{new Date(message.timestamp).toLocaleString()}</div>
                       </div>
                     ))
                   )}
@@ -154,20 +154,20 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
             </TabsContent>
 
             <TabsContent value="activities" className="mt-0 p-6">
-              <section className="rounded-[28px] border border-black/10 bg-white/70 p-5 shadow-sm">
-                <h3 className="mb-4 text-sm font-medium uppercase tracking-[0.24em] text-neutral-500">Activity Trail</h3>
+              <section className="rounded-2xl border border-border bg-muted/50 p-5 shadow-sm">
+                <h3 className="mb-4 text-sm font-medium uppercase tracking-[0.24em] text-muted-foreground">Activity Trail</h3>
                 <div className="space-y-3">
                   {activities.length === 0 ? (
-                    <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-neutral-500">
+                    <div className="rounded-2xl border border-border px-4 py-8 text-center text-sm text-muted-foreground">
                       暂无活动记录
                     </div>
                   ) : (
                     activities.map((activity) => (
-                      <div key={activity.id} className="flex items-start gap-3 rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-                        <div className="mt-2 h-2 w-2 rounded-full bg-neutral-950" />
+                      <div key={activity.id} className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4">
+                        <div className="mt-2 h-2 w-2 rounded-full bg-primary" />
                         <div>
-                          <div className="text-sm leading-6 text-neutral-800">{activity.details || activity.action}</div>
-                          <div className="mt-2 text-xs text-neutral-400">{new Date(activity.timestamp).toLocaleString()}</div>
+                          <div className="text-sm leading-6 text-foreground">{activity.details || activity.action}</div>
+                          <div className="mt-2 text-xs text-muted-foreground">{new Date(activity.timestamp).toLocaleString()}</div>
                         </div>
                       </div>
                     ))

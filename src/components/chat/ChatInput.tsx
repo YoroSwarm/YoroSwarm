@@ -224,7 +224,7 @@ export function ChatInput({
       onDrop={handleDrop}
     >
       {isDragging && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border-2 border-dashed border-primary bg-primary/5 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center rounded-2xl border border-primary/50 bg-primary/5 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-2 text-primary">
             <Paperclip className="h-8 w-8" />
             <span className="text-sm font-medium">拖放文件到这里</span>
@@ -250,7 +250,7 @@ export function ChatInput({
               ) : (
                 getFileIcon(file)
               )}
-              <span className="max-w-[150px] truncate">{file.name}</span>
+              <span className="max-w-37.5 truncate">{file.name}</span>
               <span className="text-xs text-muted-foreground">
                 {formatFileSize(file.size)}
               </span>
@@ -301,7 +301,7 @@ export function ChatInput({
             disabled={disabled}
             placeholder={placeholder}
             rows={1}
-            className="w-full resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed max-h-[200px]"
+            className="w-full resize-none bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed max-h-50"
             style={{ minHeight: '36px' }}
           />
 

@@ -194,11 +194,11 @@ export function MessageItem({
 
       default:
         return (
-          <div className="text-sm leading-relaxed max-w-full overflow-hidden break-words font-body">
+          <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-word">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
-                code({ node, inline, className, children, ...props }: any) {
+                code({ node, inline, className, children, ...props }: { node?: unknown; inline?: boolean; className?: string; children?: React.ReactNode }) {
                   const match = /language-(\w+)/.exec(className || '');
                   return !inline && match ? (
                     <div className="overflow-x-auto rounded-lg my-2 border border-border/50">
@@ -297,24 +297,21 @@ export function MessageItem({
 
         <div
           className={cn(
-            'relative px-4 py-2.5 border-2',
+            'relative px-4 py-2.5 border',
             isUser
               ? 'bg-primary text-primary-foreground border-primary'
-              : 'bg-white text-foreground border-border',
+              : 'bg-card text-foreground border-border',
             message.type === 'code' && 'p-0 overflow-hidden bg-muted border-border',
-            message.type === 'image' && 'p-1 bg-white border-border',
-            message.type === 'file' && 'p-2 bg-white border-border'
+            message.type === 'image' && 'p-1 bg-card border-border',
+            message.type === 'file' && 'p-2 bg-card border-border'
           )}
           style={{
-            borderRadius: isUser 
-              ? "255px 15px 225px 15px / 15px 225px 15px 255px" 
-              : "15px 225px 15px 255px / 255px 15px 225px 15px",
-            boxShadow: isUser ? "2px 2px 0px 0px rgba(0,0,0,0.2)" : "2px 2px 0px 0px rgba(0,0,0,0.1)"
+            borderRadius: "12px",
           }}
         >
           {/* Thinking Process Section */}
           {((message.toolCalls && message.toolCalls.length > 0) || (message.thinkingContent && message.thinkingContent.length > 0)) && (
-            <div className="mb-4 rounded-lg bg-muted/30 p-3 text-xs border-2 border-dashed border-border/40">
+            <div className="mb-4 rounded-lg bg-muted/30 p-3 text-xs border border-border/40">
               <button
                 onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
                 className="flex w-full items-center gap-2 text-muted-foreground hover:text-foreground transition-colors group"
@@ -330,7 +327,7 @@ export function MessageItem({
 
               {isThinkingExpanded && (
                 <div className="mt-3 space-y-3 pt-2 animate-fade-in">
-                  {message.toolCalls?.map((tc: any, i: number) => (
+                  {message.toolCalls?.map((tc: { toolName: string; status: 'calling' | 'completed' | 'error'; inputSummary?: string; resultSummary?: string }, i: number) => (
                     <div key={i} className="flex flex-col gap-1 p-2 bg-background/50 rounded border border-border/20">
                       <div className="flex items-center gap-2 font-medium">
                         {tc.status === 'calling' ? (
@@ -343,12 +340,12 @@ export function MessageItem({
                         <span className="text-foreground">{tc.toolName}</span>
                       </div>
                       {tc.inputSummary && (
-                        <div className="pl-5 text-muted-foreground break-words font-mono text-[10px]">
+                        <div className="pl-5 text-muted-foreground wrap-break-word font-mono text-[10px]">
                           输入: {tc.inputSummary}
                         </div>
                       )}
                       {tc.resultSummary && (
-                        <div className="pl-5 text-muted-foreground break-words font-mono text-[10px] border-l-2 border-primary/20">
+                        <div className="pl-5 text-muted-foreground wrap-break-word font-mono text-[10px] border-l-2 border-primary/20">
                           输出: {tc.resultSummary}
                         </div>
                       )}

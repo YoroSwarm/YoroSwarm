@@ -60,7 +60,7 @@ export const AgentList: React.FC<AgentListProps> = ({
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
+                  <div className="w-12 h-12 rounded-full bg-linear-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-lg">
                     {agent.name.charAt(0)}
                   </div>
                   <div
