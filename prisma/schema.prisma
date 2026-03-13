@@ -26,9 +26,8 @@ model User {
 
   // Relations
   sessions      Session[]
-  sentMessages     Message[] @relation("SentMessages")
-  receivedMessages Message[] @relation("ReceivedMessages")
-  conversationMemberships ConversationParticipant[]
+  swarmSessions SwarmSession[]
+  externalConversations ExternalConversation[]
   files         File[]
 
   @@map("users")
@@ -53,6 +52,34 @@ model Session {
   @@map("sessions")
 }
 
+model SwarmSession {
+  id          String             @id @default(uuid())
+  userId      String             @map("user_id")
+  title       String
+  goal        String?
+  status      SwarmSessionStatus @default(ACTIVE)
+  mode        String             @default("general_office")
+  leadAgentId String?            @unique @map("lead_agent_id")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+  archivedAt  DateTime?          @map("archived_at")
+
+  user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadAgent             Agent?                @relation("LeadAgent", fields: [leadAgentId], references: [id], onDelete: SetNull)
+  agents                Agent[]
+  agentContextEntries   AgentContextEntry[]
+  tasks                 TeamLeadTask[]
+  taskDependencies      TaskDependency[]
+  internalThreads       InternalThread[]
+  internalMessages      InternalMessage[]
+  externalConversations ExternalConversation[]
+  externalMessages      ExternalMessage[]
+  artifacts             Artifact[]
+  files                 File[]
+
+  @@map("swarm_sessions")
+}
+
 // ============================================
 // 文件模块
 // ============================================
@@ -65,14 +92,17 @@ model File {
   size         Int
   path         String
   sessionId    String   @map("session_id")
+  swarmSessionId String @map("swarm_session_id")
   userId       String?  @map("user_id")
   createdAt    DateTime @default(now()) @map("created_at")
   metadata     String? // JSON string
 
   // Relations
   session   Session        @relation(fields: [sessionId], references: [id])
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
   user      User?          @relation(fields: [userId], references: [id])
   thumbnails FileThumbnail[]
+  artifacts  Artifact[]
 
   @@map("files")
 }
@@ -89,80 +119,6 @@ model FileThumbnail {
   file File @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@map("file_thumbnails")
-}
-
-// ============================================
-// 消息模块
-// ============================================
-
-enum MessageType {
-  TEXT
-  TASK_UPDATE
-  AGENT_STATUS
-  SYSTEM
-  FILE
-  BROADCAST
-}
-
-enum MessageStatus {
-  SENT
-  DELIVERED
-  READ
-  FAILED
-}
-
-enum ConversationType {
-  DIRECT
-  GROUP
-  BROADCAST
-}
-
-model Message {
-  id             String        @id @default(uuid())
-  type           MessageType   @default(TEXT)
-  senderId       String        @map("sender_id")
-  recipientId    String?       @map("recipient_id")
-  conversationId String?       @map("conversation_id")
-  content        String
-  metadata       String? // JSON string
-  status         MessageStatus @default(SENT)
-  createdAt      DateTime      @default(now()) @map("created_at")
-  readAt         DateTime?     @map("read_at")
-
-  // Relations
-  sender       User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  recipient    User?         @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
-  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-
-  @@map("messages")
-}
-
-model Conversation {
-  id          String          @id @default(uuid())
-  type        ConversationType
-  title       String?
-  createdAt   DateTime        @default(now()) @map("created_at")
-  updatedAt   DateTime        @updatedAt @map("updated_at")
-
-  // Relations
-  messages     Message[]
-  participants ConversationParticipant[]
-
-  @@map("conversations")
-}
-
-model ConversationParticipant {
-  id             String    @id @default(uuid())
-  conversationId String    @map("conversation_id")
-  userId         String    @map("user_id")
-  joinedAt       DateTime  @default(now()) @map("joined_at")
-
-  // Relations
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([conversationId, userId])
-  @@map("conversation_participants")
 }
 
 // ============================================
@@ -185,39 +141,33 @@ enum TeamLeadTaskStatus {
   CANCELLED
 }
 
-enum WorkflowStatus {
-  CREATED
-  RUNNING
+enum SwarmSessionStatus {
+  ACTIVE
   PAUSED
   COMPLETED
+  ARCHIVED
   FAILED
-  STOPPED
 }
 
-model Team {
-  id          String   @id @default(uuid())
-  name        String
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-  createdBy   String?  @map("created_by")
-  config      String   @default("{}") // JSON string
-
-  // Relations
-  agents    Agent[]
-  tasks     TeamLeadTask[]
-  workflows Workflow[]
-
-  @@map("teams")
+enum AgentKind {
+  LEAD
+  RESEARCHER
+  WRITER
+  ANALYST
+  ENGINEER
+  COORDINATOR
+  SPECIALIST
+  WORKER
 }
 
 model Agent {
   id          String              @id @default(uuid())
+  swarmSessionId String           @map("swarm_session_id")
   name        String
   role        String
+  kind        AgentKind           @default(WORKER)
   description String?
   status      TeamLeadAgentStatus @default(IDLE)
-  teamId      String              @map("team_id")
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
@@ -226,23 +176,53 @@ model Agent {
   config       String  @default("{}") // JSON string
 
   // Relations
-  team     Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  tasks    TeamLeadTask[] @relation("AgentTasks")
-  createdTasks TeamLeadTask[] @relation("CreatedTasks")
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  leadForSessions SwarmSession[]   @relation("LeadAgent")
+  contextEntries AgentContextEntry[]
+  tasks          TeamLeadTask[]    @relation("AgentTasks")
+  createdTasks   TeamLeadTask[]    @relation("CreatedTasks")
+  sentInternalMessages InternalMessage[] @relation("InternalMessageSender")
+  receivedInternalMessages InternalMessage[] @relation("InternalMessageRecipient")
+  externalConversationsAsLead ExternalConversation[] @relation("ExternalConversationLead")
+  artifacts Artifact[]
 
+  @@index([swarmSessionId])
   @@map("agents")
+}
+
+model AgentContextEntry {
+  id             String   @id @default(uuid())
+  swarmSessionId String   @map("swarm_session_id")
+  agentId        String   @map("agent_id")
+  sourceType     String   @map("source_type")
+  sourceId       String?  @map("source_id")
+  entryType      String   @map("entry_type")
+  content        String
+  metadata       String?
+  visibility     String   @default("private")
+  sequence       Int
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, sequence])
+  @@index([swarmSessionId, agentId, createdAt])
+  @@map("agent_context_entries")
 }
 
 model TeamLeadTask {
   id          String             @id @default(uuid())
+  swarmSessionId String          @map("swarm_session_id")
   title       String
   description String?
   status      TeamLeadTaskStatus @default(PENDING)
   priority    Int                @default(2) // 1-4: LOW, MEDIUM, HIGH, CRITICAL
   assigneeId  String?            @map("assignee_id")
   creatorId   String             @map("creator_id")
-  teamId      String?            @map("team_id")
   parentId    String?            @map("parent_id")
+  resultSummary String?          @map("result_summary")
+  errorSummary String?           @map("error_summary")
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
   startedAt   DateTime?          @map("started_at")
@@ -250,31 +230,130 @@ model TeamLeadTask {
   dueDate     DateTime?          @map("due_date")
 
   // Relations
-  assignee   Agent?         @relation("AgentTasks", fields: [assigneeId], references: [id], onDelete: SetNull)
-  creator    Agent          @relation("CreatedTasks", fields: [creatorId], references: [id], onDelete: Cascade)
-  team       Team?          @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  parent     TeamLeadTask?  @relation("TaskDependencies", fields: [parentId], references: [id], onDelete: Cascade)
-  subtasks   TeamLeadTask[] @relation("TaskDependencies")
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  assignee     Agent?           @relation("AgentTasks", fields: [assigneeId], references: [id], onDelete: SetNull)
+  creator      Agent            @relation("CreatedTasks", fields: [creatorId], references: [id], onDelete: Cascade)
+  parent       TeamLeadTask?    @relation("TaskTree", fields: [parentId], references: [id], onDelete: Cascade)
+  subtasks     TeamLeadTask[]   @relation("TaskTree")
+  dependencies TaskDependency[] @relation("TaskDependencies")
+  dependents   TaskDependency[] @relation("TaskDependents")
+  internalThreads InternalThread[]
+  artifacts    Artifact[]
 
+  @@index([swarmSessionId, status])
   @@map("team_lead_tasks")
 }
 
-model Workflow {
-  id          String         @id @default(uuid())
-  name        String
-  description String?
-  status      WorkflowStatus @default(CREATED)
-  teamId      String         @map("team_id")
-  definition  String         @default("{}") // JSON string
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
-  startedAt   DateTime?      @map("started_at")
-  completedAt DateTime?      @map("completed_at")
+model TaskDependency {
+  id              String   @id @default(uuid())
+  swarmSessionId  String   @map("swarm_session_id")
+  taskId          String   @map("task_id")
+  dependsOnTaskId String   @map("depends_on_task_id")
+  dependencyType  String   @default("blocks") @map("dependency_type")
 
-  // Relations
-  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  task         TeamLeadTask  @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask TeamLeadTask @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
 
-  @@map("workflows")
+  @@unique([taskId, dependsOnTaskId])
+  @@index([swarmSessionId, taskId])
+  @@map("task_dependencies")
+}
+
+model InternalThread {
+  id             String   @id @default(uuid())
+  swarmSessionId String   @map("swarm_session_id")
+  threadType     String   @map("thread_type")
+  subject        String?
+  relatedTaskId  String?  @map("related_task_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  swarmSession SwarmSession  @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  relatedTask  TeamLeadTask? @relation(fields: [relatedTaskId], references: [id], onDelete: SetNull)
+  messages     InternalMessage[]
+
+  @@index([swarmSessionId, createdAt])
+  @@map("internal_threads")
+}
+
+model InternalMessage {
+  id               String    @id @default(uuid())
+  swarmSessionId   String    @map("swarm_session_id")
+  threadId         String    @map("thread_id")
+  senderAgentId    String    @map("sender_agent_id")
+  recipientAgentId String?   @map("recipient_agent_id")
+  messageType      String    @map("message_type")
+  content          String
+  metadata         String?
+  createdAt        DateTime  @default(now()) @map("created_at")
+  readAt           DateTime? @map("read_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  thread       InternalThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  sender       Agent @relation("InternalMessageSender", fields: [senderAgentId], references: [id], onDelete: Cascade)
+  recipient    Agent? @relation("InternalMessageRecipient", fields: [recipientAgentId], references: [id], onDelete: SetNull)
+
+  @@index([swarmSessionId, threadId, createdAt])
+  @@map("internal_messages")
+}
+
+model ExternalConversation {
+  id             String   @id @default(uuid())
+  swarmSessionId String   @map("swarm_session_id")
+  userId         String   @map("user_id")
+  leadAgentId    String   @map("lead_agent_id")
+  title          String
+  status         String   @default("active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  user         User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leadAgent    Agent @relation("ExternalConversationLead", fields: [leadAgentId], references: [id], onDelete: Cascade)
+  messages     ExternalMessage[]
+
+  @@index([swarmSessionId, userId])
+  @@map("external_conversations")
+}
+
+model ExternalMessage {
+  id             String   @id @default(uuid())
+  conversationId String   @map("conversation_id")
+  swarmSessionId String   @map("swarm_session_id")
+  senderType     String   @map("sender_type")
+  senderId       String?  @map("sender_id")
+  content        String
+  messageType    String   @default("text") @map("message_type")
+  metadata       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  conversation ExternalConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  swarmSession SwarmSession         @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+
+  @@index([swarmSessionId, conversationId, createdAt])
+  @@map("external_messages")
+}
+
+model Artifact {
+  id             String   @id @default(uuid())
+  swarmSessionId String   @map("swarm_session_id")
+  ownerAgentId   String?  @map("owner_agent_id")
+  sourceTaskId   String?  @map("source_task_id")
+  kind           String
+  fileId         String?  @map("file_id")
+  title          String
+  summary        String?
+  metadata       String?
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  ownerAgent   Agent?       @relation(fields: [ownerAgentId], references: [id], onDelete: SetNull)
+  sourceTask   TeamLeadTask? @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  file         File?         @relation(fields: [fileId], references: [id], onDelete: SetNull)
+
+  @@index([swarmSessionId, kind, createdAt])
+  @@map("artifacts")
 }
 
 // ============================================
@@ -296,7 +375,6 @@ model SharedTask {
   priority    Int             @default(2) // 1-4
   assigneeId  String?         @map("assignee_id")
   creatorId   String          @map("creator_id")
-  teamId      String?         @map("team_id")
   parentId    Int?            @map("parent_id")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")

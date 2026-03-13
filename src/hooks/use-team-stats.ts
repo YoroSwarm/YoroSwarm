@@ -1,55 +1,50 @@
-/**
- * Team Stats Hook
- * 迁移自 React SPA: frontend/src/hooks/useTeamStats.ts
- * 用于管理团队统计数据
- */
-
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { teamsApi, type TeamStatusResponse } from '@/lib/api/teams';
+import { useCallback, useEffect, useState } from 'react';
+import { swarmSessionsApi, type SwarmSessionMonitorResponse } from '@/lib/api/swarm-sessions';
 import { storage } from '@/utils/storage';
 
-const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
+const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
 interface UseTeamStatsOptions {
-  teamId?: string;
+  swarmSessionId?: string;
   autoLoad?: boolean;
 }
 
 export function useTeamStats(options: UseTeamStatsOptions = {}) {
-  const { teamId, autoLoad = true } = options;
-  const [stats, setStats] = useState<TeamStatusResponse | null>(null);
+  const { swarmSessionId, autoLoad = true } = options;
+  const [stats, setStats] = useState<SwarmSessionMonitorResponse['metrics'] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const resolvedTeamId = teamId || storage.get<string>(CURRENT_TEAM_STORAGE_KEY) || 'default';
+  const resolvedSessionId = swarmSessionId || storage.get<string>(CURRENT_SESSION_STORAGE_KEY) || undefined;
 
   const loadStats = useCallback(async () => {
+    if (!resolvedSessionId) return;
+
     setIsLoading(true);
     setError(null);
     try {
-      const response = await teamsApi.getTeamStatus(resolvedTeamId);
-      setStats(response);
+      const response = await swarmSessionsApi.getMonitor(resolvedSessionId);
+      setStats(response.metrics);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载团队状态失败');
+      setError(err instanceof Error ? err.message : '加载会话状态失败');
     } finally {
       setIsLoading(false);
     }
-  }, [resolvedTeamId]);
+  }, [resolvedSessionId]);
 
   useEffect(() => {
-    if (autoLoad && resolvedTeamId) {
-      loadStats();
+    if (autoLoad && resolvedSessionId) {
+      void loadStats();
     }
-  }, [autoLoad, resolvedTeamId, loadStats]);
+  }, [autoLoad, resolvedSessionId, loadStats]);
 
   return {
     stats,
     isLoading,
     error,
     loadStats,
-    // 便利计算属性
     totalAgents: stats?.total_agents || 0,
     activeAgents: stats?.active_agents || 0,
     busyAgents: stats?.busy_agents || 0,
@@ -58,6 +53,6 @@ export function useTeamStats(options: UseTeamStatsOptions = {}) {
     inProgressTasks: stats?.in_progress_tasks || 0,
     completedTasks: stats?.completed_tasks || 0,
     failedTasks: stats?.failed_tasks || 0,
-    averageLoad: stats?.average_load || 0,
+    averageLoad: 0,
   };
 }

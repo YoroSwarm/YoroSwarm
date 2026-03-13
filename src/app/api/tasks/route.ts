@@ -3,10 +3,10 @@ import prisma from '@/lib/db'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { successResponse, errorResponse, unauthorizedResponse } from '@/lib/api/response'
 import { cookies } from 'next/headers'
-import { SharedTaskStatus } from '@prisma/client'
-import { mapApiStatusToDb, mapPriorityToNumber, serializeTask, getLeadAgent, resolveTeam } from '@/lib/server/swarm'
+import { mapApiStatusToDb, mapPriorityToNumber, serializeTask, getLeadAgent, resolveSessionScope } from '@/lib/server/swarm'
+import { appendAgentContextEntry } from '@/lib/server/agent-context'
+import { buildSessionTaskData } from '@/lib/server/swarm-session'
 
-// GET - List tasks
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -24,41 +24,28 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    const assigneeId = searchParams.get('assigneeId')
-    const teamId = searchParams.get('teamId')
+    const assigneeId = searchParams.get('assigneeId') || searchParams.get('assignee_id')
+    const swarmSessionId = searchParams.get('swarmSessionId') || searchParams.get('swarm_session_id')
 
-    if (teamId || assigneeId) {
-      const team = await resolveTeam(teamId)
-      const tasks = await prisma.teamLeadTask.findMany({
-        where: {
-          ...(team?.id ? { teamId: team.id } : {}),
-          ...(assigneeId ? { assigneeId } : {}),
-          ...(status ? { status: mapApiStatusToDb(status) } : {}),
-        },
-        include: {
-          assignee: true,
-          parent: true,
-          subtasks: true,
-        },
-        orderBy: [
-          { priority: 'desc' },
-          { createdAt: 'desc' },
-        ],
-      })
-
-      const items = tasks.map(serializeTask)
-      return successResponse({ items, total: items.length })
+    if (!swarmSessionId) {
+      return errorResponse('swarmSessionId is required', 400)
     }
 
-    const tasks = await prisma.sharedTask.findMany({
+    const session = await resolveSessionScope({ swarmSessionId })
+    if (!session) {
+      return errorResponse('Swarm session not found', 404)
+    }
+
+    const tasks = await prisma.teamLeadTask.findMany({
       where: {
-        ...(status ? { status: status.toUpperCase() as SharedTaskStatus } : {}),
+        swarmSessionId: session.id,
         ...(assigneeId ? { assigneeId } : {}),
-        ...(teamId ? { teamId } : {}),
+        ...(status ? { status: mapApiStatusToDb(status) } : {}),
       },
       include: {
-        subtasks: true,
+        assignee: true,
         parent: true,
+        subtasks: true,
       },
       orderBy: [
         { priority: 'desc' },
@@ -66,14 +53,14 @@ export async function GET(request: NextRequest) {
       ],
     })
 
-    return successResponse({ items: tasks, total: tasks.length })
+    const items = tasks.map(serializeTask)
+    return successResponse({ items, total: items.length })
   } catch (error) {
     console.error('List tasks error:', error)
     return errorResponse('Internal server error', 500)
   }
 }
 
-// POST - Create a new task
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -83,72 +70,73 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse('Authentication required')
     }
 
-    let payload
     try {
-      payload = verifyAccessToken(token)
+      verifyAccessToken(token)
     } catch {
       return unauthorizedResponse('Invalid token')
     }
 
     const body = await request.json()
-    const { title, description, priority, assigneeId, teamId, parentId, dueDate } = body
+    const title = typeof body.title === 'string' ? body.title.trim() : ''
+    const description = typeof body.description === 'string' ? body.description : undefined
+    const priority = body.priority
+    const assigneeId = body.assigneeId || body.assigned_agent_id || body.agent_id
+    const swarmSessionId = body.swarmSessionId || body.swarm_session_id
+    const parentId = body.parentId || body.dependency_parent_id || body.dependency_id
+    const dueDate = body.dueDate || body.deadline
 
     if (!title) {
       return errorResponse('Task title is required', 400)
     }
 
-    if (teamId) {
-      const team = await resolveTeam(teamId)
-      if (!team) {
-        return errorResponse('Team not found', 404)
-      }
-
-      const creator = await getLeadAgent(team.id)
-      if (!creator) {
-        return errorResponse('No creator agent available', 400)
-      }
-
-      const task = await prisma.teamLeadTask.create({
-        data: {
-          title,
-          description,
-          priority: mapPriorityToNumber(priority),
-          assigneeId,
-          creatorId: creator.id,
-          teamId: team.id,
-          parentId: parentId || null,
-          dueDate: dueDate ? new Date(dueDate) : null,
-          status: assigneeId ? 'ASSIGNED' : 'PENDING',
-        },
-        include: {
-          assignee: true,
-          parent: true,
-          subtasks: true,
-        },
-      })
-
-      return successResponse(serializeTask(task), 'Task created successfully')
+    if (!swarmSessionId) {
+      return errorResponse('swarmSessionId is required', 400)
     }
 
-    const task = await prisma.sharedTask.create({
-      data: {
+    const session = await resolveSessionScope({ swarmSessionId })
+    if (!session) {
+      return errorResponse('Swarm session not found', 404)
+    }
+
+    const creator = await getLeadAgent({ swarmSessionId: session.id })
+    if (!creator) {
+      return errorResponse('No creator agent available', 400)
+    }
+
+    const task = await prisma.teamLeadTask.create({
+      data: buildSessionTaskData({
+        swarmSessionId: session.id,
+        creatorId: creator.id,
         title,
         description,
-        priority: priority || 2,
+        priority: mapPriorityToNumber(priority),
         assigneeId,
-        creatorId: payload.userId,
-        teamId,
-        parentId: parentId ? parseInt(parentId) : null,
+        parentId: parentId || null,
         dueDate: dueDate ? new Date(dueDate) : null,
-        status: 'PENDING',
-      },
+      }),
       include: {
-        subtasks: true,
+        assignee: true,
         parent: true,
+        subtasks: true,
       },
     })
 
-    return successResponse(task, 'Task created successfully')
+    if (assigneeId) {
+      await appendAgentContextEntry({
+        swarmSessionId: session.id,
+        agentId: assigneeId,
+        sourceType: 'task',
+        sourceId: task.id,
+        entryType: 'task_brief',
+        content: `${task.title}\n\n${task.description || ''}`.trim(),
+        metadata: {
+          priority: task.priority,
+          creatorId: creator.id,
+        },
+      })
+    }
+
+    return successResponse(serializeTask(task), 'Task created successfully')
   } catch (error) {
     console.error('Create task error:', error)
     return errorResponse('Internal server error', 500)

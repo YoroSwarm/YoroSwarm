@@ -37,6 +37,7 @@ export interface AgentStatusUpdate {
   total_tasks_completed: number;
   total_tasks_failed: number;
   last_active_at?: string;
+  swarm_session_id?: string;
   timestamp: string;
 }
 
@@ -49,6 +50,7 @@ export interface TaskStatusUpdate {
   priority: 'low' | 'medium' | 'high' | 'critical';
   progress?: number;
   message?: string;
+  swarm_session_id?: string;
   timestamp: string;
 }
 
@@ -66,7 +68,7 @@ export interface ChatMessagePayload {
   type: 'text' | 'task_update' | 'agent_status' | 'system' | 'file' | 'broadcast';
   sender_id: string;
   sender_name?: string;
-  conversation_id?: string;
+  swarm_session_id?: string;
   status?: 'sent' | 'delivered' | 'read' | 'failed';
   metadata?: Record<string, unknown>;
   read_at?: string;
@@ -82,7 +84,7 @@ export interface PresenceUpdate {
 
 export interface TypingIndicator {
   user_id: string;
-  conversation_id: string;
+  swarm_session_id: string;
   is_typing: boolean;
   timestamp: string;
 }
@@ -90,11 +92,11 @@ export interface TypingIndicator {
 export interface ReadReceipt {
   user_id: string;
   message_id: string;
-  conversation_id: string;
+  swarm_session_id: string;
   read_at: string;
 }
 
 export interface WebSocketSubscription {
-  target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
+  target: 'all' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
   id?: string;
 }

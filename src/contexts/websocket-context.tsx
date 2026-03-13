@@ -23,7 +23,7 @@ interface WebSocketContextValue {
   subscribeToAllTasks: () => void;
   unsubscribeFromAgent: (agentId: string) => void;
   unsubscribeFromTask: (taskId: string) => void;
-  sendChatMessage: (agentId: string, content: string, conversationId?: string) => boolean;
+  sendChatMessage: (agentId: string, content: string, swarmSessionId?: string) => boolean;
   connect: () => void;
   disconnect: () => void;
 }
@@ -58,7 +58,6 @@ export function WebSocketProvider({
     onSystemNotification,
   });
 
-  // Keep callbacks ref in sync using useEffect
   useEffect(() => {
     callbacksRef.current = {
       onAgentStatus,

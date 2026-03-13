@@ -1,6 +1,7 @@
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
-import { requireTokenPayload } from '@/lib/server/swarm'
+import { requireTokenPayload, serializeRealtimeAgentStatus } from '@/lib/server/swarm'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
 
 type RouteContext = { params: Promise<{ agentId: string }> }
 
@@ -11,7 +12,16 @@ export async function POST(_request: Request, context: RouteContext) {
     const agent = await prisma.agent.findUnique({ where: { id: agentId } })
     if (!agent) return notFoundResponse('Agent not found')
 
-    await prisma.agent.update({ where: { id: agentId }, data: { status: 'IDLE' } })
+    const updated = await prisma.agent.update({ where: { id: agentId }, data: { status: 'IDLE' }, include: { tasks: true } })
+
+    publishRealtimeMessage(
+      {
+        type: 'agent_status',
+        payload: serializeRealtimeAgentStatus(updated),
+      },
+      { sessionId: updated.swarmSessionId }
+    )
+
     return successResponse({ agent_id: agentId, action: 'resume', success: true, message: 'Agent resumed' })
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') return unauthorizedResponse('Authentication required')

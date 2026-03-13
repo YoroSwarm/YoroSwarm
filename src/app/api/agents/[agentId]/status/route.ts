@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
-import { mapAgentStatusToApi, mapApiAgentStatusToDb, requireTokenPayload } from '@/lib/server/swarm'
+import { mapAgentStatusToApi, mapApiAgentStatusToDb, requireTokenPayload, serializeRealtimeAgentStatus } from '@/lib/server/swarm'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
 
 type RouteContext = {
   params: Promise<{ agentId: string }>
@@ -57,6 +58,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       data: { status: mapApiAgentStatusToDb(body.status) },
       include: { tasks: true },
     })
+
+    publishRealtimeMessage(
+      {
+        type: 'agent_status',
+        payload: serializeRealtimeAgentStatus(updated),
+      },
+      { sessionId: updated.swarmSessionId }
+    )
 
     return successResponse({
       agent_id: updated.id,

@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Loader2, MessageSquareText } from 'lucide-react';
 import type { Agent, AgentActivity, AgentMessage } from '@/types/agent';
 
 interface AgentDetailDrawerProps {
@@ -10,8 +9,6 @@ interface AgentDetailDrawerProps {
   onClose: () => void;
   messages: AgentMessage[];
   activities: AgentActivity[];
-  onOpenDirectChat: (agent: Agent) => void | Promise<void>;
-  isOpeningDirectChat?: boolean;
 }
 
 export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
@@ -20,8 +17,6 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
   onClose,
   messages,
   activities,
-  onOpenDirectChat,
-  isOpeningDirectChat = false,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'messages' | 'activities'>('overview');
 
@@ -56,18 +51,8 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
             </button>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              onClick={() => void onOpenDirectChat(agent)}
-              disabled={isOpeningDirectChat}
-              className="inline-flex items-center gap-2 rounded-2xl bg-neutral-950 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {isOpeningDirectChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquareText className="h-4 w-4" />}
-              打开直接对话
-            </button>
-            <div className="rounded-2xl border border-black/10 bg-white/70 px-4 py-2.5 text-sm text-neutral-500">
-              用户可直接进入该队友的独立会话，而不是只在监控面板里查看静态消息。
-            </div>
+          <div className="mt-6 rounded-2xl border border-black/10 bg-white/70 px-4 py-2.5 text-sm text-neutral-500">
+            该抽屉仅用于监控当前 agent 在该 SwarmSession 内的状态、活动与摘要。用户外部沟通统一通过该会话的 Lead 完成。
           </div>
         </div>
 
@@ -137,21 +122,14 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <h3 className="text-sm font-medium uppercase tracking-[0.24em] text-neutral-500">Recent Signals</h3>
-                  <p className="mt-2 text-sm text-neutral-600">这里展示监控面板内观察到的最近动态，正式沟通请进入直接对话。</p>
+                  <p className="mt-2 text-sm text-neutral-600">这里展示监控面板内观察到的最近动态，不承载用户外部聊天。</p>
                 </div>
-                <button
-                  onClick={() => void onOpenDirectChat(agent)}
-                  disabled={isOpeningDirectChat}
-                  className="rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-neutral-800 transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  进入聊天
-                </button>
               </div>
 
               <div className="space-y-3">
                 {messages.length === 0 ? (
                   <div className="rounded-2xl border border-dashed border-black/10 px-4 py-8 text-center text-sm text-neutral-500">
-                    暂无监控消息，直接对话会在聊天页中实时承载。
+                    暂无监控消息。
                   </div>
                 ) : (
                   messages.map((message) => (

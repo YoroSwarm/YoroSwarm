@@ -1,109 +1,80 @@
-/**
- * Tasks Hook
- * 迁移自 React SPA: frontend/src/hooks/useTasks.ts
- * 用于管理任务数据
- */
-
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { tasksApi, type TaskResponse, type TaskStatus, type TaskPriority } from '@/lib/api/tasks';
-import { teamsApi } from '@/lib/api/teams';
+import { tasksApi, type TaskStatus, type TaskPriority } from '@/lib/api/tasks';
+import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
 import { storage } from '@/utils/storage';
 import type { Task } from '@/types/agent';
 
-const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
+const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
 interface UseTasksOptions {
-  teamId?: string;
+  swarmSessionId?: string;
   autoLoad?: boolean;
 }
 
-type ApiTaskListShape =
-  | { items: TaskResponse[]; total: number }
-  | TaskResponse[];
-
-// 转换 API 任务到前端 Task 类型
-const convertApiTask = (apiTask: TaskResponse): Task => {
-  const statusMap: Record<string, Task['status']> = {
-    pending: 'pending',
-    in_progress: 'in_progress',
-    completed: 'completed',
-    failed: 'failed',
-    cancelled: 'cancelled',
-  };
-
-  const priorityMap: Record<string, Task['priority']> = {
-    low: 'low',
-    medium: 'medium',
-    high: 'high',
-  };
-
-  return {
-    id: apiTask.id,
-    title: apiTask.title,
-    description: apiTask.description,
-    status: statusMap[apiTask.status] || 'pending',
-    assignedTo: apiTask.assigned_agent_id,
-    priority: priorityMap[apiTask.priority] || 'medium',
-    createdAt: apiTask.created_at,
-    updatedAt: apiTask.updated_at,
-  };
+type SessionTask = {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  priority: string;
+  assigned_agent_id?: string;
+  created_at: string;
+  updated_at: string;
 };
 
+const convertTask = (task: SessionTask): Task => ({
+  id: task.id,
+  title: task.title,
+  description: task.description,
+  status: (task.status as Task['status']) || 'pending',
+  assignedTo: task.assigned_agent_id,
+  priority: (task.priority as Task['priority']) || 'medium',
+  createdAt: task.created_at,
+  updatedAt: task.updated_at,
+});
+
 export function useTasks(options: UseTasksOptions = {}) {
-  const { teamId, autoLoad = true } = options;
+  const { swarmSessionId, autoLoad = true } = options;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
-  const resolvedTeamId = teamId || storage.get<string>(CURRENT_TEAM_STORAGE_KEY) || undefined;
+  const resolvedSessionId = swarmSessionId || storage.get<string>(CURRENT_SESSION_STORAGE_KEY) || undefined;
 
-  // 加载任务列表
   const loadTasks = useCallback(async (params?: { status?: TaskStatus }) => {
+    if (!resolvedSessionId) return;
+
     setIsLoading(true);
     setError(null);
     try {
-      let response;
-      if (resolvedTeamId) {
-        response = await tasksApi.getTeamTasks(resolvedTeamId, params);
-      } else {
-        response = await tasksApi.listTasks(params);
-      }
-      const normalizedResponse = Array.isArray(response)
-        ? { items: response, total: response.length }
-        : response as ApiTaskListShape;
-      const convertedTasks = normalizedResponse.items.map(convertApiTask);
+      const response = await swarmSessionsApi.getSessionTasks(resolvedSessionId);
+      const filtered = params?.status ? response.items.filter((task) => task.status === params.status) : response.items;
+      const convertedTasks = filtered.map((task) => convertTask(task as SessionTask));
       setTasks(convertedTasks);
-      setTotalCount(normalizedResponse.total);
+      setTotalCount(convertedTasks.length);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载任务失败');
     } finally {
       setIsLoading(false);
     }
-  }, [resolvedTeamId]);
+  }, [resolvedSessionId]);
 
-  // 创建任务
-  const createTask = useCallback(async (data: {
-    title: string;
-    description: string;
-    priority?: TaskPriority;
-  }) => {
+  const createTask = useCallback(async (data: { title: string; description: string; priority?: TaskPriority; }) => {
+    if (!resolvedSessionId) {
+      throw new Error('No active swarm session');
+    }
+
     setIsLoading(true);
     try {
-      const response = resolvedTeamId
-        ? await teamsApi.createTask(resolvedTeamId, {
+      const response = await swarmSessionsApi.createSessionTask(resolvedSessionId, {
         title: data.title,
         description: data.description,
         priority: data.priority,
-          })
-        : await tasksApi.createTask({
-            title: data.title,
-            description: data.description,
-            priority: data.priority,
-          });
-      const newTask = convertApiTask(response);
+      });
+      const newTask = convertTask(response as SessionTask);
       setTasks((prev) => [newTask, ...prev]);
       return newTask;
     } catch (err) {
@@ -112,55 +83,31 @@ export function useTasks(options: UseTasksOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [resolvedTeamId]);
+  }, [resolvedSessionId]);
 
-  // 分配任务
   const assignTask = useCallback(async (taskId: string, agentId?: string) => {
-    try {
-      await tasksApi.assignTask(taskId, {
-        agent_id: agentId,
-        strategy: agentId ? undefined : 'auto',
-      });
-      // 重新加载任务列表
-      await loadTasks();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '分配任务失败');
-      throw err;
-    }
+    await tasksApi.assignTask(taskId, {
+      agent_id: agentId,
+      strategy: agentId ? undefined : 'auto',
+    });
+    await loadTasks();
   }, [loadTasks]);
 
-  // 更新任务状态
   const updateTaskStatus = useCallback(async (taskId: string, status: TaskStatus) => {
-    try {
-      await tasksApi.updateTaskStatus(taskId, { status });
-      setTasks((prev) =>
-        prev.map((task) =>
-          task.id === taskId ? { ...task, status, updatedAt: new Date().toISOString() } : task
-        )
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '更新任务状态失败');
-      throw err;
-    }
+    await tasksApi.updateTaskStatus(taskId, { status });
+    setTasks((prev) => prev.map((task) => task.id === taskId ? { ...task, status, updatedAt: new Date().toISOString() } : task));
   }, []);
 
-  // 删除任务
   const deleteTask = useCallback(async (taskId: string) => {
-    try {
-      await tasksApi.deleteTask(taskId);
-      setTasks((prev) => prev.filter((task) => task.id !== taskId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '删除任务失败');
-      throw err;
-    }
+    await tasksApi.deleteTask(taskId);
+    setTasks((prev) => prev.filter((task) => task.id !== taskId));
   }, []);
 
-  // 自动加载
   useEffect(() => {
-    if (autoLoad) {
-      loadTasks();
+    if (autoLoad && resolvedSessionId) {
+      void loadTasks();
     }
-  }, [autoLoad, loadTasks]);
+  }, [autoLoad, loadTasks, resolvedSessionId]);
 
   return {
     tasks,

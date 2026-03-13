@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
-import { parseJson, requireTokenPayload } from '@/lib/server/swarm'
+import { parseJson, requireTokenPayload, serializeRealtimeAgentStatus, serializeRealtimeTaskUpdate } from '@/lib/server/swarm'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
+import { appendAgentContextEntry } from '@/lib/server/agent-context'
 
 type RouteContext = {
   params: Promise<{ taskId: string }>
@@ -31,7 +33,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (!agentId) {
       const agents = await prisma.agent.findMany({
-        where: { teamId: task.teamId || undefined },
+        where: {
+          swarmSessionId: task.swarmSessionId,
+          role: { not: 'team_lead' },
+        },
         include: {
           tasks: {
             where: {
@@ -59,11 +64,62 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return notFoundResponse('Agent not found')
     }
 
-    await prisma.teamLeadTask.update({
+    if (agent.swarmSessionId !== task.swarmSessionId) {
+      return errorResponse('Agent and task must belong to the same swarm session', 400)
+    }
+
+    if (agent.role === 'team_lead') {
+      return errorResponse('Team Lead cannot be assigned execution tasks', 400)
+    }
+
+    const updatedTask = await prisma.teamLeadTask.update({
       where: { id: task.id },
       data: {
         assigneeId: agent.id,
         status: task.status === 'IN_PROGRESS' ? task.status : 'ASSIGNED',
+      },
+      include: {
+        assignee: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    })
+
+    const refreshedAgent = await prisma.agent.findUnique({
+      where: { id: agent.id },
+      include: { tasks: true },
+    })
+
+    publishRealtimeMessage(
+      {
+        type: 'task_update',
+        payload: serializeRealtimeTaskUpdate(updatedTask, `任务已分配给 ${agent.name}`),
+      },
+      { sessionId: task.swarmSessionId }
+    )
+
+    if (refreshedAgent) {
+      publishRealtimeMessage(
+        {
+          type: 'agent_status',
+          payload: serializeRealtimeAgentStatus(refreshedAgent),
+        },
+        { sessionId: refreshedAgent.swarmSessionId }
+      )
+    }
+
+    await appendAgentContextEntry({
+      swarmSessionId: task.swarmSessionId,
+      agentId: agent.id,
+      sourceType: 'task',
+      sourceId: task.id,
+      entryType: 'task_brief',
+      content: `${task.title}\n\n${task.description || ''}`.trim(),
+      metadata: {
+        assignmentStrategy: strategy,
       },
     })
 

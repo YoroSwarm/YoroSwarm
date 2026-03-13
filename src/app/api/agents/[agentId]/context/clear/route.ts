@@ -1,6 +1,7 @@
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
 import { requireTokenPayload } from '@/lib/server/swarm'
+import { clearAgentContext } from '@/lib/server/agent-context'
 
 type RouteContext = {
   params: Promise<{ agentId: string }>
@@ -16,6 +17,8 @@ export async function POST(_request: Request, context: RouteContext) {
       return notFoundResponse('Agent not found')
     }
 
+    const deleted = await clearAgentContext(agentId)
+
     await prisma.agent.update({
       where: { id: agentId },
       data: {
@@ -29,6 +32,7 @@ export async function POST(_request: Request, context: RouteContext) {
     return successResponse({
       agent_id: agentId,
       action: 'clear_context',
+      deleted_entries: deleted.count,
       success: true,
       message: 'Agent context cleared',
     })

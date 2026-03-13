@@ -21,6 +21,7 @@ export interface AgentStatusUpdate {
   total_tasks_completed: number;
   total_tasks_failed: number;
   last_active_at?: string;
+  swarm_session_id?: string;
   timestamp: string;
 }
 
@@ -33,6 +34,7 @@ export interface TaskStatusUpdate {
   priority: 'low' | 'medium' | 'high' | 'critical';
   progress?: number;
   message?: string;
+  swarm_session_id?: string;
   timestamp: string;
 }
 
@@ -47,8 +49,8 @@ export interface SystemNotification {
 export interface UseAgentWebSocketOptions {
   clientId?: string;
   token?: string;
-  teamId?: string;
   sessionId?: string;
+  swarmSessionId?: string;
   path?: string;
   scopePath?: string;
   onAgentStatus?: (update: AgentStatusUpdate) => void;
@@ -76,7 +78,7 @@ export interface UseAgentWebSocketReturn {
   unsubscribeFromTask: (taskId: string) => void;
   unsubscribeFromAllAgents: () => void;
   unsubscribeFromAllTasks: () => void;
-  sendChatMessage: (agentId: string, content: string, conversationId?: string) => boolean;
+  sendChatMessage: (agentId: string, content: string, swarmSessionId?: string) => boolean;
   connect: () => void;
   disconnect: () => void;
 }
@@ -84,8 +86,8 @@ export interface UseAgentWebSocketReturn {
 export function useAgentWebSocket({
   clientId,
   token,
-  teamId,
   sessionId,
+  swarmSessionId,
   path,
   scopePath,
   onAgentStatus,
@@ -104,7 +106,6 @@ export function useAgentWebSocket({
   const agentsRef = useRef(agents);
   const tasksRef = useRef(tasks);
 
-  // Keep refs in sync
   useEffect(() => {
     agentsRef.current = agents;
   }, [agents]);
@@ -138,13 +139,12 @@ export function useAgentWebSocket({
 
       case 'system': {
         const notification = message.payload as SystemNotification;
-        setNotifications(prev => [...prev.slice(-49), notification]); // Keep last 50
+        setNotifications(prev => [...prev.slice(-49), notification]);
         onSystemNotification?.(notification);
         break;
       }
 
       case 'broadcast': {
-        // Handle broadcast messages
         const payload = message.payload as { type: string; data: unknown };
         if (payload.type === 'agent_status') {
           const update = payload.data as AgentStatusUpdate;
@@ -160,17 +160,15 @@ export function useAgentWebSocket({
     }
   }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification]);
 
-  // Get WebSocket URL from environment
   const query = new URLSearchParams();
   if (token) query.set('token', token);
   if (clientId) query.set('clientId', clientId);
-  if (teamId) query.set('teamId', teamId);
-  if (sessionId) query.set('sessionId', sessionId);
+  if (swarmSessionId || sessionId) query.set('sessionId', swarmSessionId || sessionId || '');
 
   const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
   const resolvedScopePath = scopePath
     || path
-    || (teamId ? `/ws/teams/${teamId}` : sessionId ? `/ws/sessions/${sessionId}` : clientId ? `/ws/agents/${clientId}` : '/ws');
+    || (swarmSessionId || sessionId ? `/ws/sessions/${swarmSessionId || sessionId}` : clientId ? `/ws/agents/${clientId}` : '/ws');
   const wsUrl = typeof window !== 'undefined'
     ? `${baseUrl.replace(/\/$/, '')}${resolvedScopePath}${query.size ? `?${query.toString()}` : ''}`
     : '';
@@ -249,22 +247,21 @@ export function useAgentWebSocket({
     });
   }, [sendMessage]);
 
-  const sendChatMessage = useCallback((agentId: string, content: string, conversationId?: string): boolean => {
+  const sendChatMessage = useCallback((agentId: string, content: string, resolvedSessionId?: string): boolean => {
     return sendMessage({
       type: 'chat_message',
       payload: {
         id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         agent_id: agentId,
-        agent_name: 'User', // Will be replaced by server
+        agent_name: 'User',
         content,
         type: 'message',
-        conversation_id: conversationId,
+        swarm_session_id: resolvedSessionId,
         timestamp: new Date().toISOString(),
       }
     });
   }, [sendMessage]);
 
-  // Auto-subscribe to all updates on connect
   useEffect(() => {
     if (isConnected) {
       subscribeToAllAgents();

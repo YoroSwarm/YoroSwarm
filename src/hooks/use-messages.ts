@@ -1,18 +1,10 @@
-/**
- * Messages Hook
- * 迁移自 React SPA: frontend/src/hooks/useMessages.ts
- * 用于管理消息数据
- */
-
 'use client';
 
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { messagesApi, type MessageResponse } from '@/lib/api/messages';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { swarmSessionsApi, type ExternalMessageResponse } from '@/lib/api/swarm-sessions';
 import { filesApi } from '@/lib/api/files';
-import type { Agent, Message, MessageType, MessageStatus } from '@/types/chat';
+import type { Agent, Message } from '@/types/chat';
 import type { ChatMessagePayload } from '@/types/websocket';
-import { storage } from '@/utils/storage';
-import type { User } from '@/types';
 
 interface UseMessagesOptions {
   sessionId: string | null;
@@ -20,353 +12,154 @@ interface UseMessagesOptions {
   autoLoad?: boolean;
 }
 
-type FileMessageMetadata = {
-  fileId?: string;
-  fileName?: string;
-  name?: string;
-  size?: number;
-  mimeType?: string;
-  url?: string;
-};
-
 type IncomingRealtimeMessage = ChatMessagePayload & {
-  created_at?: string;
+  swarm_session_id?: string;
+  sender_type?: 'user' | 'lead';
+  message_type?: string;
 };
 
 const EMPTY_PARTICIPANTS: Agent[] = [];
+
+function convertExternalMessage(message: ExternalMessageResponse, participants: Agent[]): Message {
+  const lead = participants.find((participant) => participant.role === 'lead');
+  const isUser = message.sender_type === 'user';
+
+  return {
+    id: message.id,
+    sessionId: message.swarm_session_id,
+    type: message.message_type === 'file' ? 'file' : message.message_type === 'system' ? 'system' : 'text',
+    content: message.content,
+    sender: {
+      id: message.sender_id || (isUser ? 'user' : lead?.id || 'lead'),
+      type: isUser ? 'user' : 'agent',
+      name: isUser ? '我' : lead?.name || 'Lead',
+    },
+    status: 'received',
+    createdAt: message.created_at,
+    metadata: message.metadata as Message['metadata'],
+  };
+}
 
 export function useMessages(options: UseMessagesOptions) {
   const { sessionId, participants = EMPTY_PARTICIPANTS, autoLoad = true } = options;
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasMore, setHasMore] = useState(true);
-  const pageRef = useRef(1);
-  const isLoadingRef = useRef(false);
-  const optimisticKeyRef = useRef<Map<string, string>>(new Map());
-  const pageSize = 20;
-  const resolveCurrentUser = useCallback((): Pick<User, 'id' | 'username'> | null => {
-    const storedUser = storage.get<User>('user');
-    if (storedUser?.id) {
-      return {
-        id: storedUser.id,
-        username: storedUser.username || '我',
-      };
-    }
+  const [hasMore, setHasMore] = useState(false);
+  const optimisticIds = useRef(new Set<string>());
 
-    const authState = storage.get<{ state?: { user?: User | null } }>('auth-storage')
-      || storage.get<{ state?: { user?: User | null } }>('swarm-auth-storage');
-    const hydratedUser = authState?.state?.user;
-    if (hydratedUser?.id) {
-      return {
-        id: hydratedUser.id,
-        username: hydratedUser.username || '我',
-      };
-    }
+  const participantMap = useMemo(() => participants, [participants]);
 
-    const token = storage.get<string>('access_token');
-    if (!token) return null;
+  const loadMessages = useCallback(async (_isLoadMore = false) => {
+    if (!sessionId) return;
 
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1] || '')) as { userId?: string; username?: string };
-      if (!payload.userId) return null;
-      return {
-        id: payload.userId,
-        username: payload.username || '我',
-      };
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const currentUser = useMemo(() => resolveCurrentUser(), [resolveCurrentUser]);
-
-  const normalizeAttachment = useCallback((metadata?: Record<string, unknown>) => {
-    if (!metadata) return undefined;
-
-    const fileMetadata = metadata as FileMessageMetadata;
-    if (!fileMetadata.url) return undefined;
-
-    return [{
-      id: fileMetadata.fileId || fileMetadata.url,
-      type: fileMetadata.mimeType?.startsWith('image/') ? 'image' as const : 'file' as const,
-      url: fileMetadata.url,
-      name: fileMetadata.name || fileMetadata.fileName || '文件',
-      size: typeof fileMetadata.size === 'number' ? fileMetadata.size : undefined,
-      mimeType: fileMetadata.mimeType,
-    }];
-  }, []);
-
-  const buildOptimisticKey = useCallback((senderId: string, content: string, createdAt?: string) => {
-    const normalizedTime = createdAt ? new Date(createdAt).getTime() : 0;
-    const bucket = normalizedTime ? Math.floor(normalizedTime / 5000) : 0;
-    return `${senderId}:${content}:${bucket}`;
-  }, []);
-
-  // 转换 API 消息到前端类型
-  const convertApiMessage = useCallback((msg: MessageResponse, sessionId: string): Message => {
-    const typeMap: Record<string, MessageType> = {
-      text: 'text',
-      task_update: 'system',
-      agent_status: 'system',
-      system: 'system',
-      file: 'file',
-      broadcast: 'system',
-    };
-
-    const statusMap: Record<string, MessageStatus> = {
-      sent: 'sent',
-      delivered: 'received',
-      read: 'received',
-      failed: 'error',
-    };
-
-    const isSystemMessage = msg.type !== 'text' && msg.type !== 'file';
-    const isCurrentUser = currentUser?.id ? msg.sender_id === currentUser.id : false;
-    const matchedParticipant = participants.find((participant) => participant.id === msg.sender_id);
-    const senderType = isSystemMessage ? 'system' : isCurrentUser ? 'user' : 'agent';
-    const fallbackName = isCurrentUser
-      ? (currentUser?.username || '我')
-      : matchedParticipant?.name || `Agent ${msg.sender_id.slice(0, 6)}`;
-
-    const attachments = msg.type === 'file' ? normalizeAttachment(msg.metadata) : undefined;
-    const primaryAttachment = attachments?.[0];
-    const resolvedType = msg.type === 'file' && primaryAttachment?.mimeType?.startsWith('image/')
-      ? 'image'
-      : typeMap[msg.type] || 'text';
-
-    return {
-      id: msg.id,
-      sessionId,
-      type: resolvedType,
-      content: primaryAttachment?.url || msg.content,
-      sender: {
-        id: msg.sender_id,
-        type: senderType,
-        name: fallbackName,
-      },
-      status: statusMap[msg.status] || 'received',
-      createdAt: msg.created_at,
-      attachments,
-      metadata: msg.metadata,
-    };
-  }, [currentUser?.id, currentUser?.username, normalizeAttachment, participants]);
-
-  const convertRealtimeMessage = useCallback((msg: IncomingRealtimeMessage, activeSessionId: string): Message => {
-    const apiShape: MessageResponse = {
-      id: msg.id,
-      content: msg.content,
-      type: msg.type,
-      sender_id: msg.sender_id,
-      conversation_id: msg.conversation_id,
-      status: msg.status || 'sent',
-      metadata: msg.metadata,
-      created_at: msg.created_at || msg.timestamp,
-      read_at: msg.read_at,
-    };
-
-    return convertApiMessage(apiShape, activeSessionId);
-  }, [convertApiMessage]);
-
-  const appendRealtimeMessage = useCallback((incoming: IncomingRealtimeMessage) => {
-    if (!sessionId || incoming.conversation_id !== sessionId) return;
-
-    const normalized = convertRealtimeMessage(incoming, sessionId);
-    const optimisticKey = buildOptimisticKey(
-      normalized.sender.id,
-      normalized.attachments?.[0]?.name || normalized.content,
-      normalized.createdAt
-    );
-
-    setMessages((prev) => {
-      if (prev.some((message) => message.id === normalized.id)) {
-        return prev;
-      }
-
-      const optimisticId = optimisticKeyRef.current.get(optimisticKey);
-      if (optimisticId) {
-        optimisticKeyRef.current.delete(optimisticKey);
-        return prev.map((message) => message.id === optimisticId ? normalized : message);
-      }
-
-      return [...prev, normalized];
-    });
-  }, [buildOptimisticKey, convertRealtimeMessage, sessionId]);
-
-  // 加载消息
-  const loadMessages = useCallback(async (isLoadMore = false) => {
-    if (!sessionId || isLoadingRef.current) return;
-
-    isLoadingRef.current = true;
     setIsLoading(true);
     setError(null);
-
     try {
-      const currentPage = isLoadMore ? pageRef.current + 1 : 1;
-      const response = await messagesApi.getConversationMessages(sessionId, {
-        page: currentPage,
-        page_size: pageSize,
-      });
-
-      const convertedMessages = response.items.map((msg) =>
-        convertApiMessage(msg, sessionId)
-      );
-
-      if (isLoadMore) {
-        setMessages((prev) => [...convertedMessages, ...prev]);
-        pageRef.current = currentPage;
-      } else {
-        setMessages(convertedMessages);
-        pageRef.current = 1;
-        void messagesApi.markConversationAsRead(sessionId).catch(() => undefined);
-      }
-
-      setHasMore(response.has_more);
+      const response = await swarmSessionsApi.getExternalMessages(sessionId);
+      setMessages(response.items.map((message) => convertExternalMessage(message, participantMap)));
+      setHasMore(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载消息失败');
     } finally {
-      isLoadingRef.current = false;
       setIsLoading(false);
     }
-  }, [sessionId, convertApiMessage]);
+  }, [participantMap, sessionId]);
 
-  // 发送消息
-  const sendMessage = useCallback(async (content: string, type: MessageType = 'text', attachments?: File[]) => {
+  const appendRealtimeMessage = useCallback((incoming: IncomingRealtimeMessage) => {
     if (!sessionId) return;
+    const targetSessionId = incoming.swarm_session_id;
+    if (targetSessionId !== sessionId) return;
 
-    const trimmedContent = content.trim();
+    const converted: Message = {
+      id: incoming.id,
+      sessionId,
+      type: incoming.message_type === 'file' || incoming.type === 'file' ? 'file' : incoming.message_type === 'system' ? 'system' : 'text',
+      content: incoming.content,
+      sender: {
+        id: incoming.sender_id,
+        type: incoming.sender_type === 'user' ? 'user' : 'agent',
+        name: incoming.sender_type === 'user'
+          ? '我'
+          : participantMap.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Lead',
+      },
+      status: 'received',
+      createdAt: incoming.created_at || incoming.timestamp,
+      metadata: incoming.metadata as Message['metadata'],
+    };
+
+    setMessages((prev) => {
+      if (prev.some((message) => message.id === converted.id)) {
+        return prev;
+      }
+
+      return [...prev, converted];
+    });
+  }, [participantMap, sessionId]);
+
+  const sendMessage = useCallback(async (
+    content: string,
+    _type: 'text' | 'system' | 'file' = 'text',
+    attachments?: File[],
+    targetSessionId?: string | null
+  ) => {
+    const activeSessionId = targetSessionId || sessionId;
+    if (!activeSessionId) return;
+    const trimmed = content.trim();
     const files = attachments || [];
-
-    if (!trimmedContent && files.length === 0) return;
+    if (!trimmed && files.length === 0) return;
 
     try {
-      if (trimmedContent) {
+      if (trimmed) {
         const tempId = `temp-${Date.now()}`;
-        const tempMessage: Message = {
+        optimisticIds.current.add(tempId);
+        setMessages((prev) => [...prev, {
           id: tempId,
-          sessionId,
-          type,
-          content: trimmedContent,
-          sender: {
-            id: currentUser?.id || 'current-user',
-            type: 'user',
-            name: currentUser?.username || '我',
-          },
+          sessionId: activeSessionId,
+          type: 'text',
+          content: trimmed,
+          sender: { id: 'user', type: 'user', name: '我' },
           status: 'sending',
           createdAt: new Date().toISOString(),
-        };
+        }]);
 
-        const optimisticKey = buildOptimisticKey(tempMessage.sender.id, tempMessage.content, tempMessage.createdAt);
-        optimisticKeyRef.current.set(optimisticKey, tempId);
-
-        setMessages((prev) => [...prev, tempMessage]);
-
-        const response = await messagesApi.sendMessage({
-          content: trimmedContent,
-          type: type === 'text' ? 'text' : 'system',
-          conversation_id: sessionId,
+        const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, {
+          content: trimmed,
+          message_type: 'text',
         });
 
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === tempId ? convertApiMessage(response, sessionId) : msg
-          )
-        );
+        setMessages((prev) => prev.map((message) => message.id === tempId ? convertExternalMessage(response, participantMap) : message));
       }
 
       for (const file of files) {
-        const uploaded = await filesApi.uploadFile(file);
-        const tempId = `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-        const tempFileMessage: Message = {
-          id: tempId,
-          sessionId,
-          type: uploaded.mimeType.startsWith('image/') ? 'image' : 'file',
-          content: uploaded.url,
-          sender: {
-            id: currentUser?.id || 'current-user',
-            type: 'user',
-            name: currentUser?.username || '我',
-          },
-          status: 'sending',
-          createdAt: new Date().toISOString(),
-          attachments: [{
-            id: uploaded.id,
-            type: uploaded.mimeType.startsWith('image/') ? 'image' : 'file',
-            url: uploaded.url,
-            name: uploaded.originalName,
-            size: uploaded.size,
-            mimeType: uploaded.mimeType,
-          }],
-          metadata: {
-            ...(uploaded.mimeType.startsWith('image/') ? {} : {}),
-          },
-        };
-
-        const optimisticKey = buildOptimisticKey(
-          tempFileMessage.sender.id,
-          uploaded.originalName,
-          tempFileMessage.createdAt
-        );
-        optimisticKeyRef.current.set(optimisticKey, tempId);
-
-        setMessages((prev) => [...prev, tempFileMessage]);
-
-        const response = await messagesApi.sendMessage({
+        const uploaded = await filesApi.uploadFile(file, activeSessionId);
+        await swarmSessionsApi.sendExternalMessage(activeSessionId, {
           content: uploaded.originalName,
-          type: 'file',
-          conversation_id: sessionId,
+          message_type: 'file',
           metadata: {
             fileId: uploaded.id,
             fileName: uploaded.originalName,
-            name: uploaded.originalName,
-            size: uploaded.size,
             mimeType: uploaded.mimeType,
+            size: uploaded.size,
             url: uploaded.url,
           },
         });
+      }
 
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === tempId ? convertApiMessage(response, sessionId) : msg
-          )
-        );
+      if (files.length > 0) {
+        await loadMessages();
       }
     } catch (err) {
-      setMessages((prev) => prev.map((msg) => (
-        msg.status === 'sending' ? { ...msg, status: 'error' as const } : msg
-      )));
-      optimisticKeyRef.current.clear();
       setError(err instanceof Error ? err.message : '发送消息失败');
       throw err;
     }
-  }, [sessionId, currentUser?.id, currentUser?.username, convertApiMessage, buildOptimisticKey]);
+  }, [loadMessages, participantMap, sessionId]);
 
-  // 标记已读
-  const markAsRead = useCallback(async (messageId: string) => {
-    try {
-      await messagesApi.markAsRead(messageId);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === messageId ? { ...msg, status: 'received' as const } : msg
-        )
-      );
-    } catch (err) {
-      console.error('标记已读失败:', err);
-    }
-  }, []);
-
-  // 自动加载
   useEffect(() => {
-    setMessages([]);
-    pageRef.current = 1;
-    setHasMore(true);
-    isLoadingRef.current = false;
-    optimisticKeyRef.current.clear();
-
     if (autoLoad && sessionId) {
-      loadMessages(false);
+      void loadMessages();
     }
-  }, [autoLoad, sessionId, loadMessages]);
+  }, [autoLoad, loadMessages, sessionId]);
 
   return {
     messages,
@@ -376,6 +169,5 @@ export function useMessages(options: UseMessagesOptions) {
     loadMessages,
     sendMessage,
     appendRealtimeMessage,
-    markAsRead,
   };
 }

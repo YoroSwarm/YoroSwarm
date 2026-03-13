@@ -8,13 +8,11 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { agentsApi } from '@/lib/api/agents';
-import { teamsApi, type TeamAgentResponse } from '@/lib/api/teams';
 import type { Agent, AgentActivity, AgentMessage } from '@/types/agent';
 import { storage } from '@/utils/storage';
 
-const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
+const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
-// 转换 API Agent 到前端 Agent 类型
 const convertApiAgent = (apiAgent: {
   id: string;
   name: string;
@@ -42,7 +40,7 @@ const convertApiAgent = (apiAgent: {
     type: apiAgent.type as Agent['type'],
     status: statusMap[apiAgent.status] || 'idle',
     currentTask: apiAgent.current_task_id || undefined,
-    load: 0, // 需要从其他 API 获取
+    load: 0,
     description: apiAgent.description || '',
     expertise: apiAgent.expertise || [],
     createdAt: apiAgent.created_at || new Date().toISOString(),
@@ -54,11 +52,11 @@ const convertApiAgent = (apiAgent: {
 
 interface UseAgentsOptions {
   autoLoad?: boolean;
-  teamId?: string;
+  swarmSessionId?: string;
 }
 
 export function useAgents(options: UseAgentsOptions = {}) {
-  const { autoLoad = true, teamId } = options;
+  const { autoLoad = true, swarmSessionId } = options;
   const [agents, setAgents] = useState<Agent[]>([]);
   const [activities, setActivities] = useState<AgentActivity[]>([]);
   const [messages, setMessages] = useState<AgentMessage[]>([]);
@@ -66,87 +64,50 @@ export function useAgents(options: UseAgentsOptions = {}) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const resolveTeamId = useCallback(() => {
-    const storedTeamId = storage.get<string>(CURRENT_TEAM_STORAGE_KEY);
-    if (teamId || storedTeamId) {
-      return teamId || storedTeamId || undefined;
+  const resolveSwarmSessionId = useCallback(() => {
+    const storedSessionId = storage.get<string>(CURRENT_SESSION_STORAGE_KEY);
+    return swarmSessionId || storedSessionId || undefined;
+  }, [swarmSessionId]);
+
+  const loadAgents = useCallback(async () => {
+    const scopedSessionId = resolveSwarmSessionId();
+
+    if (!scopedSessionId) {
+      setAgents([]);
+      setError(null);
+      setIsLoading(false);
+      return;
     }
 
-    const teams = storage.get<Array<{ id: string }>>('monitor_teams');
-    const currentTeam = storage.get<{ id?: string }>('monitor_current_team');
-
-    return currentTeam?.id || teams?.[0]?.id || undefined;
-  }, [teamId]);
-
-  const convertTeamAgent = useCallback((apiAgent: TeamAgentResponse): Agent => {
-    return {
-      id: apiAgent.id,
-      name: apiAgent.name,
-      type: (apiAgent.role === 'team_lead'
-        ? 'leader'
-        : apiAgent.role.includes('analysis') || apiAgent.role.includes('research') || apiAgent.role.includes('document')
-          ? 'specialist'
-          : apiAgent.role.includes('coordinator')
-            ? 'coordinator'
-            : 'worker') as Agent['type'],
-      status: apiAgent.status === 'offline'
-        ? 'offline'
-        : apiAgent.status === 'busy'
-          ? 'busy'
-          : apiAgent.status === 'error'
-            ? 'error'
-            : 'idle',
-      currentTask: undefined,
-      load: Math.min(Math.round((apiAgent.current_load / Math.max(apiAgent.max_load, 1)) * 100), 100),
-      description: apiAgent.description || apiAgent.role,
-      expertise: apiAgent.capabilities || [],
-      createdAt: apiAgent.created_at,
-      lastActiveAt: apiAgent.last_active_at || apiAgent.updated_at,
-      messageCount: 0,
-      completedTasks: 0,
-    };
-  }, []);
-
-  // 加载 Agent 列表
-  const loadAgents = useCallback(async () => {
     setIsLoading(true);
     setError(null);
     try {
-      const scopedTeamId = resolveTeamId();
-      const convertedAgents = scopedTeamId
-        ? (await teamsApi.getTeamMembers(scopedTeamId)).items.map(convertTeamAgent)
-        : (await agentsApi.getAgents()).agents.map(convertApiAgent);
-      setAgents(convertedAgents);
+      const response = await agentsApi.getAgents({ swarmSessionId: scopedSessionId });
+      setAgents(response.agents.map(convertApiAgent));
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Agent 失败');
     } finally {
       setIsLoading(false);
     }
-  }, [convertTeamAgent, resolveTeamId]);
+  }, [resolveSwarmSessionId]);
 
-  // 创建 Agent
   const createAgent = useCallback(async (agentData: Omit<Agent, 'id' | 'createdAt' | 'lastActiveAt' | 'messageCount' | 'completedTasks'>) => {
+    const scopedSessionId = resolveSwarmSessionId();
+    if (!scopedSessionId) {
+      const nextError = 'No active swarm session';
+      setError(nextError);
+      throw new Error(nextError);
+    }
+
     setIsLoading(true);
     try {
-      const scopedTeamId = resolveTeamId();
-      const response = scopedTeamId
-        ? await teamsApi.createAgent(scopedTeamId, {
-            name: agentData.name,
-            role: agentData.type === 'leader'
-              ? 'team_lead'
-              : agentData.type === 'specialist'
-                ? 'specialist'
-                : agentData.type,
-            description: agentData.description,
-            capabilities: agentData.expertise,
-          })
-        : await agentsApi.createAgent({
-            name: agentData.name,
-            agent_type: agentData.type,
-            description: agentData.description,
-            expertise: agentData.expertise,
-          });
-      // 重新加载列表
+      const response = await agentsApi.createAgent({
+        name: agentData.name,
+        agent_type: agentData.type,
+        description: agentData.description,
+        expertise: agentData.expertise,
+        swarmSessionId: scopedSessionId,
+      });
       await loadAgents();
       return response;
     } catch (err) {
@@ -155,9 +116,8 @@ export function useAgents(options: UseAgentsOptions = {}) {
     } finally {
       setIsLoading(false);
     }
-  }, [loadAgents, resolveTeamId]);
+  }, [loadAgents, resolveSwarmSessionId]);
 
-  // 更新 Agent
   const updateAgent = useCallback(async (id: string, updates: Partial<Agent>) => {
     try {
       await agentsApi.updateAgent(id, {
@@ -172,7 +132,6 @@ export function useAgents(options: UseAgentsOptions = {}) {
     }
   }, [loadAgents]);
 
-  // 删除 Agent
   const deleteAgent = useCallback(async (id: string) => {
     try {
       await agentsApi.deleteAgent(id);
@@ -183,7 +142,6 @@ export function useAgents(options: UseAgentsOptions = {}) {
     }
   }, []);
 
-  // 添加活动
   const addActivity = useCallback((activity: Omit<AgentActivity, 'id' | 'timestamp'>) => {
     const newActivity: AgentActivity = {
       ...activity,
@@ -193,7 +151,6 @@ export function useAgents(options: UseAgentsOptions = {}) {
     setActivities((prev) => [newActivity, ...prev].slice(0, 100));
   }, []);
 
-  // 添加消息
   const addMessage = useCallback((message: Omit<AgentMessage, 'id' | 'timestamp'>) => {
     const newMessage: AgentMessage = {
       ...message,
@@ -203,17 +160,14 @@ export function useAgents(options: UseAgentsOptions = {}) {
     setMessages((prev) => [...prev, newMessage].slice(-100));
   }, []);
 
-  // 获取 Agent 消息
   const getAgentMessages = useCallback((agentId: string) => {
     return messages.filter((msg) => msg.agentId === agentId);
   }, [messages]);
 
-  // 获取 Agent 活动
   const getAgentActivities = useCallback((agentId: string) => {
     return activities.filter((act) => act.agentId === agentId);
   }, [activities]);
 
-  // 初始加载
   useEffect(() => {
     if (autoLoad) {
       loadAgents();

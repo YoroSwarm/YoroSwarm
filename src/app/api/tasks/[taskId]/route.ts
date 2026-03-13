@@ -56,8 +56,12 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         title: body.title ?? task.title,
         description: body.description ?? task.description,
         priority: body.priority ? mapPriorityToNumber(body.priority) : task.priority,
-        dueDate: body.deadline ? new Date(body.deadline) : body.deadline === null ? null : task.dueDate,
-        assigneeId: body.assigned_agent_id ?? task.assigneeId,
+        dueDate: body.deadline || body.dueDate
+          ? new Date(body.deadline || body.dueDate)
+          : body.deadline === null || body.dueDate === null
+            ? null
+            : task.dueDate,
+        assigneeId: body.assigned_agent_id ?? body.assigneeId ?? task.assigneeId,
       },
       include: {
         assignee: true,

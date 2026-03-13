@@ -6,6 +6,7 @@ import { cookies } from 'next/headers'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
 import { randomUUID } from 'crypto'
+import { resolveSessionScope } from '@/lib/server/swarm'
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
 const MAX_UPLOAD_SIZE = parseInt(process.env.MAX_UPLOAD_SIZE || '104857600') // 100MB
@@ -18,6 +19,7 @@ function serializeFile(file: {
   size: number
   path: string
   sessionId: string
+  swarmSessionId: string
   userId: string | null
   createdAt: Date
   metadata: string | null
@@ -31,6 +33,7 @@ function serializeFile(file: {
     path: file.path,
     url: `/api/files/${file.id}`,
     sessionId: file.sessionId,
+    swarmSessionId: file.swarmSessionId,
     userId: file.userId,
     createdAt: file.createdAt.toISOString(),
     metadata: file.metadata,
@@ -38,7 +41,7 @@ function serializeFile(file: {
 }
 
 // GET - List files
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies()
     const token = cookieStore.get('access_token')?.value
@@ -54,8 +57,14 @@ export async function GET() {
       return unauthorizedResponse('Invalid token')
     }
 
+    const { searchParams } = new URL(request.url)
+    const swarmSessionId = searchParams.get('swarmSessionId') || searchParams.get('swarm_session_id')
+
     const files = await prisma.file.findMany({
-      where: { userId: payload.userId },
+      where: {
+        userId: payload.userId,
+        ...(swarmSessionId ? { swarmSessionId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
     })
 
@@ -85,6 +94,11 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get('file') as File
+    const swarmSessionId = typeof formData.get('swarmSessionId') === 'string'
+      ? formData.get('swarmSessionId') as string
+      : typeof formData.get('swarm_session_id') === 'string'
+        ? formData.get('swarm_session_id') as string
+        : undefined
 
     if (!file) {
       return errorResponse('No file provided', 400)
@@ -120,6 +134,11 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to database
+    const sessionScope = await resolveSessionScope({ swarmSessionId, userId: payload.userId })
+    if (!sessionScope) {
+      return errorResponse('No swarm session found for file upload', 400)
+    }
+
     const fileRecord = await prisma.file.create({
       data: {
         filename: uniqueName,
@@ -128,6 +147,7 @@ export async function POST(request: NextRequest) {
         size: file.size,
         path: filePath,
         sessionId: session.id,
+        swarmSessionId: sessionScope.id,
         userId: payload.userId,
       },
     })

@@ -22,6 +22,7 @@ interface ChatInputProps {
 }
 
 export function ChatInput({
+  sessionId,
   disabled = false,
   placeholder = '输入消息...',
   onSend,
@@ -38,7 +39,10 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mentionStartRef = useRef<number>(-1);
 
-  const { agents } = useAgents();
+  const { agents } = useAgents({
+    swarmSessionId: sessionId || undefined,
+    autoLoad: Boolean(sessionId),
+  });
 
   const mentionSuggestions: MentionSuggestion[] = agents.map((agent) => ({
     id: agent.id,

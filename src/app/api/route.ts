@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 export async function GET() {
   return NextResponse.json({
     success: true,
-    message: 'Swarm API - Next.js Full Stack Edition',
+    message: 'Swarm API - Session Scoped Multi-Agent Edition',
     version: '1.0.0',
     endpoints: {
       auth: {
@@ -15,37 +15,36 @@ export async function GET() {
         'GET  /api/auth/access-code': 'Get access code info',
         'POST /api/auth/access-code': 'Rotate access code',
       },
-      teams: {
-        'GET  /api/teams': 'List all teams',
-        'POST /api/teams': 'Create new team',
-        'GET  /api/teams/{teamId}/status': 'Get team status summary',
+      swarm_sessions: {
+        'GET  /api/swarm-sessions': 'List current user swarm sessions',
+        'POST /api/swarm-sessions': 'Create new swarm session',
+        'GET  /api/swarm-sessions/{id}': 'Get swarm session detail',
+        'PATCH /api/swarm-sessions/{id}': 'Update swarm session',
+        'DELETE /api/swarm-sessions/{id}': 'Archive swarm session',
+        'GET  /api/swarm-sessions/{id}/monitor': 'Get session monitor summary',
+        'GET  /api/swarm-sessions/{id}/external/messages': 'List external user <-> lead messages',
+        'POST /api/swarm-sessions/{id}/external/messages': 'Send user message to session lead',
+        'GET  /api/swarm-sessions/{id}/tasks': 'List session tasks',
+        'POST /api/swarm-sessions/{id}/tasks': 'Create session task',
       },
       agents: {
-        'GET  /api/agents': 'List all agents',
-        'GET  /api/agents?teamId={id}': 'List agents by team',
-        'POST /api/agents': 'Create new agent',
-      },
-      messages: {
-        'GET  /api/messages': 'List messages',
-        'GET  /api/messages?conversationId={id}': 'List messages by conversation',
-        'POST /api/messages': 'Send new message',
+        'GET  /api/agents?swarmSessionId={id}': 'List agents by swarm session',
+        'POST /api/agents': 'Create session-scoped agent',
       },
       tasks: {
-        'GET  /api/tasks': 'List all tasks',
-        'GET  /api/tasks?status={status}': 'List tasks by status',
-        'GET  /api/tasks?assigneeId={id}': 'List tasks by assignee',
-        'POST /api/tasks': 'Create new task',
+        'GET  /api/tasks?swarmSessionId={id}': 'List tasks by swarm session',
+        'POST /api/tasks': 'Create task in an existing swarm session',
+        'GET  /api/tasks/ready/list?swarmSessionId={id}': 'List ready tasks in a swarm session',
       },
       files: {
-        'GET  /api/files': 'List user files',
-        'POST /api/files': 'Upload file (multipart/form-data)',
-      },
-      llm: {
-        'POST /api/llm': 'Send message to LLM',
+        'GET  /api/files?swarmSessionId={id}': 'List session files',
+        'POST /api/files': 'Upload file into a swarm session (multipart/form-data)',
       },
       websocket: {
         'GET  /api/ws': 'WebSocket server info',
-        'WS   ws://localhost:3001': 'WebSocket endpoint (port 3001)',
+        'WS   ws://localhost:3001/ws/sessions/{id}': 'Session realtime stream',
+        'WS   ws://localhost:3001/ws/agents/{id}': 'Agent realtime stream',
+        'WS   ws://localhost:3001/ws/tasks/{id}': 'Task realtime stream',
       },
     },
     docs: {

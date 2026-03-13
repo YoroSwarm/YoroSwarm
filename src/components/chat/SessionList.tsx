@@ -1,9 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { formatSessionTime } from '@/lib/utils/date';
-import { useSessions } from '@/hooks/use-sessions';
+import type { Session } from '@/types/chat';
 import {
   Plus,
   Search,
@@ -16,27 +16,30 @@ import {
 } from 'lucide-react';
 
 interface SessionListProps {
+  sessions: Session[];
+  isLoading?: boolean;
+  error?: string | null;
   currentSessionId: string | null;
   onSessionSelect: (sessionId: string) => void;
+  onCreateSession: () => void;
+  onDeleteSession: (sessionId: string) => Promise<void> | void;
+  onArchiveSession: (sessionId: string) => Promise<void> | void;
   onCloseMobile?: () => void;
 }
 
 export function SessionList({
+  sessions,
+  isLoading = false,
+  error = null,
   currentSessionId,
   onSessionSelect,
+  onCreateSession,
+  onDeleteSession,
+  onArchiveSession,
   onCloseMobile,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
-
-  const {
-    sessions,
-    isLoading,
-    error,
-    createSession,
-    deleteSession,
-    archiveSession,
-  } = useSessions();
 
   const filteredSessions = useMemo(() => {
     return sessions.filter((session) => {
@@ -47,19 +50,10 @@ export function SessionList({
     });
   }, [sessions, searchQuery]);
 
-  const handleCreateSession = async () => {
-    try {
-      const newSession = await createSession();
-      onSessionSelect(newSession.id);
-    } catch (err) {
-      console.error('创建会话失败:', err);
-    }
-  };
-
   const handleDeleteSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await deleteSession(sessionId);
+      await onDeleteSession(sessionId);
       setActiveMenuId(null);
     } catch (err) {
       console.error('删除会话失败:', err);
@@ -69,7 +63,7 @@ export function SessionList({
   const handleArchiveSession = async (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      await archiveSession(sessionId);
+      await onArchiveSession(sessionId);
       setActiveMenuId(null);
     } catch (err) {
       console.error('归档会话失败:', err);
@@ -85,11 +79,12 @@ export function SessionList({
         </div>
         <div className="flex items-center gap-1">
           <button
-            onClick={handleCreateSession}
-            className="p-2 rounded-md hover:bg-accent transition-colors"
-            title="新建会话"
+            onClick={onCreateSession}
+            className="inline-flex items-center gap-1 rounded-md px-2 py-2 text-sm font-medium text-primary transition-colors hover:bg-accent"
+            title="创建会话"
           >
-            <Plus className="h-5 w-5" />
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">新建</span>
           </button>
           {onCloseMobile && (
             <button

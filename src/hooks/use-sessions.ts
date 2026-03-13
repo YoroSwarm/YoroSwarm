@@ -1,56 +1,55 @@
-/**
- * Sessions Hook
- * 迁移自 React SPA: frontend/src/hooks/useSessions.ts
- * 用于管理会话数据
- */
-
 'use client';
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
-import { messagesApi, type ConversationResponse } from '@/lib/api/messages';
+import { useCallback, useEffect, useState } from 'react';
+import { swarmSessionsApi, type SwarmSessionResponse } from '@/lib/api/swarm-sessions';
 import type { Session } from '@/types/chat';
 import { storage } from '@/utils/storage';
-import type { User } from '@/types';
 
-const AGENT_CHAT_TITLE_PREFIX = '__agent_chat__';
+export const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
 interface UseSessionsOptions {
   autoLoad?: boolean;
 }
 
-interface ParsedAgentChat {
-  agentId: string;
-  agentName: string;
+interface CreateSessionInput {
+  title?: string;
+  goal?: string;
+  description?: string;
 }
 
-function parseAgentChatTitle(title?: string | null): ParsedAgentChat | null {
-  if (!title || !title.startsWith(`${AGENT_CHAT_TITLE_PREFIX}:`)) {
-    return null;
-  }
+function convertSession(session: SwarmSessionResponse): Session {
+  const lead = session.agents.find((agent) => agent.id === session.lead_agent_id);
 
-  const [, agentId, ...encodedNameParts] = title.split(':');
-  if (!agentId) return null;
-
-  const encodedName = encodedNameParts.join(':').trim();
-  if (!encodedName) {
-    return {
-      agentId,
-      agentName: `Teammate ${agentId.slice(0, 6)}`,
-    };
-  }
-
-  try {
-    const decodedName = decodeURIComponent(encodedName);
-    return {
-      agentId,
-      agentName: decodedName || `Teammate ${agentId.slice(0, 6)}`,
-    };
-  } catch {
-    return {
-      agentId,
-      agentName: encodedName,
-    };
-  }
+  return {
+    id: session.id,
+    title: session.title,
+    description: session.goal,
+    participants: session.agents.map((agent) => ({
+      id: agent.id,
+      name: agent.name,
+      role: agent.id === session.lead_agent_id ? 'lead' : 'teammate',
+      status: agent.status === 'offline' ? 'offline' : agent.status === 'busy' ? 'busy' : 'online',
+    })),
+    lastMessage: session.last_message
+      ? {
+          id: session.last_message.id,
+          sessionId: session.id,
+          type: session.last_message.message_type === 'file' ? 'file' : session.last_message.message_type === 'system' ? 'system' : 'text',
+          content: session.last_message.content,
+          sender: {
+            id: session.last_message.sender_id || lead?.id || 'lead',
+            type: session.last_message.sender_type === 'user' ? 'user' : 'agent',
+            name: session.last_message.sender_type === 'user' ? '我' : lead?.name || 'Lead',
+          },
+          status: 'received',
+          createdAt: session.last_message.created_at,
+        }
+      : undefined,
+    unreadCount: 0,
+    createdAt: session.created_at,
+    updatedAt: session.updated_at,
+    status: session.status === 'archived' ? 'archived' : 'active',
+  };
 }
 
 export function useSessions(options: UseSessionsOptions = {}) {
@@ -60,192 +59,65 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
 
-  const resolveCurrentUser = useCallback((): Pick<User, 'id' | 'username'> | null => {
-    const storedUser = storage.get<User>('user');
-    if (storedUser?.id) {
-      return {
-        id: storedUser.id,
-        username: storedUser.username || '我',
-      };
-    }
-
-    const authState = storage.get<{ state?: { user?: User | null } }>('auth-storage')
-      || storage.get<{ state?: { user?: User | null } }>('swarm-auth-storage');
-    const hydratedUser = authState?.state?.user;
-    if (hydratedUser?.id) {
-      return {
-        id: hydratedUser.id,
-        username: hydratedUser.username || '我',
-      };
-    }
-
-    const token = storage.get<string>('access_token');
-    if (!token) return null;
-
-    try {
-      const payload = JSON.parse(atob(token.split('.')[1] || '')) as { userId?: string; username?: string };
-      if (!payload.userId) return null;
-      return {
-        id: payload.userId,
-        username: payload.username || '我',
-      };
-    } catch {
-      return null;
-    }
-  }, []);
-
-  const currentUser = useMemo(() => resolveCurrentUser(), [resolveCurrentUser]);
-
-  const convertConversationToSession = useCallback((
-    conv: ConversationResponse,
-    unreadCount: number
-  ): Session => {
-    const agentChat = parseAgentChatTitle(conv.title);
-    const participants = agentChat
-      ? [
-          ...(currentUser ? [{
-            id: currentUser.id,
-            name: currentUser.username || '我',
-            role: 'owner',
-            status: 'online' as const,
-          }] : []),
-          {
-            id: agentChat.agentId,
-            name: agentChat.agentName,
-            role: 'teammate',
-            status: 'online' as const,
-          },
-        ]
-      : conv.participants.map((participant) => ({
-          id: participant.user_id,
-          name: participant.user_id === currentUser?.id
-            ? (currentUser.username || '我')
-            : `Participant ${participant.user_id.slice(0, 6)}`,
-          role: participant.is_admin ? 'owner' : 'participant',
-          status: participant.user_id === currentUser?.id ? 'online' as const : 'busy' as const,
-        }));
-
-    const lastMessageType = conv.last_message?.type === 'text'
-      ? 'text'
-      : conv.last_message?.type === 'file'
-        ? 'file'
-        : 'system';
-
-    const lastMessageSenderName = conv.last_message
-      ? conv.last_message.sender_id === currentUser?.id
-        ? (currentUser.username || '我')
-        : participants.find((participant) => participant.id === conv.last_message?.sender_id)?.name
-          || agentChat?.agentName
-          || `Participant ${conv.last_message.sender_id.slice(0, 6)}`
-      : undefined;
-
-    return {
-      id: conv.id,
-      title: agentChat?.agentName || conv.title || '未命名会话',
-      description: agentChat
-        ? `与 ${agentChat.agentName} 的直接对话`
-        : conv.last_message?.content?.substring(0, 100),
-      participants,
-      lastMessage: conv.last_message ? {
-        id: conv.last_message.id,
-        sessionId: conv.id,
-        type: lastMessageType,
-        content: conv.last_message.content,
-        sender: {
-          id: conv.last_message.sender_id,
-          type: conv.last_message.sender_id === currentUser?.id ? 'user' : 'agent',
-          name: lastMessageSenderName || '未知发送者',
-        },
-        status: 'received',
-        createdAt: conv.last_message.created_at,
-      } : undefined,
-      unreadCount,
-      createdAt: conv.created_at,
-      updatedAt: conv.updated_at,
-      status: conv.is_active ? 'active' : 'archived',
-    };
-  }, [currentUser]);
-
-  const mergeSession = useCallback((incoming: Session) => {
-    setSessions((prev) => [incoming, ...prev.filter((session) => session.id !== incoming.id)]);
-  }, []);
-
   const loadSessions = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+
     try {
-      const [response, unreadCounts] = await Promise.all([
-        messagesApi.getConversations(),
-        messagesApi.getUnreadCount().catch(() => ({ total_unread: 0, conversation_unread: {} as Record<string, number> })),
-      ]);
-      const convertedSessions = response.items.map((conversation) => (
-        convertConversationToSession(
-          conversation,
-          unreadCounts.conversation_unread[conversation.id] || 0
-        )
-      ));
-      setSessions(convertedSessions);
+      const response = await swarmSessionsApi.listSessions();
+      const converted = response.items.map(convertSession);
+      setSessions(converted);
       setTotalCount(response.total);
+
+      if (!storage.get<string>(CURRENT_SESSION_STORAGE_KEY) && converted[0]?.id) {
+        storage.set(CURRENT_SESSION_STORAGE_KEY, converted[0].id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载会话失败');
     } finally {
       setIsLoading(false);
     }
-  }, [convertConversationToSession]);
+  }, []);
 
-  const createSession = useCallback(async (title?: string) => {
-    try {
-      const response = await messagesApi.createConversation({
-        type: 'direct',
-        title: title || '新会话',
-        participant_ids: [],
-      });
-      const newSession = convertConversationToSession(response, 0);
-      mergeSession(newSession);
-      return newSession;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '创建会话失败');
-      throw err;
-    }
-  }, [convertConversationToSession, mergeSession]);
+  const createSession = useCallback(async (input?: string | CreateSessionInput) => {
+    const payload = typeof input === 'string'
+      ? { title: input }
+      : input || {};
 
-  const openDirectSessionForAgent = useCallback(async (agentId: string, agentName?: string) => {
-    try {
-      const response = await messagesApi.createConversation({
-        type: 'direct',
-        participant_ids: [],
-        target_agent_id: agentId,
-        target_agent_name: agentName,
-      });
-      const directSession = convertConversationToSession(response, 0);
-      mergeSession(directSession);
-      return directSession;
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '打开队友会话失败');
-      throw err;
-    }
-  }, [convertConversationToSession, mergeSession]);
+    const created = await swarmSessionsApi.createSession({
+      title: payload.title,
+      goal: payload.goal,
+      description: payload.description,
+      mode: 'general_office',
+    });
+    const converted = convertSession(created);
+    setSessions((prev) => [converted, ...prev.filter((session) => session.id !== converted.id)]);
+    storage.set(CURRENT_SESSION_STORAGE_KEY, converted.id);
+    return converted;
+  }, []);
+
+  const ensureLeadSession = useCallback(async ({ leadAgentId, leadAgentName }: { leadAgentId: string; leadAgentName?: string }) => {
+    const existing = sessions.find((session) => session.participants.some((participant) => participant.id === leadAgentId));
+    if (existing) return existing;
+    return createSession(leadAgentName ? `${leadAgentName} 会话` : 'Lead 会话');
+  }, [createSession, sessions]);
+
+  const openDirectSessionForAgent = useCallback(async (_agentId: string, _agentName?: string) => {
+    throw new Error('用户不再直接与 teammate 建立外部会话，请进入对应 SwarmSession 与 Lead 对话。');
+  }, []);
 
   const deleteSession = useCallback(async (sessionId: string) => {
-    try {
-      setSessions((prev) => prev.filter((session) => session.id !== sessionId));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '删除会话失败');
-      throw err;
+    await swarmSessionsApi.deleteSession(sessionId);
+    setSessions((prev) => prev.filter((session) => session.id !== sessionId));
+    if (storage.get<string>(CURRENT_SESSION_STORAGE_KEY) === sessionId) {
+      storage.remove(CURRENT_SESSION_STORAGE_KEY);
     }
   }, []);
 
   const archiveSession = useCallback(async (sessionId: string) => {
-    try {
-      setSessions((prev) =>
-        prev.map((session) =>
-          session.id === sessionId ? { ...session, status: 'archived' as const } : session
-        )
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '归档会话失败');
-      throw err;
-    }
+    const updated = await swarmSessionsApi.updateSession(sessionId, { status: 'archived' });
+    const converted = convertSession(updated);
+    setSessions((prev) => prev.map((session) => session.id === sessionId ? converted : session));
   }, []);
 
   useEffect(() => {
@@ -261,6 +133,7 @@ export function useSessions(options: UseSessionsOptions = {}) {
     totalCount,
     loadSessions,
     createSession,
+    ensureLeadSession,
     openDirectSessionForAgent,
     deleteSession,
     archiveSession,

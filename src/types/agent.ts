@@ -38,7 +38,7 @@ export interface AgentMessage {
   timestamp: string;
 }
 
-export interface Team {
+export interface SessionSummary {
   id: string;
   name: string;
   description: string;

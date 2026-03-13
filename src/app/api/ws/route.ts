@@ -9,8 +9,6 @@ type WebSocketMessage = {
 
 type SubscriptionTarget =
   | 'all'
-  | 'conversation'
-  | 'team'
   | 'session'
   | 'agent'
   | 'task'
@@ -24,9 +22,9 @@ type ClientState = {
 }
 
 type DeliveryScope = {
-  conversationId?: string
-  teamId?: string
   sessionId?: string
+  agentId?: string
+  taskId?: string
 }
 
 let wss: WebSocketServer | null = null
@@ -76,25 +74,25 @@ function getScopeFromUrl(rawUrl?: string | null): DeliveryScope {
   const url = new URL(rawUrl, 'ws://localhost:3001')
   const segments = url.pathname.split('/').filter(Boolean)
   const scope: DeliveryScope = {
-    conversationId: url.searchParams.get('conversationId') || undefined,
-    teamId: url.searchParams.get('teamId') || undefined,
     sessionId: url.searchParams.get('sessionId') || undefined,
+    agentId: url.searchParams.get('agentId') || undefined,
+    taskId: url.searchParams.get('taskId') || undefined,
   }
 
   if (segments[0] === 'ws' && segments.length >= 3) {
     const [, target, id] = segments
-    if (target === 'teams') scope.teamId = id
     if (target === 'sessions') scope.sessionId = id
-    if (target === 'conversations') scope.conversationId = id
+    if (target === 'agents') scope.agentId = id
+    if (target === 'tasks') scope.taskId = id
   }
 
   return scope
 }
 
 function initializeScopeSubscriptions(state: ClientState, scope: DeliveryScope) {
-  if (scope.conversationId) subscribe(state, 'conversation', scope.conversationId)
-  if (scope.teamId) subscribe(state, 'team', scope.teamId)
   if (scope.sessionId) subscribe(state, 'session', scope.sessionId)
+  if (scope.agentId) subscribe(state, 'agent', scope.agentId)
+  if (scope.taskId) subscribe(state, 'task', scope.taskId)
 }
 
 function sendToClient(clientId: string, message: WebSocketMessage) {
@@ -111,9 +109,9 @@ function shouldDeliver(state: ClientState, scope?: DeliveryScope) {
   const isExplicitlyScoped = state.subscriptions.size > 0
   if (!isExplicitlyScoped) return true
   if (hasSubscription(state, 'all')) return true
-  if (scope.conversationId && hasSubscription(state, 'conversation', scope.conversationId)) return true
-  if (scope.teamId && hasSubscription(state, 'team', scope.teamId)) return true
   if (scope.sessionId && hasSubscription(state, 'session', scope.sessionId)) return true
+  if (scope.agentId && hasSubscription(state, 'agent', scope.agentId)) return true
+  if (scope.taskId && hasSubscription(state, 'task', scope.taskId)) return true
   return false
 }
 
@@ -130,8 +128,6 @@ function broadcast(message: WebSocketMessage, options?: { excludeClientId?: stri
 function normalizeSubscriptionTarget(value: unknown): SubscriptionTarget | null {
   switch (value) {
     case 'all':
-    case 'conversation':
-    case 'team':
     case 'session':
     case 'agent':
     case 'task':
@@ -218,9 +214,9 @@ export function ensureWebSocketServer() {
           case 'chat_message': {
             const payload = getPayloadObject(message.payload)
             const scope: DeliveryScope = {
-              conversationId: typeof payload.conversation_id === 'string' ? payload.conversation_id : undefined,
-              teamId: typeof payload.team_id === 'string' ? payload.team_id : undefined,
-              sessionId: typeof payload.session_id === 'string' ? payload.session_id : undefined,
+              sessionId: typeof payload.swarm_session_id === 'string' ? payload.swarm_session_id : typeof payload.session_id === 'string' ? payload.session_id : undefined,
+              agentId: typeof payload.agent_id === 'string' ? payload.agent_id : undefined,
+              taskId: typeof payload.task_id === 'string' ? payload.task_id : undefined,
             }
 
             broadcast({
@@ -235,13 +231,18 @@ export function ensureWebSocketServer() {
           case 'agent_status':
           case 'task_update': {
             const payload = getPayloadObject(message.payload)
+            const scope: DeliveryScope = {
+              sessionId: typeof payload.swarm_session_id === 'string' ? payload.swarm_session_id : undefined,
+              agentId: typeof payload.agent_id === 'string' ? payload.agent_id : undefined,
+              taskId: typeof payload.task_id === 'string' ? payload.task_id : undefined,
+            }
             broadcast({
               type: message.type,
               payload: {
                 ...payload,
                 timestamp: new Date().toISOString(),
               },
-            })
+            }, { scope })
             return
           }
           default:
@@ -275,16 +276,6 @@ export function ensureWebSocketServer() {
 export function publishRealtimeMessage(message: WebSocketMessage, scope?: DeliveryScope) {
   ensureWebSocketServer()
   broadcast(message, { scope })
-}
-
-export function publishConversationMessage(payload: Record<string, unknown> & { conversation_id: string }) {
-  publishRealtimeMessage(
-    {
-      type: 'chat_message',
-      payload,
-    },
-    { conversationId: payload.conversation_id }
-  )
 }
 
 export async function GET() {

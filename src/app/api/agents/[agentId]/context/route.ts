@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
 import { parseJson, requireTokenPayload } from '@/lib/server/swarm'
+import { listAgentContextEntries } from '@/lib/server/agent-context'
 
 type RouteContext = {
   params: Promise<{ agentId: string }>
@@ -16,22 +17,20 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const agent = await prisma.agent.findUnique({
       where: { id: agentId },
-      include: {
-        tasks: {
-          orderBy: { updatedAt: 'desc' },
-          take: Math.min(limit, 100),
-        },
-      },
     })
 
     if (!agent) {
       return notFoundResponse('Agent not found')
     }
 
-    const messages = agent.tasks.map((task) => ({
-      role: task.status === 'COMPLETED' ? 'system' : 'assistant',
-      content: `${task.title}: ${task.description || 'No description'} [${task.status}]`,
-      timestamp: task.updatedAt.toISOString(),
+    const entries = await listAgentContextEntries(agent.id, limit)
+    const messages = entries.map((entry) => ({
+      role: entry.entryType === 'user_goal' ? 'user' : entry.entryType === 'system_event' ? 'system' : 'assistant',
+      content: entry.content,
+      entry_type: entry.entryType,
+      source_type: entry.sourceType,
+      visibility: entry.visibility,
+      timestamp: entry.createdAt.toISOString(),
     }))
 
     return successResponse({

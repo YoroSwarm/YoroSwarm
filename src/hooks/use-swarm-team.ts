@@ -1,118 +1,67 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { teamsApi } from '@/lib/api/teams';
-import type { Agent, Team } from '@/types/agent';
+import { swarmSessionsApi, type SwarmSessionResponse } from '@/lib/api/swarm-sessions';
+import type { Agent, SessionSummary } from '@/types/agent';
 import { storage } from '@/utils/storage';
 
-const CURRENT_TEAM_STORAGE_KEY = 'current_team_id';
+const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
-type ApiTeam = {
-  id: string;
-  name: string;
-  description?: string | null;
-  createdAt?: string;
-  updatedAt?: string;
-  config?: string;
-  agents?: Array<{
-    id: string;
-    name: string;
-    role: string;
-    description?: string | null;
-    status: 'IDLE' | 'BUSY' | 'OFFLINE' | 'ERROR';
-    createdAt: string;
-    updatedAt: string;
-    capabilities?: string | null;
-    tasks?: Array<{ id: string; title: string; status: string }>;
-  }>;
-  tasks?: Array<{ id: string; status: string }>;
-};
+type ApiSession = SwarmSessionResponse;
 
-type ApiTeamAgent = NonNullable<ApiTeam['agents']>[number];
-
-type CreateSwarmSessionInput = {
-  name: string;
-  description?: string;
-  sessionGoal?: string;
-};
-
-function parseCapabilities(value?: string | null): string[] {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : [];
-  } catch {
-    return [];
-  }
-}
-
-function mapStatus(status: ApiTeamAgent['status']): Agent['status'] {
-  switch (status) {
-    case 'BUSY':
-      return 'busy';
-    case 'OFFLINE':
-      return 'offline';
-    case 'ERROR':
-      return 'error';
-    default:
-      return 'idle';
-  }
-}
-
-function mapRoleToType(role: string): Agent['type'] {
-  if (role === 'team_lead') return 'leader';
-  if (role.includes('analysis') || role.includes('research') || role.includes('document')) return 'specialist';
-  if (role.includes('coordinator')) return 'coordinator';
-  return 'worker';
-}
-
-function convertAgent(agent: ApiTeamAgent): Agent {
-  const assignedCount = agent.tasks?.filter((task) => task.status !== 'COMPLETED' && task.status !== 'FAILED' && task.status !== 'CANCELLED').length || 0;
-
+function convertAgent(agent: ApiSession['agents'][number]): Agent {
   return {
     id: agent.id,
     name: agent.name,
-    type: mapRoleToType(agent.role),
-    status: mapStatus(agent.status),
-    currentTask: agent.tasks?.find((task) => task.status === 'IN_PROGRESS')?.title,
-    load: Math.min(assignedCount * 30, 100),
+    type: agent.kind === 'lead'
+      ? 'leader'
+      : agent.kind === 'coordinator'
+        ? 'coordinator'
+        : agent.kind === 'researcher' || agent.kind === 'writer' || agent.kind === 'analyst' || agent.kind === 'engineer' || agent.kind === 'specialist'
+          ? 'specialist'
+          : 'worker',
+    status: agent.status === 'offline'
+      ? 'offline'
+      : agent.status === 'busy'
+        ? 'busy'
+        : agent.status === 'error'
+          ? 'error'
+          : 'idle',
+    currentTask: undefined,
+    load: 0,
     description: agent.description || agent.role,
-    expertise: parseCapabilities(agent.capabilities),
-    createdAt: agent.createdAt,
-    lastActiveAt: agent.updatedAt,
+    expertise: agent.capabilities || [],
+    createdAt: agent.created_at,
+    lastActiveAt: agent.updated_at,
     messageCount: 0,
-    completedTasks: agent.tasks?.filter((task) => task.status === 'COMPLETED').length || 0,
+    completedTasks: 0,
   };
 }
 
-function convertTeam(team: ApiTeam): Team {
-  const agents = team.agents || [];
-  const tasks = team.tasks || [];
-
+function convertSessionToSummary(session: ApiSession): SessionSummary {
   return {
-    id: team.id,
-    name: team.name,
-    description: team.description || 'Swarm 单用户协作会话',
-    agentCount: agents.length,
-    activeAgents: agents.filter((agent) => agent.status !== 'OFFLINE').length,
-    totalTasks: tasks.length,
-    completedTasks: tasks.filter((task) => task.status === 'COMPLETED').length,
+    id: session.id,
+    name: session.title,
+    description: session.goal || 'Swarm 工作会话',
+    agentCount: session.agents.length,
+    activeAgents: session.agents.filter((agent) => agent.status !== 'offline').length,
+    totalTasks: session.tasks.length,
+    completedTasks: session.tasks.filter((task) => task.status === 'completed').length,
   };
 }
 
 export function useSwarmTeam() {
-  const [teams, setTeams] = useState<ApiTeam[]>([]);
+  const [teams, setTeams] = useState<ApiSession[]>([]);
   const [currentTeamId, setCurrentTeamIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const setCurrentTeamId = useCallback((teamId: string | null) => {
-    setCurrentTeamIdState(teamId);
-    if (teamId) {
-      storage.set(CURRENT_TEAM_STORAGE_KEY, teamId);
+  const setCurrentTeamId = useCallback((sessionId: string | null) => {
+    setCurrentTeamIdState(sessionId);
+    if (sessionId) {
+      storage.set(CURRENT_SESSION_STORAGE_KEY, sessionId);
     } else {
-      storage.remove(CURRENT_TEAM_STORAGE_KEY);
+      storage.remove(CURRENT_SESSION_STORAGE_KEY);
     }
   }, []);
 
@@ -121,19 +70,19 @@ export function useSwarmTeam() {
     setError(null);
 
     try {
-      const response = await teamsApi.listTeams();
-      const nextTeams = Array.isArray(response) ? response : response.items;
-      const storedTeamId = storage.get<string>(CURRENT_TEAM_STORAGE_KEY);
-      setTeams(nextTeams);
+      const response = await swarmSessionsApi.listSessions();
+      const nextSessions = response.items;
+      const storedSessionId = storage.get<string>(CURRENT_SESSION_STORAGE_KEY);
+      setTeams(nextSessions);
 
       setCurrentTeamIdState((prev) => {
-        if (prev && nextTeams.some((team) => team.id === prev)) return prev;
-        if (storedTeamId && nextTeams.some((team) => team.id === storedTeamId)) return storedTeamId;
-        const fallbackTeamId = nextTeams[0]?.id ?? null;
-        if (fallbackTeamId) {
-          storage.set(CURRENT_TEAM_STORAGE_KEY, fallbackTeamId);
+        if (prev && nextSessions.some((session) => session.id === prev)) return prev;
+        if (storedSessionId && nextSessions.some((session) => session.id === storedSessionId)) return storedSessionId;
+        const fallbackSessionId = nextSessions[0]?.id ?? null;
+        if (fallbackSessionId) {
+          storage.set(CURRENT_SESSION_STORAGE_KEY, fallbackSessionId);
         }
-        return fallbackTeamId;
+        return fallbackSessionId;
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载 Swarm 会话失败');
@@ -142,25 +91,18 @@ export function useSwarmTeam() {
     }
   }, []);
 
-  const createSwarmSession = useCallback(async (input: CreateSwarmSessionInput) => {
+  const createSwarmSession = useCallback(async () => {
     setIsLoading(true);
     setError(null);
 
     try {
-      const created = await teamsApi.createTeam({
-        name: input.name,
-        description: input.description,
-        config: {
-          autoProvision: true,
-          sessionGoal: input.sessionGoal,
-          workspaceMode: 'general_office',
-        },
+      const created = await swarmSessionsApi.createSession({
+        mode: 'general_office',
       });
 
-      const createdTeam = created as ApiTeam;
-      setTeams((prev) => [createdTeam, ...prev]);
-      setCurrentTeamId(createdTeam.id);
-      return createdTeam;
+      setTeams((prev) => [created, ...prev]);
+      setCurrentTeamId(created.id);
+      return created;
     } catch (err) {
       const message = err instanceof Error ? err.message : '创建 Swarm 会话失败';
       setError(message);
@@ -179,8 +121,8 @@ export function useSwarmTeam() {
     [teams, currentTeamId]
   );
 
-  const currentTeamCard = useMemo(
-    () => (currentTeam ? convertTeam(currentTeam) : null),
+  const currentSessionCard = useMemo(
+    () => (currentTeam ? convertSessionToSummary(currentTeam) : null),
     [currentTeam]
   );
 
@@ -193,7 +135,7 @@ export function useSwarmTeam() {
     teams,
     currentTeam,
     currentTeamId,
-    currentTeamCard,
+    currentSessionCard,
     agents,
     isLoading,
     error,

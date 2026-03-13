@@ -16,6 +16,8 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
   onAssignTask,
   onUpdateTaskStatus,
 }) => {
+  const executableAgents = agents.filter((agent) => agent.type !== 'leader');
+
   const getStatusColor = (status: Task['status']) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
@@ -60,10 +62,11 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
                 <select
                   value={task.assignedTo || ''}
                   onChange={(e) => onAssignTask(task.id, e.target.value || undefined)}
+                  disabled={executableAgents.length === 0}
                   className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
                 >
-                  <option value="">未分配</option>
-                  {agents.map((agent) => (
+                  <option value="">{executableAgents.length === 0 ? '等待 Lead 创建 teammate' : '未分配'}</option>
+                  {executableAgents.map((agent) => (
                     <option key={agent.id} value={agent.id}>{agent.name}</option>
                   ))}
                 </select>
@@ -82,6 +85,12 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
           ))
         )}
       </div>
+
+      {tasks.length > 0 && executableAgents.length === 0 ? (
+        <div className="mt-4 rounded-lg border border-dashed border-gray-300 px-4 py-3 text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">
+          当前没有可执行任务的 teammate。按照原始架构，应由 Lead 先动态创建合适队员，再进行分配。
+        </div>
+      ) : null}
     </div>
   );
 };

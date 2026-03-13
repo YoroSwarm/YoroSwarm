@@ -2,6 +2,8 @@ import { NextRequest } from 'next/server'
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
 import { getLeadAgent, mapPriorityToNumber, requireTokenPayload, serializeTask } from '@/lib/server/swarm'
+import { appendAgentContextEntry } from '@/lib/server/agent-context'
+import { buildSessionTaskData } from '@/lib/server/swarm-session'
 
 type RouteContext = {
   params: Promise<{ agentId: string }>
@@ -57,26 +59,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return errorResponse('Task title is required', 400)
     }
 
-    const creator = await getLeadAgent(agent.teamId)
+    const creator = await getLeadAgent({ swarmSessionId: agent.swarmSessionId })
     if (!creator) {
       return errorResponse('No creator agent available', 400)
     }
 
     const task = await prisma.teamLeadTask.create({
-      data: {
+      data: buildSessionTaskData({
+        swarmSessionId: agent.swarmSessionId,
+        creatorId: creator.id,
         title: body.title,
         description: body.description,
         priority: mapPriorityToNumber(body.priority),
         assigneeId: agent.id,
-        creatorId: creator.id,
-        teamId: agent.teamId,
-        status: 'ASSIGNED',
-      },
+      }),
       include: {
         assignee: true,
         parent: true,
         subtasks: true,
       },
+    })
+
+    await appendAgentContextEntry({
+      swarmSessionId: agent.swarmSessionId,
+      agentId: agent.id,
+      sourceType: 'task',
+      sourceId: task.id,
+      entryType: 'task_brief',
+      content: `${task.title}\n\n${task.description || ''}`.trim(),
     })
 
     return successResponse({

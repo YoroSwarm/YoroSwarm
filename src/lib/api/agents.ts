@@ -11,6 +11,7 @@ export interface CreateAgentRequest {
   agent_type: AgentType;
   description?: string;
   expertise?: string[];
+  swarmSessionId?: string;
   max_concurrent_tasks?: number;
   context_window_size?: number;
   timeout_seconds?: number;
@@ -96,8 +97,8 @@ export const agentsApi = {
   /**
    * 获取所有Agent列表
    */
-  getAgents: async (): Promise<AgentListResponse> => {
-    return api.get<AgentListResponse>('/agents');
+  getAgents: async (params?: { swarmSessionId?: string }): Promise<AgentListResponse> => {
+    return api.get<AgentListResponse>('/agents', { params });
   },
 
   /**

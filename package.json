@@ -6,6 +6,7 @@
     "dev": "node scripts/next-with-access-code.mjs dev",
     "build": "next build",
     "start": "node scripts/next-with-access-code.mjs start",
+    "db:migrate": "prisma migrate deploy",
     "lint": "eslint"
   },
   "dependencies": {

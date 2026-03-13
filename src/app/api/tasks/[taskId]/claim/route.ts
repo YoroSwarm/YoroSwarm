@@ -25,7 +25,7 @@ export async function PUT(_request: Request, context: RouteContext) {
     }
 
     const fallbackAgent = await prisma.agent.findFirst({
-      where: { teamId: task.teamId || undefined },
+      where: { swarmSessionId: task.swarmSessionId },
       orderBy: { createdAt: 'asc' },
     })
 

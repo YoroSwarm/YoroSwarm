@@ -9,6 +9,7 @@ export interface UploadedFileResponse {
   path: string;
   url?: string;
   sessionId: string;
+  swarmSessionId?: string;
   userId?: string | null;
   createdAt: string;
   metadata?: string | null;
@@ -33,9 +34,12 @@ function resolveFileUrl(uploaded: UploadedFileResponse) {
 }
 
 export const filesApi = {
-  uploadFile: async (file: File): Promise<UploadedFileResponse & { url: string }> => {
+  uploadFile: async (file: File, swarmSessionId?: string): Promise<UploadedFileResponse & { url: string }> => {
     const formData = new FormData();
     formData.append('file', file);
+    if (swarmSessionId) {
+      formData.append('swarmSessionId', swarmSessionId);
+    }
 
     const token = storage.get<string>('access_token');
     const response = await fetch('/api/files', {

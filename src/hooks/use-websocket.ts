@@ -10,6 +10,8 @@ import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
 const LOCAL_WS_SERVER_PORT = '3001';
 
+type SubscriptionTarget = 'all' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
+
 let wsServerInitializationPromise: Promise<void> | null = null;
 
 function resolveWebSocketUrl(rawUrl: string): string {
@@ -29,8 +31,6 @@ function resolveWebSocketUrl(rawUrl: string): string {
     const usesApiWsBootstrapPath = parsed.pathname === '/api/ws' || parsed.pathname.startsWith('/api/ws/');
     if (usesApiWsBootstrapPath) {
       parsed.pathname = parsed.pathname.replace(/^\/api\/ws(?=\/|$)/, '') || '/';
-
-      // `/api/ws` boots a dedicated ws server that listens on port 3001.
       parsed.port = LOCAL_WS_SERVER_PORT;
     }
 
@@ -129,8 +129,8 @@ export interface UseWebSocketReturn {
   sendMessageWithAck: (message: Omit<WebSocketMessage, 'message_id'>) => Promise<boolean>;
   connect: () => void;
   disconnect: () => void;
-  subscribe: (target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
-  unsubscribe: (target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => void;
+  subscribe: (target: SubscriptionTarget, id?: string) => void;
+  unsubscribe: (target: SubscriptionTarget, id?: string) => void;
 }
 
 export function useWebSocket({
@@ -196,7 +196,6 @@ export function useWebSocket({
           payload: { timestamp: Date.now() }
         }));
 
-        // Set timeout for pong response
         heartbeatTimeoutRef.current = setTimeout(() => {
           console.warn('Heartbeat timeout, closing connection');
           wsRef.current?.close();
@@ -262,7 +261,6 @@ export function useWebSocket({
           try {
             const message = JSON.parse(event.data) as WebSocketMessage;
 
-            // Handle pong
             if (message.type === 'pong') {
               if (heartbeatTimeoutRef.current) {
                 clearTimeout(heartbeatTimeoutRef.current);
@@ -271,13 +269,11 @@ export function useWebSocket({
               return;
             }
 
-            // Handle acknowledgment responses
             if (message.type === 'message_received' && message.message_id) {
               handleAcknowledgment(message.message_id);
               return;
             }
 
-            // Send acknowledgment if required
             if (message.requires_ack && message.message_id) {
               ws.send(JSON.stringify({
                 type: 'ack',
@@ -302,14 +298,12 @@ export function useWebSocket({
           clearHeartbeat();
           onDisconnect?.(event.code, event.reason);
 
-          // Clear pending acknowledgments
           pendingAcksRef.current.forEach((pending) => {
             clearTimeout(pending.timeout);
             pending.resolve(false);
           });
           pendingAcksRef.current.clear();
 
-          // Auto reconnect if not manually disconnected
           if (autoReconnect && !isManualDisconnectRef.current && connectionAttemptsRef.current < maxReconnectAttempts) {
             reconnectTimeoutRef.current = setTimeout(() => {
               setConnectionAttempts((prev) => {
@@ -361,7 +355,6 @@ export function useWebSocket({
     clearReconnect();
     clearHeartbeat();
 
-    // Clear pending acknowledgments
     pendingAcksRef.current.forEach((pending) => {
       clearTimeout(pending.timeout);
       pending.resolve(false);
@@ -392,26 +385,24 @@ export function useWebSocket({
       const messageId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
       const fullMessage = { ...message, message_id: messageId, requires_ack: true };
 
-      // Set timeout for acknowledgment
       const timeout = setTimeout(() => {
         pendingAcksRef.current.delete(messageId);
         resolve(false);
       }, 10000);
 
       pendingAcksRef.current.set(messageId, { resolve, timeout });
-
       wsRef.current.send(JSON.stringify(fullMessage));
     });
   }, []);
 
-  const subscribe = useCallback((target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
+  const subscribe = useCallback((target: SubscriptionTarget, id?: string) => {
     sendMessage({
       type: 'subscribe',
       payload: { target, id }
     });
   }, [sendMessage]);
 
-  const unsubscribe = useCallback((target: 'all' | 'conversation' | 'team' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks', id?: string) => {
+  const unsubscribe = useCallback((target: SubscriptionTarget, id?: string) => {
     sendMessage({
       type: 'unsubscribe',
       payload: { target, id }

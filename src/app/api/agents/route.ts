@@ -3,9 +3,8 @@ import prisma from '@/lib/db'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { successResponse, errorResponse, unauthorizedResponse } from '@/lib/api/response'
 import { cookies } from 'next/headers'
-import { serializeAgent } from '@/lib/server/swarm'
+import { resolveSessionScope, serializeAgent } from '@/lib/server/swarm'
 
-// GET - List all agents
 export async function GET(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -22,10 +21,19 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const teamId = searchParams.get('teamId')
+    const swarmSessionId = searchParams.get('swarmSessionId') || searchParams.get('swarm_session_id')
+
+    if (!swarmSessionId) {
+      return errorResponse('swarmSessionId is required', 400)
+    }
+
+    const session = await resolveSessionScope({ swarmSessionId })
+    if (!session) {
+      return errorResponse('Swarm session not found', 404)
+    }
 
     const agents = await prisma.agent.findMany({
-      where: teamId ? { teamId } : undefined,
+      where: { swarmSessionId: session.id },
       include: { tasks: true },
       orderBy: { createdAt: 'desc' },
     })
@@ -40,7 +48,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Create a new agent
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies()
@@ -57,29 +64,40 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, role, description, teamId, capabilities, config, agent_type, expertise } = body
+    const { name, role, description, swarmSessionId, capabilities, config, agent_type, expertise } = body
     const normalizedRole = role || agent_type
     const normalizedCapabilities = capabilities || expertise
 
-    if (!name || !normalizedRole || !teamId) {
-      return errorResponse('Name, role, and teamId are required', 400)
+    if (!name || !normalizedRole) {
+      return errorResponse('Name and role are required', 400)
     }
 
-    // Verify team exists
-    const team = await prisma.team.findUnique({
-      where: { id: teamId },
-    })
+    if (!swarmSessionId) {
+      return errorResponse('swarmSessionId is required', 400)
+    }
 
-    if (!team) {
-      return errorResponse('Team not found', 404)
+    const session = await resolveSessionScope({ swarmSessionId })
+    if (!session) {
+      return errorResponse('Swarm session not found', 404)
     }
 
     const agent = await prisma.agent.create({
       data: {
+        swarmSessionId: session.id,
         name,
         role: normalizedRole,
         description,
-        teamId,
+        kind: normalizedRole === 'team_lead'
+          ? 'LEAD'
+          : normalizedRole.includes('research')
+            ? 'RESEARCHER'
+            : normalizedRole.includes('document')
+              ? 'WRITER'
+              : normalizedRole.includes('analysis')
+                ? 'ANALYST'
+                : normalizedRole.includes('engineering')
+                  ? 'ENGINEER'
+                  : 'WORKER',
         capabilities: normalizedCapabilities ? JSON.stringify(normalizedCapabilities) : null,
         config: JSON.stringify(config || {}),
       },

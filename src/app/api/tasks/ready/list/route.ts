@@ -1,17 +1,25 @@
 import prisma from '@/lib/db'
 import { errorResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
-import { requireTokenPayload, resolveTeam, serializeTask } from '@/lib/server/swarm'
+import { requireTokenPayload, resolveSessionScope, serializeTask } from '@/lib/server/swarm'
 
 export async function GET(request: Request) {
   try {
     await requireTokenPayload()
     const { searchParams } = new URL(request.url)
-    const teamId = searchParams.get('team_id') || searchParams.get('teamId')
-    const team = await resolveTeam(teamId)
+    const swarmSessionId = searchParams.get('swarm_session_id') || searchParams.get('swarmSessionId')
+
+    if (!swarmSessionId) {
+      return errorResponse('swarmSessionId is required', 400)
+    }
+
+    const session = await resolveSessionScope({ swarmSessionId })
+    if (!session) {
+      return errorResponse('Swarm session not found', 404)
+    }
 
     const tasks = await prisma.teamLeadTask.findMany({
       where: {
-        ...(team?.id ? { teamId: team.id } : {}),
+        swarmSessionId: session.id,
         status: 'PENDING',
       },
       include: {

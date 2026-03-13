@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server'
 import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
-import { listUnlockedSubtasks, mapApiStatusToDb, requireTokenPayload, serializeTask } from '@/lib/server/swarm'
+import { listUnlockedSubtasks, mapApiStatusToDb, requireTokenPayload, serializeRealtimeAgentStatus, serializeRealtimeTaskUpdate, serializeTask } from '@/lib/server/swarm'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
 
 type RouteContext = {
   params: Promise<{ taskId: string }>
@@ -43,6 +44,31 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     })
 
     const unlockedTasks = status === 'COMPLETED' ? await listUnlockedSubtasks(taskId) : []
+
+    publishRealtimeMessage(
+      {
+        type: 'task_update',
+        payload: serializeRealtimeTaskUpdate(updated, `任务状态更新为 ${body.status}`),
+      },
+      { sessionId: updated.swarmSessionId }
+    )
+
+    if (updated.assigneeId) {
+      const assignee = await prisma.agent.findUnique({
+        where: { id: updated.assigneeId },
+        include: { tasks: true },
+      })
+
+      if (assignee) {
+        publishRealtimeMessage(
+          {
+            type: 'agent_status',
+            payload: serializeRealtimeAgentStatus(assignee),
+          },
+          { sessionId: assignee.swarmSessionId }
+        )
+      }
+    }
 
     return successResponse({
       task: serializeTask(updated),
