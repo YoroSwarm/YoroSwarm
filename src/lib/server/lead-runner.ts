@@ -150,6 +150,131 @@ export async function runLeadLoop(input: OrchestrateInput): Promise<void> {
   }
 }
 
+const LEAD_REEVALUATION_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。一个队友刚刚完成了一项任务。
+
+请评估当前情况并决定下一步行动：
+
+1. **检查所有任务状态**：是否还有待处理的任务？是否需要分配新任务？
+2. **评估整体进度**：用户的原始需求是否已经完全满足？
+3. **发现改进空间**：是否有遗漏的方面？是否需要补充额外的工作？
+4. **动态调整**：如果需要，创建新的队友或新的任务
+
+## 决策规则
+
+- 如果所有任务都已完成且结果令人满意 → 使用 reply_to_user 向用户汇报最终结果
+- 如果还有未分配的任务 → 分配给空闲的队友（或创建新队友）
+- 如果发现需要补充的工作 → 创建新任务并分配
+- 如果某些任务失败了 → 分析原因，决定是否重试
+- 你**不需要**每次都回复用户，只在有重要进展或所有工作完成时才 reply_to_user
+- 你是领导者，**不要亲自执行具体工作**`
+
+/**
+ * Lead 自主反馈循环
+ * 当 Teammate 完成任务后自动触发
+ * Lead 重新评估、发现改进方向、动态创建新任务/队友
+ */
+export async function runLeadReEvaluation(
+  swarmSessionId: string,
+  leadAgentId: string,
+  userId: string,
+  completedTaskTitle: string,
+  completedReport: string
+): Promise<void> {
+  console.log(`[LeadRunner] Re-evaluation triggered: task "${completedTaskTitle}" completed`)
+
+  const { context, tools: orchTools } = await orchestrate({
+    swarmSessionId,
+    userId,
+    leadAgentId,
+    userMessage: `[系统通知] 队友完成了任务 "${completedTaskTitle}"，汇报如下:\n\n${completedReport}`,
+  })
+
+  // Check if there are remaining tasks
+  const pendingTasks = context.tasks.filter(t =>
+    t.status === 'PENDING' || t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS'
+  )
+
+  const contextMessages = buildLeadContextMessages(
+    context,
+    `[队友任务完成通知]\n\n已完成任务: "${completedTaskTitle}"\n汇报内容: ${completedReport}\n\n当前剩余未完成任务: ${pendingTasks.length} 个\n\n请评估当前情况并决定下一步行动。如果所有工作已完成，请用 reply_to_user 向用户汇报最终结果。`
+  )
+
+  // Create tool executor (same as runLeadLoop)
+  const executeTool: ToolExecutor = async (name, toolInput) => {
+    switch (name) {
+      case 'reply_to_user': {
+        const result = await orchTools.replyToUser(
+          toolInput.content as string,
+          toolInput.metadata as Record<string, unknown> | undefined
+        )
+        return JSON.stringify({ success: true, message_id: result.id })
+      }
+      case 'provision_teammate': {
+        const result = await orchTools.provisionTeammate({
+          name: toolInput.name as string,
+          role: toolInput.role as string,
+          description: (toolInput.description as string) || '',
+          capabilities: (toolInput.capabilities as string[]) || [],
+        })
+        return JSON.stringify({
+          success: true,
+          teammate_id: result.agent.id,
+          name: result.agent.name,
+          role: result.agent.role,
+        })
+      }
+      case 'decompose_task': {
+        const tasks = toolInput.tasks as Array<{
+          title: string; description?: string; priority?: number; parentId?: string
+        }>
+        const result = await orchTools.decomposeTask(tasks)
+        return JSON.stringify({
+          success: true,
+          tasks: result.map(t => ({ task_id: t.id, title: t.title, status: t.status })),
+        })
+      }
+      case 'assign_task': {
+        const taskId = toolInput.task_id as string
+        const teammateId = toolInput.teammate_id as string
+        const result = await orchTools.assignTaskToTeammate(taskId, teammateId)
+        triggerTeammateExecution(swarmSessionId, teammateId, taskId).catch(err => {
+          console.error(`[LeadRunner] Failed to trigger teammate ${teammateId}:`, err)
+        })
+        return JSON.stringify({
+          success: true,
+          task_id: result.id,
+          status: result.status,
+          assignee: result.assignee?.name,
+        })
+      }
+      case 'send_message_to_teammate': {
+        const result = await orchTools.sendToTeammate(
+          toolInput.teammate_id as string,
+          toolInput.content as string
+        )
+        return JSON.stringify({ success: true, message_id: result.id })
+      }
+      default:
+        return JSON.stringify({ error: `Unknown tool: ${name}` })
+    }
+  }
+
+  const result = await runAgentLoop({
+    systemPrompt: LEAD_REEVALUATION_PROMPT,
+    agentId: leadAgentId,
+    agentName: 'Team Lead',
+    swarmSessionId,
+    tools: leadTools,
+    executeTool,
+    contextMessages,
+    maxIterations: 10,
+  })
+
+  console.log(
+    `[LeadRunner] Re-evaluation completed: ${result.iterationsUsed} iterations, ${result.toolCallsMade} tool calls`
+  )
+}
+
 /**
  * Build LLM messages from Lead's context
  */

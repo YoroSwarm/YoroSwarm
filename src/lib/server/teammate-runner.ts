@@ -7,6 +7,7 @@ import { handleTeammateReport, sendToTeammate } from './lead-orchestrator'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { transitionTaskStatus } from './task-orchestrator'
 import { createInternalThread, sendInternalMessage } from './internal-bus'
+import { runLeadReEvaluation } from './lead-runner'
 import * as fs from 'fs'
 import * as path from 'path'
 
@@ -283,6 +284,22 @@ export async function runTeammateLoop(
         result.finalText?.slice(0, 200)
       )
     }
+
+    // Trigger Lead re-evaluation (async, non-blocking)
+    const userId = session.userId
+    const report = taskCompleted
+      ? (await prisma.teamLeadTask.findUnique({ where: { id: taskId } }))?.resultSummary || result.finalText
+      : result.finalText || '任务已完成'
+
+    triggerLeadReEvaluation(
+      swarmSessionId,
+      leadAgentId,
+      userId,
+      task.title,
+      report || '任务已完成'
+    ).catch(err => {
+      console.error(`[TeammateRunner] Lead re-evaluation failed:`, err)
+    })
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error'
     console.error(`[TeammateRunner][${teammate.name}] Fatal error:`, errMsg)
@@ -427,4 +444,19 @@ function normalizeMessages(messages: LLMMessage[]): LLMMessage[] {
   }
 
   return normalized
+}
+
+/**
+ * 异步触发 Lead 重新评估
+ */
+async function triggerLeadReEvaluation(
+  swarmSessionId: string,
+  leadAgentId: string,
+  userId: string,
+  taskTitle: string,
+  report: string
+): Promise<void> {
+  // Small delay to let DB writes settle
+  await new Promise(resolve => setTimeout(resolve, 1000))
+  await runLeadReEvaluation(swarmSessionId, leadAgentId, userId, taskTitle, report)
 }
