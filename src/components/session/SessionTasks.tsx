@@ -1,19 +1,12 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState } from "react";
 import { useTasks } from "@/hooks/use-tasks";
 import { useAgents } from "@/hooks/use-agents";
 import {
-  Plus,
   Search,
-  Filter,
-  MoreHorizontal,
-  CheckCircle2,
   Clock,
-  AlertCircle,
-  X,
   Loader2
 } from "lucide-react";
 import { Task } from "@/types/agent";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 

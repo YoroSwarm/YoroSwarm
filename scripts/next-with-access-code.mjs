@@ -90,17 +90,50 @@ try {
 console.log(`🔑 Current Access Code: ${accessCode}`)
 console.log('   (This code is required for new user registration)\n')
 
-const child = spawn(
-  process.execPath,
-  [require.resolve('next/dist/bin/next'), mode],
-  {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      ACCESS_CODE: accessCode,
+const nextBin = require.resolve('next/dist/bin/next')
+const args = [nextBin, mode]
+
+// 添加 --quiet 标志来减少日志输出（如果支持）
+if (mode === 'dev' && process.env.QUIET_DEV === 'true') {
+  args.push('--quiet')
+}
+
+const child = spawn(process.execPath, args, {
+  stdio: ['inherit', 'pipe', 'pipe'],
+  env: {
+    ...process.env,
+    ACCESS_CODE: accessCode,
     },
   },
 )
+
+// 过滤 HTTP 200 请求日志
+const hideRequestLogs = process.env.HIDE_REQUEST_LOGS !== 'false' // 默认隐藏
+
+function shouldLogLine(line) {
+  if (!hideRequestLogs) return true
+  // 隐藏包含 " 200 " 的请求日志行
+  if (line.includes(' 200 ') && /\s(GET|POST|PUT|DELETE|PATCH)\s/.test(line)) {
+    return false
+  }
+  return true
+}
+
+child.stdout?.on('data', (data) => {
+  const lines = data.toString().split('\n')
+  const filteredLines = lines.filter(shouldLogLine)
+  if (filteredLines.length > 0) {
+    process.stdout.write(filteredLines.join('\n') + '\n')
+  }
+})
+
+child.stderr?.on('data', (data) => {
+  const lines = data.toString().split('\n')
+  const filteredLines = lines.filter(shouldLogLine)
+  if (filteredLines.length > 0) {
+    process.stderr.write(filteredLines.join('\n') + '\n')
+  }
+})
 
 child.on('exit', (code, signal) => {
   if (signal) {

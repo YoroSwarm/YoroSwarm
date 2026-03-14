@@ -9,15 +9,11 @@ import {
   Search,
   Layers,
   ExternalLink,
-  Bot,
-  FolderOpen,
   File,
   Loader2,
-  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { artifactsApi, type ArtifactListItem, type ArtifactDetail } from "@/lib/api/artifacts";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -84,12 +80,6 @@ function getKindConfig(kind: string) {
   return KIND_CONFIG[kind] || KIND_CONFIG.other;
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
   return date.toLocaleDateString("zh-CN");
@@ -101,7 +91,7 @@ export function SessionArtifacts({ sessionId }: SessionArtifactsProps) {
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedArtifact, setSelectedArtifact] = useState<ArtifactDetail | null>(null);
-  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [, setIsDetailLoading] = useState(false);
 
   const loadArtifacts = useCallback(async () => {
     setIsLoading(true);

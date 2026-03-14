@@ -26,10 +26,9 @@ export default function TasksPage() {
   const [statusFilter, setStatusFilter] = useState<Task["status"] | "all">("all");
 
   // Resolve session ID for WebSocket connection
-  const [swarmSessionId, setSwarmSessionId] = useState<string | undefined>();
-  useEffect(() => {
-    setSwarmSessionId(storage.get<string>(CURRENT_SESSION_STORAGE_KEY) || undefined);
-  }, []);
+  const [swarmSessionId] = useState<string | undefined>(() =>
+    storage.get<string>(CURRENT_SESSION_STORAGE_KEY) || undefined
+  );
 
   // Debounced refresh on WebSocket events
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

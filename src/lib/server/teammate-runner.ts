@@ -2,11 +2,16 @@ import type { LLMMessage } from './llm/types'
 import prisma from '@/lib/db'
 import { runAgentLoop, type ToolExecutor } from './agent-loop'
 import { teammateTools } from './tools/teammate-tools'
-import { listAgentContextEntries, appendAgentContextEntry } from './agent-context'
-import { handleTeammateReport, sendToTeammate } from './lead-orchestrator'
+import { handleTeammateReport } from './lead-orchestrator'
+import { listAgentContextEntries } from './agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
-import { transitionTaskStatus } from './task-orchestrator'
-import { createInternalThread, sendInternalMessage } from './internal-bus'
+import {
+  createInternalThread,
+  sendInternalMessage,
+  sendPeerToPeerMessage,
+  broadcastToTeam,
+  getTeamRoster,
+} from './internal-bus'
 import { runLeadReEvaluation } from './lead-runner'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -326,36 +331,52 @@ export async function runTeammateLoop(
         return JSON.stringify({ success: true, message_id: msg.id })
       }
 
-      case 'update_task_progress': {
-        const desc = input.progress_description as string
+      case 'send_message_to_teammate': {
+        const content = input.content as string
+        const recipientId = input.teammate_id as string
+        const msgType = (input.message_type as string) || 'coordination'
 
-        await appendAgentContextEntry({
+        const msg = await sendPeerToPeerMessage({
           swarmSessionId,
-          agentId: teammateId,
-          sourceType: 'task',
-          sourceId: taskId,
-          entryType: 'progress_update',
-          content: desc,
+          senderAgentId: teammateId,
+          recipientAgentId: recipientId,
+          messageType: msgType,
+          content,
         })
 
-        publishRealtimeMessage(
-          {
-            type: 'task_update',
-            payload: {
-              task_id: taskId,
-              title: task.title,
-              status: 'in_progress',
-              assignee_id: teammateId,
-              assignee_name: teammate.name,
-              swarm_session_id: swarmSessionId,
-              message: `${teammate.name}: ${desc}`,
-              timestamp: new Date().toISOString(),
-            },
-          },
-          { sessionId: swarmSessionId }
-        )
+        return JSON.stringify({
+          success: true,
+          message_id: msg.id,
+          recipient_id: recipientId,
+        })
+      }
 
-        return JSON.stringify({ success: true })
+      case 'broadcast_to_team': {
+        const content = input.content as string
+        const msgType = (input.message_type as string) || 'info'
+
+        const result = await broadcastToTeam({
+          swarmSessionId,
+          senderAgentId: teammateId,
+          messageType: msgType,
+          content,
+        })
+
+        return JSON.stringify({
+          success: true,
+          thread_id: result.threadId,
+          recipients_count: result.messageCount,
+          recipient_ids: result.recipientIds,
+        })
+      }
+
+      case 'get_team_roster': {
+        const roster = await getTeamRoster(swarmSessionId, teammateId)
+        return JSON.stringify({
+          success: true,
+          teammates: roster,
+          count: roster.length,
+        })
       }
 
       default:
@@ -374,6 +395,7 @@ export async function runTeammateLoop(
       executeTool,
       contextMessages,
       maxIterations: 20,
+      stopOnSuccessfulTools: ['report_task_completion'],
     })
 
     console.log(
@@ -463,19 +485,32 @@ ${caps.length > 0 ? `- 能力: ${caps.join(', ')}` : ''}
 - 标题: ${task.title}
 - 描述: ${task.description || '无详细描述'}
 
-## 工作规则
-1. 专注于你被分配的任务，认真完成它
-2. 可以使用 update_task_progress 报告进展
-3. 可以使用 send_message_to_lead 与 Lead 沟通（如遇到问题或需要更多信息）
-4. 完成任务后，**必须**使用 report_task_completion 工具汇报结果
-5. 如果任务涉及文件，使用 read_file 工具读取文件内容
-6. 如果需要创建文件让用户下载（代码文件、报告等），使用 write_file 工具
-7. 如果需要创建文档、分析报告等工件，使用 write_artifact 工具（内容也会保存为可下载文件）
+## 工作原则（重要）
+1. **专注执行任务**：直接开始工作，产出实际成果
+2. **避免空泛状态报告**：不要报告"正在分析"、"正在深入思考"等无意义的状态更新
+3. **只在必要时沟通**：只有遇到阻碍、需要澄清或重要发现时才联系 Lead
+4. **与队友协作**：可以使用 send_message_to_teammate 与其他队友直接沟通协作
+5. **任务完成后必须汇报**：使用 report_task_completion 提交结果
 
-## 输出要求
-- 产出高质量的工作成果
-- 报告要简洁但全面
-- 如果无法完成任务，在报告中说明原因`
+## 工具使用指南
+- **write_artifact**：创建文档、分析报告、代码等工件
+- **write_file**：创建用户可下载的文件
+- **read_file**：读取上传的文件内容
+- **report_task_completion**：任务完成后的汇报（必须调用）
+- **send_message_to_lead**：仅在遇到阻碍时联系 Lead
+- **send_message_to_teammate**：与其他队友直接沟通
+- **broadcast_to_team**：向所有队友广播重要信息
+- **get_team_roster**：查看团队成员列表
+
+## 禁止行为
+- ❌ 不要调用工具报告"正在分析"、"正在处理"等状态
+- ❌ 不要每完成一个小步骤就发送消息
+- ❌ 不要生成无意义的占位内容
+
+## 正确做法
+- ✅ 直接分析并产出结果
+- ✅ 遇到实际问题才寻求帮助
+- ✅ 完成任务后立即汇报`
 }
 
 async function buildTeammateContextMessages(
@@ -524,23 +559,54 @@ async function buildTeammateContextMessages(
     }
   }
 
-  // Get task-related files
+  // Get task-related artifacts files
   const artifacts = await prisma.artifact.findMany({
     where: { sourceTaskId: task.id },
     include: { file: true },
   })
 
-  if (artifacts.length > 0) {
-    const fileInfo = artifacts
-      .filter(a => a.file)
-      .map(a => `- ${a.file!.originalName} (ID: ${a.file!.id})`)
-      .join('\n')
-    if (fileInfo) {
-      messages.push({
-        role: 'user',
-        content: `[任务附件]\n${fileInfo}\n\n你可以使用 read_file 工具读取这些文件。`,
+  // Get all session files (including user uploads)
+  const sessionFiles = await prisma.file.findMany({
+    where: { swarmSessionId },
+    orderBy: { createdAt: 'desc' },
+    take: 20,
+  })
+
+  // Combine artifact files and session files (avoid duplicates)
+  const fileIdSet = new Set<string>()
+  const allFiles: { id: string; originalName: string; description?: string }[] = []
+
+  // Add artifact files first
+  for (const a of artifacts) {
+    if (a.file && !fileIdSet.has(a.file.id)) {
+      fileIdSet.add(a.file.id)
+      allFiles.push({
+        id: a.file.id,
+        originalName: a.file.originalName,
+        description: `Artifact: ${a.title}`,
       })
     }
+  }
+
+  // Add session files
+  for (const f of sessionFiles) {
+    if (!fileIdSet.has(f.id)) {
+      fileIdSet.add(f.id)
+      allFiles.push({
+        id: f.id,
+        originalName: f.originalName,
+      })
+    }
+  }
+
+  if (allFiles.length > 0) {
+    const fileInfo = allFiles
+      .map(f => `- ${f.originalName} (文件ID: ${f.id})${f.description ? ` - ${f.description}` : ''}`)
+      .join('\n')
+    messages.push({
+      role: 'user',
+      content: `[可用文件列表]\n${fileInfo}\n\n如需读取文件内容，请使用 read_file 工具，传入上述文件ID。`,
+    })
   }
 
   // Current task instruction

@@ -14,6 +14,19 @@ const eslintConfig = defineConfig([
     "dist/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Allow underscore prefix for intentionally unused variables (Next.js API routes pattern)
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

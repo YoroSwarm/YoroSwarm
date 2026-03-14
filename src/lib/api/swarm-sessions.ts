@@ -1,5 +1,23 @@
 import { api } from './client';
 
+// Re-export type from API route
+export interface AgentActivityItem {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentRole: 'lead' | 'teammate';
+  agentKind: string;
+  activityType: 'thinking' | 'tool_call' | 'tool_result';
+  content: string;
+  metadata?: {
+    toolName?: string;
+    toolInput?: string;
+    isError?: boolean;
+    toolCallId?: string; // For matching tool_call with tool_result
+  };
+  createdAt: string;
+}
+
 export interface SwarmSessionAgentResponse {
   id: string;
   name: string;
@@ -88,6 +106,39 @@ export interface SendExternalMessageRequest {
   metadata?: Record<string, unknown>;
 }
 
+export interface AgentActivityItem {
+  id: string;
+  agentId: string;
+  agentName: string;
+  agentRole: 'lead' | 'teammate';
+  agentKind: string;
+  activityType: 'thinking' | 'tool_call' | 'tool_result';
+  content: string;
+  metadata?: {
+    toolName?: string;
+    toolInput?: string;
+    isError?: boolean;
+    toolCallId?: string;
+  };
+  createdAt: string;
+}
+
+// Deprecated: old aggregated format, kept for reference
+export interface AgentActivityResponse {
+  agentId: string;
+  agentName: string;
+  agentRole: 'lead' | 'teammate';
+  agentKind: string;
+  thinkingContent?: string[];
+  toolCalls?: Array<{
+    toolName: string;
+    status: 'calling' | 'completed' | 'error';
+    inputSummary?: string;
+    resultSummary?: string;
+    timestamp: string;
+  }>;
+}
+
 export const swarmSessionsApi = {
   listSessions: async (): Promise<SwarmSessionListResponse> => {
     return api.get<SwarmSessionListResponse>('/swarm-sessions');
@@ -127,5 +178,9 @@ export const swarmSessionsApi = {
 
   createSessionTask: async (sessionId: string, data: Record<string, unknown>): Promise<SwarmSessionTaskResponse> => {
     return api.post<SwarmSessionTaskResponse>(`/swarm-sessions/${sessionId}/tasks`, data);
+  },
+
+  getAgentActivities: async (sessionId: string): Promise<{ items: AgentActivityItem[]; total: number }> => {
+    return api.get<{ items: AgentActivityItem[]; total: number }>(`/swarm-sessions/${sessionId}/agent-activities`);
   },
 };

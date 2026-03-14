@@ -6,7 +6,7 @@ import { appendExternalUserMessage, listExternalMessages } from '@/lib/server/ex
 import { serializeExternalMessage } from '@/lib/server/swarm-session-view';
 import { publishRealtimeMessage } from '@/app/api/ws/route';
 import { getLeadAgentForSession } from '@/lib/server/swarm-session';
-import { runLeadLoop } from '@/lib/server/lead-runner';
+import { runCognitiveLeadLoop } from '@/lib/server/cognitive-lead-runner';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -85,10 +85,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return errorResponse('Lead agent not found', 500);
     }
 
-    // 4. 触发 Lead Agent Loop（异步，不阻塞响应）
+    // 4. 验证 Lead Agent 在数据库中确实存在
+    const leadAgentCheck = await prisma.agent.findUnique({ where: { id: lead.id } });
+    if (!leadAgentCheck) {
+      console.error(`[ExternalMessages] Lead agent ${lead.id} not found in database`);
+      return errorResponse('Lead agent not found in database', 500);
+    }
+    console.log(`[ExternalMessages] Verified lead agent exists: ${leadAgentCheck.name} (${lead.id})`);
+
+    // 5. 触发认知 Lead Agent Loop（投递到收件箱，异步，不阻塞响应）
     const attachments = body.attachments || [];
 
-    runLeadLoop({
+    runCognitiveLeadLoop({
       swarmSessionId: id,
       userId: payload.userId,
       leadAgentId: lead.id,

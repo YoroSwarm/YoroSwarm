@@ -9,16 +9,15 @@ import {
   Search,
   FolderOpen,
   Loader2,
-  X,
   File,
 } from "lucide-react";
 import { filesApi, type UploadedFileResponse } from "@/lib/api/files";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 
 interface SessionFilesProps {
   sessionId: string;
+  refreshToken?: number;
 }
 
 function getFileType(mimeType: string): "document" | "image" | "code" | "other" {
@@ -47,7 +46,7 @@ function getFileType(mimeType: string): "document" | "image" | "code" | "other" 
   return "other";
 }
 
-export function SessionFiles({ sessionId }: SessionFilesProps) {
+export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps) {
   const [files, setFiles] = useState<UploadedFileResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +70,7 @@ export function SessionFiles({ sessionId }: SessionFilesProps) {
     if (sessionId) {
       loadFiles();
     }
-  }, [sessionId, loadFiles]);
+  }, [sessionId, loadFiles, refreshToken]);
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

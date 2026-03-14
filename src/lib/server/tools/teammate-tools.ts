@@ -84,7 +84,7 @@ export const teammateTools: ToolDefinition[] = [
   },
   {
     name: 'send_message_to_lead',
-    description: '向 Lead 发送消息，用于汇报进展、请求澄清、或请求额外资源。',
+    description: '向 Lead 发送消息，仅在遇到阻碍、需要澄清或需要额外资源时使用。不要用于普通的进度汇报。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -94,25 +94,61 @@ export const teammateTools: ToolDefinition[] = [
         },
         message_type: {
           type: 'string',
-          enum: ['progress_update', 'question', 'resource_request', 'issue_report'],
-          description: '消息类型',
+          enum: ['blocking_issue', 'clarification_request', 'resource_request', 'critical_update'],
+          description: '消息类型：blocking_issue=遇到阻碍无法继续, clarification_request=需要澄清, resource_request=需要额外资源, critical_update=重要更新',
         },
       },
-      required: ['content'],
+      required: ['content', 'message_type'],
     },
   },
   {
-    name: 'update_task_progress',
-    description: '更新当前任务的执行进度。',
+    name: 'send_message_to_teammate',
+    description: '向特定队友发送直接消息，用于协作、同步信息或讨论相关任务。',
     input_schema: {
       type: 'object' as const,
       properties: {
-        progress_description: {
+        teammate_id: {
           type: 'string',
-          description: '当前进度描述',
+          description: '接收消息的队友ID',
+        },
+        content: {
+          type: 'string',
+          description: '消息内容',
+        },
+        message_type: {
+          type: 'string',
+          enum: ['coordination', 'info_share', 'question', 'response'],
+          description: '消息类型：coordination=协调工作, info_share=分享信息, question=提问, response=回复',
         },
       },
-      required: ['progress_description'],
+      required: ['teammate_id', 'content', 'message_type'],
+    },
+  },
+  {
+    name: 'broadcast_to_team',
+    description: '向所有团队成员广播消息，用于分享重要信息、发现或资源。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        content: {
+          type: 'string',
+          description: '广播消息内容',
+        },
+        message_type: {
+          type: 'string',
+          enum: ['info', 'discovery', 'resource', 'warning'],
+          description: '消息类型：info=信息分享, discovery=重要发现, resource=共享资源, warning=警告',
+        },
+      },
+      required: ['content', 'message_type'],
+    },
+  },
+  {
+    name: 'get_team_roster',
+    description: '获取当前团队成员列表，查看所有队友的信息和状态。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {},
     },
   },
 ]

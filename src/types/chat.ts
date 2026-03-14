@@ -23,6 +23,14 @@ export interface MessageAttachment {
   mimeType?: string;
 }
 
+export interface ToolCall {
+  toolName: string;
+  status: 'calling' | 'completed' | 'error';
+  inputSummary?: string;
+  resultSummary?: string;
+  timestamp: string;
+}
+
 export interface Message {
   id: string;
   sessionId: string;
@@ -47,10 +55,15 @@ export interface Message {
     fileId?: string;
     mimeType?: string;
     size?: number;
-    toolCalls?: any[];
-    thinkingContent?: string[];
+    toolCalls?: ToolCall[];
+    activityType?: 'thinking' | 'tool_call' | 'tool_result';
+    isError?: boolean;
+    toolName?: string;
+    toolCallId?: string;
+    hasResult?: boolean;
+    seq?: number;
   };
-  toolCalls?: any[];
+  toolCalls?: ToolCall[];
   thinkingContent?: string[];
 }
 

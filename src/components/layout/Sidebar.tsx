@@ -26,7 +26,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import {
   Popover,
@@ -34,7 +33,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 
-import { useState } from 'react';
+
 
 export function Sidebar() {
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);

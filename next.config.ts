@@ -16,6 +16,12 @@ const nextConfig: NextConfig = {
   typescript: {
     ignoreBuildErrors: true,
   },
+  // 隐藏 HTTP 请求日志
+  logging: {
+    fetches: {
+      fullUrl: false,
+    },
+  },
 };
 
 export default nextConfig;

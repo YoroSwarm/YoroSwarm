@@ -1,4 +1,4 @@
-import type { LLMMessage, ToolDefinition } from './llm/types'
+import type { LLMMessage } from './llm/types'
 import { runAgentLoop, type ToolExecutor } from './agent-loop'
 import { leadTools } from './tools/lead-tools'
 import {
@@ -6,32 +6,60 @@ import {
   type OrchestrateInput,
 } from './lead-orchestrator'
 import { runTeammateLoop } from './teammate-runner'
-import { appendAgentContextEntry, listAgentContextEntries } from './agent-context'
+import { listExternalMessages } from './external-chat'
+import prisma from '@/lib/db'
 
-const LEAD_SYSTEM_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。你的职责是：
+const LEAD_SYSTEM_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
 
-1. **理解用户需求**：分析用户的请求，理解他们想要达成的目标
-2. **规划工作**：将复杂任务拆解为可执行的子任务
-3. **组建团队**：根据任务需要创建具有特定角色的队友
-4. **分配任务**：将子任务分配给合适的队友
-5. **协调工作**：监控进展，协调队友之间的协作
-6. **回复用户**：向用户汇报进展和结果
+## 你的工作模式
 
-## 重要规则
+### 第一步：评估用户需求
+- 分析用户请求的本质和目标
+- 判断是简单问答（直接回复）还是复杂任务（需要团队协作）
 
-- 你是领导者，**不要亲自执行具体工作**（如写文档、写代码、做分析）
-- 对于简单的问题（闲聊、简单问答），直接用 reply_to_user 回复用户即可
-- 对于需要执行的任务，你应该：
-  1. 先用 decompose_task 拆解任务
-  2. 再用 provision_teammate 创建需要的队友
-  3. 最后用 assign_task 分配任务给队友
-  4. 然后用 reply_to_user 告知用户你已开始处理
-- 你**必须**在每次交互中调用 reply_to_user 至少一次来回复用户
-- 所有工具名称和参数请严格按照定义使用
+### 第二步：规划与执行（仅对复杂任务）
+对于需要执行的任务，按以下顺序操作：
+1. **decompose_task** - 将任务拆解为可并行执行的子任务，明确依赖关系
+2. **provision_teammate** - 根据子任务需求创建合适的队友（可多创建几个实现并行）
+3. **assign_task** - 将子任务分配给队友，利用依赖系统实现自动调度
+4. **reply_to_user** - 告知用户工作计划
 
-## 当前状态信息
+### 第三步：监控与调整
+- 队友会自主执行任务并汇报结果
+- 如果队友报告失败，分析原因后决定是否重试或调整方案
+- 所有任务完成后，汇总结果向用户汇报
+- 如果用户要求的是“完整报告/综合分析/总结性报告/完整解读”，在分项分析之外，默认还需要一个最终整合视角；不要把“若干分项已完成”等同于“最终交付已完成”
 
-以下是你的上下文，包括历史消息、当前团队成员和任务状态。请基于这些信息做出决策。`
+## 重要原则
+
+### ✅ 必须做的事
+- 创建子任务时考虑并行性，无依赖的任务可并行执行
+- 对“多方面/多角度/多维度/分别分析/主题+人物+叙事+背景”这类天然可拆分工作，优先拆成多个可并行子任务，并尽量分配给不同队友，而不是让单个队友串行承担全部维度
+- 为每个子任务创建专门的队友，明确其角色和能力
+- 回复用户时简明扼要，说明工作计划和预期结果。对于长任务，默认只在开始时说明计划、在最终交付时汇总结果；中途只有在用户主动询问进度、任务受阻、或出现关键纠偏信息时再回复用户
+- 使用 assign_task 或 send_message_to_teammate 时，只能使用系统上下文中展示的真实 teammate ID；不要自己发明 41、81、teammate_0 之类的引用
+
+### ❌ 禁止做的事
+- **绝不亲自写文档、代码、分析报告** - 这是队友的工作
+- 不要频繁发送消息给队友询问进度 - 他们会自动汇报
+- 不要为单个简单任务创建过多队友 - 合理规划资源
+- 不要在中途不断调整计划 - 除非队友报告失败
+- 不要创建"跟进进度"、"汇报结果"、"催办"、"等待完成"之类的元任务；这些属于 Lead 自己的职责
+- 在所有任务已经完成后，不要再向队友发送“感谢”“请确认当前状态”“保持待命”等礼貌性或确认性消息；直接向用户汇总结果即可
+
+## 调度机制说明
+
+- 任务分配后会自动进入调度队列
+- 系统会根据依赖关系自动决定执行顺序
+- 无依赖的任务会并行执行（最多3个并发）
+- 队友之间可以直接通信协作，无需你中转
+
+## 工具使用
+- reply_to_user: 与用户沟通
+- decompose_task: 拆解任务，设置依赖关系
+- provision_teammate: 创建专业队友
+- assign_task: 分配任务（触发自动调度）
+- send_message_to_teammate: 仅在需要协调时使用`
 
 /**
  * 运行 Lead Agent Loop
@@ -72,6 +100,7 @@ export async function runLeadLoop(input: OrchestrateInput): Promise<void> {
           teammate_id: result.agent.id,
           name: result.agent.name,
           role: result.agent.role,
+          status: result.agent.status,
         })
       }
 
@@ -81,6 +110,9 @@ export async function runLeadLoop(input: OrchestrateInput): Promise<void> {
           description?: string
           priority?: number
           parentId?: string
+          parentTitle?: string
+          dependsOnTaskIds?: string[]
+          dependsOnTaskTitles?: string[]
         }>
         const result = await orchTools.decomposeTask(tasks)
         return JSON.stringify({
@@ -146,27 +178,60 @@ export async function runLeadLoop(input: OrchestrateInput): Promise<void> {
 
   // If the Lead never called reply_to_user (shouldn't happen but safety net)
   if (result.toolCallsMade === 0 && result.finalText) {
-    await orchTools.replyToUser(result.finalText)
+    await orchTools.replyToUser(result.finalText, {
+      thinkingContent: result.thinkingContent,
+      toolCalls: result.toolCalls,
+    })
+  } else if (result.toolCallsMade > 0) {
+    // Update the last message with thinking content and tool calls if not already included
+    // This ensures the metadata is saved even when reply_to_user was called during the loop
+    const { messages } = await listExternalMessages(input.swarmSessionId, input.userId)
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage && lastMessage.senderType === 'lead') {
+      const existingMetadata = lastMessage.metadata ? JSON.parse(lastMessage.metadata) : {}
+      if (!existingMetadata.thinkingContent && result.thinkingContent) {
+        await prisma.externalMessage.update({
+          where: { id: lastMessage.id },
+          data: {
+            metadata: JSON.stringify({
+              ...existingMetadata,
+              thinkingContent: result.thinkingContent,
+              toolCalls: result.toolCalls,
+            }),
+          },
+        })
+      }
+    }
   }
 }
 
-const LEAD_REEVALUATION_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。一个队友刚刚完成了一项任务。
+const LEAD_REEVALUATION_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。一个队友刚刚完成了一项任务，系统需要你重新评估整体情况。
 
-请评估当前情况并决定下一步行动：
+## 评估清单
 
-1. **检查所有任务状态**：是否还有待处理的任务？是否需要分配新任务？
-2. **评估整体进度**：用户的原始需求是否已经完全满足？
-3. **发现改进空间**：是否有遗漏的方面？是否需要补充额外的工作？
-4. **动态调整**：如果需要，创建新的队友或新的任务
+1. **任务完成情况**：还有哪些任务未完成？是否所有子任务都已执行？
+2. **整体成果评估**：已完成的工作是否满足用户的原始需求？
+3. **质量问题**：队友的产出是否符合预期？是否需要返工？
+4. **遗漏检查**：是否有遗漏的方面需要补充？
 
 ## 决策规则
 
-- 如果所有任务都已完成且结果令人满意 → 使用 reply_to_user 向用户汇报最终结果
-- 如果还有未分配的任务 → 分配给空闲的队友（或创建新队友）
-- 如果发现需要补充的工作 → 创建新任务并分配
-- 如果某些任务失败了 → 分析原因，决定是否重试
-- 你**不需要**每次都回复用户，只在有重要进展或所有工作完成时才 reply_to_user
-- 你是领导者，**不要亲自执行具体工作**`
+- **所有任务完成 + 结果满意** → 使用 reply_to_user 向用户汇报最终结果
+- **有未分配的就绪任务** → 分配给空闲队友
+- **任务失败** → 分析原因：是任务定义不清？还是队友能力不足？决定重试或调整
+- **发现遗漏** → 创建补充任务
+
+## 重要原则
+
+### ✅ 正确做法
+- 基于事实做决策，不要猜测队友的工作细节
+- 只在必要时联系用户（重要进展或全部完成）
+- 让调度系统自动管理任务执行，不要手动干预
+
+### ❌ 禁止做法
+- 不要频繁询问队友进度 - 系统会自动处理
+- 不要亲自查看或修改队友的工作成果
+- 不要为已完成的任务发送"收到"类消息`
 
 /**
  * Lead 自主反馈循环
@@ -273,6 +338,27 @@ export async function runLeadReEvaluation(
   console.log(
     `[LeadRunner] Re-evaluation completed: ${result.iterationsUsed} iterations, ${result.toolCallsMade} tool calls`
   )
+
+  // If the Lead replied to user, update the last message with thinking content and tool calls
+  if (result.toolCallsMade > 0) {
+    const { messages } = await listExternalMessages(swarmSessionId, userId)
+    const lastMessage = messages[messages.length - 1]
+    if (lastMessage && lastMessage.senderType === 'lead') {
+      const existingMetadata = lastMessage.metadata ? JSON.parse(lastMessage.metadata) : {}
+      if (!existingMetadata.thinkingContent && result.thinkingContent) {
+        await prisma.externalMessage.update({
+          where: { id: lastMessage.id },
+          data: {
+            metadata: JSON.stringify({
+              ...existingMetadata,
+              thinkingContent: result.thinkingContent,
+              toolCalls: result.toolCalls,
+            }),
+          },
+        })
+      }
+    }
+  }
 }
 
 /**
@@ -291,6 +377,7 @@ function buildLeadContextMessages(
   // Team status
   if (context.teammates.length > 0) {
     statusParts.push('## 当前团队成员')
+    statusParts.push('使用 assign_task 或 send_message_to_teammate 时，请直接复制下面的真实 teammate ID。不要使用序号、占位符、角色别名或自己猜测的名称。')
     for (const t of context.teammates) {
       statusParts.push(
         `- **${t.name}** (ID: ${t.id}) | 角色: ${t.role} | 状态: ${t.status} | 能力: ${t.capabilities || '通用'}`
@@ -433,6 +520,7 @@ function normalizeMessages(messages: LLMMessage[]): LLMMessage[] {
 
 /**
  * Trigger teammate execution in background (fire-and-forget)
+ * 添加状态检查和锁机制，防止重复启动
  */
 async function triggerTeammateExecution(
   swarmSessionId: string,
@@ -441,5 +529,54 @@ async function triggerTeammateExecution(
 ): Promise<void> {
   // Small delay to let DB writes settle
   await new Promise(resolve => setTimeout(resolve, 500))
-  await runTeammateLoop(swarmSessionId, teammateId, taskId)
+
+  // Check teammate and task status before triggering
+  const [teammate, task] = await Promise.all([
+    prisma.agent.findUnique({ where: { id: teammateId } }),
+    prisma.teamLeadTask.findUnique({ where: { id: taskId } }),
+  ])
+
+  if (!teammate || !task) {
+    console.error(`[LeadRunner] Cannot trigger teammate: teammate=${!!teammate}, task=${!!task}`)
+    return
+  }
+
+  // Check if teammate is already running
+  if (teammate.status === 'BUSY') {
+    console.log(`[LeadRunner] Teammate ${teammate.name} is already BUSY, skipping execution`)
+    return
+  }
+
+  // Check if task is in the right state
+  if (task.status !== 'ASSIGNED' && task.status !== 'PENDING') {
+    console.log(`[LeadRunner] Task ${taskId} is ${task.status}, not triggering teammate`)
+    return
+  }
+
+  // Check if task is assigned to this teammate
+  if (task.assigneeId !== teammateId) {
+    console.error(`[LeadRunner] Task ${taskId} is not assigned to teammate ${teammateId}`)
+    return
+  }
+
+  console.log(`[LeadRunner] Triggering teammate ${teammate.name} for task ${task.title}`)
+
+  try {
+    await runTeammateLoop(swarmSessionId, teammateId, taskId)
+  } catch (err) {
+    console.error(`[LeadRunner] Teammate execution failed:`, err)
+    // Update task status to FAILED
+    await prisma.teamLeadTask.update({
+      where: { id: taskId },
+      data: {
+        status: 'FAILED',
+        errorSummary: err instanceof Error ? err.message : 'Unknown error',
+      },
+    })
+    // Reset teammate status to ERROR
+    await prisma.agent.update({
+      where: { id: teammateId },
+      data: { status: 'ERROR' },
+    })
+  }
 }

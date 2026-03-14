@@ -29,6 +29,7 @@ type DeliveryScope = {
 
 let wss: WebSocketServer | null = null
 const clients = new Map<string, ClientState>()
+let hasLoggedPortInUse = false
 
 function getPayloadObject(payload: unknown): Record<string, unknown> {
   return typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {}
@@ -167,10 +168,35 @@ function handleSubscriptionMessage(clientId: string, type: 'subscribe' | 'unsubs
   })
 }
 
-export function ensureWebSocketServer() {
+export function ensureWebSocketServer(): WebSocketServer | null {
   if (wss) return wss
 
-  wss = new WebSocketServer({ port: 3001 })
+  try {
+    wss = new WebSocketServer({ port: 3001 })
+  } catch (error) {
+    // @ts-expect-error code might not exist on all error types
+    if (error?.code === 'EADDRINUSE') {
+      if (!hasLoggedPortInUse) {
+        console.warn('[WebSocket] Port 3001 already in use, server likely already running')
+        hasLoggedPortInUse = true
+      }
+      return null
+    }
+    throw error
+  }
+
+  // Handle async errors (e.g., port already in use)
+  wss.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EADDRINUSE') {
+      if (!hasLoggedPortInUse) {
+        console.warn('[WebSocket] Port 3001 already in use, another instance may be running')
+        hasLoggedPortInUse = true
+      }
+      wss = null
+    } else {
+      console.error('[WebSocket] Server error:', error)
+    }
+  })
 
   wss.on('connection', (socket: WebSocket, request) => {
     const requestedClientId = new URL(request.url || '/', 'ws://localhost:3001').searchParams.get('clientId') || undefined
@@ -289,17 +315,22 @@ export function ensureWebSocketServer() {
 }
 
 export function publishRealtimeMessage(message: WebSocketMessage, scope?: DeliveryScope) {
-  ensureWebSocketServer()
+  const server = ensureWebSocketServer()
+  if (!server) {
+    // WebSocket server not available (port in use or other issue)
+    // Silently skip - messages will be lost but app won't crash
+    return
+  }
   broadcast(message, { scope })
 }
 
 export async function GET() {
-  try {
-    ensureWebSocketServer()
+  const server = ensureWebSocketServer()
 
+  if (!server) {
     return new Response(
       JSON.stringify({
-        status: 'WebSocket server running',
+        status: 'WebSocket server port in use',
         port: 3001,
         clients: clients.size,
       }),
@@ -308,11 +339,17 @@ export async function GET() {
         headers: { 'Content-Type': 'application/json' },
       }
     )
-  } catch (error) {
-    console.error('WebSocket init error:', error)
-    return new Response(JSON.stringify({ error: 'Failed to initialize WebSocket' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    })
   }
+
+  return new Response(
+    JSON.stringify({
+      status: 'WebSocket server running',
+      port: 3001,
+      clients: clients.size,
+    }),
+    {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }
+  )
 }

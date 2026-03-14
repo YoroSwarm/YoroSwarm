@@ -6,8 +6,8 @@ import { formatMessageGroup } from '@/lib/utils/date';
 import { MessageItem } from './MessageItem';
 import { ThinkingIndicator } from './ThinkingIndicator';
 import { Loader2 } from 'lucide-react';
-import type { Message } from '@/types/chat';
-import type { StreamingState } from '@/hooks/use-messages';
+import type { Message, Agent } from '@/types/chat';
+import type { StreamingState, AgentStreamingState } from '@/hooks/use-messages';
 
 interface MessageListProps {
   sessionId: string;
@@ -16,12 +16,19 @@ interface MessageListProps {
   hasMore: boolean;
   onLoadMore: () => void;
   streamingState?: StreamingState;
+  activeStreamingStates?: AgentStreamingState[];
+  participants?: Agent[];
   className?: string;
 }
 
-export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState, className }: MessageListProps) {
+export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
+
+  // Find Lead agent ID from participants or streaming states
+  const leadAgentIdFromParticipants = participants.find(p => p.role === 'lead')?.id;
+  const leadAgentIdFromStreaming = activeStreamingStates.find(s => s.role === 'lead')?.agentId;
+  const leadAgentId = leadAgentIdFromParticipants || leadAgentIdFromStreaming;
 
   useEffect(() => {
     isFirstLoad.current = true;
@@ -34,12 +41,12 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
     }
   }, [messages, isLoading]);
 
-  // Auto-scroll when streaming state changes
+  // Auto-scroll when any agent is streaming
   useEffect(() => {
-    if (containerRef.current && streamingState?.isThinking) {
+    if (containerRef.current && activeStreamingStates.some(s => s.isThinking)) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
     }
-  }, [streamingState]);
+  }, [activeStreamingStates]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
@@ -114,6 +121,11 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                   new Date(message.createdAt).getTime() - 
                   new Date(prevMessage.createdAt).getTime() > 5 * 60 * 1000;
 
+                // Determine if sender is Lead
+                const isLead = message.sender.type === 'user' ||
+                  (message.sender.type === 'agent' &&
+                    (message.sender.id === leadAgentId || !leadAgentId));
+
                 return (
                   <MessageItem
                     key={message.id}
@@ -121,30 +133,13 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                     showAvatar={showAvatar}
                     isConsecutive={!showAvatar}
                     showTime={showTime}
+                    isLead={isLead}
                   />
                 );
               })}
             </div>
           </div>
         ))}
-        
-        {/* Loading/Thinking Placeholder when waiting for response */}
-        {isLoading && !streamingState?.isThinking && messages.length > 0 && (
-          <div className="flex gap-3 animate-slide-up flex-row">
-            <div className="w-8 shrink-0 flex items-center justify-center">
-               <div className="h-8 w-8 rounded-full bg-secondary border border-border flex items-center justify-center text-xs font-bold">
-                  S
-               </div>
-            </div>
-            <div className="relative px-4 py-3 bg-card border border-border text-foreground rounded-xl">
-               <div className="flex items-center gap-1">
-                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
-                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
-                 <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
-               </div>
-            </div>
-          </div>
-        )}
       </div>
 
       {messages.length === 0 && !isLoading && (
@@ -155,33 +150,20 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
         </div>
       )}
 
-      {/* Loading/Thinking Placeholder when waiting for response */}
-      {messages.length > 0 && messages[messages.length - 1].sender.type === 'user' && 
-       (!streamingState || (!streamingState.isThinking && streamingState.toolCalls.length === 0 && streamingState.thinkingContent.length === 0)) && (
-        <div className="mt-4 flex gap-3 animate-slide-up flex-row">
-          <div className="w-8 shrink-0 flex items-center justify-center">
-             <div className="h-8 w-8 rounded-full bg-secondary border border-border flex items-center justify-center text-xs font-bold">
-                S
-             </div>
-          </div>
-          <div className="relative px-4 py-3 bg-card border border-border text-foreground rounded-xl">
-             <div className="flex items-center gap-1">
-               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:0ms]" />
-               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:150ms]" />
-               <div className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50 animate-bounce [animation-delay:300ms]" />
-             </div>
-          </div>
-        </div>
-      )}
-
-      {streamingState && (streamingState.isThinking || streamingState.toolCalls.length > 0 || streamingState.thinkingContent.length > 0) && (
-        <div className="mt-4">
-          <ThinkingIndicator
-            agentName={streamingState.agentName}
-            isThinking={streamingState.isThinking}
-            thinkingContent={streamingState.thinkingContent}
-            toolCalls={streamingState.toolCalls}
-          />
+      {/* Thinking Indicators - Simple status only */}
+      {activeStreamingStates.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {activeStreamingStates
+            .filter((state) => state.isThinking)
+            .map((state) => (
+              <ThinkingIndicator
+                key={state.agentId}
+                agentName={state.agentName}
+                agentId={state.agentId}
+                role={state.role}
+                isThinking={state.isThinking}
+              />
+            ))}
         </div>
       )}
 

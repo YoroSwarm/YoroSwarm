@@ -2,19 +2,17 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { cn } from '@/lib/utils';
-import { SessionList } from './SessionList';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { SessionFiles } from '@/components/session/SessionFiles';
 import { SessionTasks } from '@/components/session/SessionTasks';
-import { SessionArtifacts } from '@/components/session/SessionArtifacts';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useSidebar } from '@/stores';
-import type { ChatMessagePayload } from '@/types/websocket';
+import type { ChatMessagePayload, AgentStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
-import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, Layers, FolderOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen } from 'lucide-react';
 
 interface ChatLayoutProps {
   className?: string;
@@ -29,14 +27,16 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   const [createError, setCreateError] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSessionId);
   const [activeTab, setActiveTab] = useState<TabType>('chat');
+  const [fileRefreshTick, setFileRefreshTick] = useState(0);
 
   const {
     sessions,
-    isLoading: isSessionsLoading,
-    error: sessionsError,
+    isLoading: _isSessionsLoading,
+    error: _sessionsError,
     createSession,
-    deleteSession,
-    archiveSession,
+    deleteSession: _deleteSession,
+    archiveSession: _archiveSession,
+    updateSessionParticipant,
   } = useSessions();
 
   useEffect(() => {
@@ -94,6 +94,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     sendMessage,
     appendRealtimeMessage,
     streamingState,
+    activeStreamingStates,
     handleStreamEvent,
   } = useMessages({
     sessionId: resolvedSessionId,
@@ -118,6 +119,37 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
       }
       if (message.type === 'agent_thinking' || message.type === 'tool_activity') {
         handleStreamEvent(message.type, message.payload);
+        return;
+      }
+      // Handle agent status updates to add new teammates to the session
+      if (message.type === 'agent_status') {
+        const update = message.payload as AgentStatusUpdate;
+        const hasRealAgentIdentity = typeof update.agent_id === 'string' && update.agent_id.trim().length > 0
+          && typeof update.name === 'string' && update.name.trim().length > 0;
+
+        if (update.swarm_session_id === resolvedSessionId && hasRealAgentIdentity) {
+          const normalizedStatus = update.status === 'idle'
+            ? 'online'
+            : update.status === 'busy' || update.status === 'running' || update.status === 'created' || update.status === 'initializing'
+              ? 'busy'
+              : update.status === 'error'
+                ? 'error'
+                : 'offline';
+
+          updateSessionParticipant(resolvedSessionId, {
+            id: update.agent_id,
+            name: update.name,
+            role: 'teammate',
+            status: normalizedStatus,
+          });
+        }
+        return;
+      }
+      if (message.type === 'internal_message') {
+        const payload = message.payload as { action?: string; swarm_session_id?: string };
+        if (payload.swarm_session_id === resolvedSessionId && (payload.action === 'artifact_created' || payload.action === 'file_created')) {
+          setFileRefreshTick((value) => value + 1);
+        }
       }
     },
   });
@@ -142,27 +174,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }
   };
 
-  const handleSelectSession = (id: string) => {
-    setCurrentSessionId(id);
-    storage.set(CURRENT_SESSION_STORAGE_KEY, id);
-  };
-
-  const handleDeleteSession = async (sessionId: string) => {
-    await deleteSession(sessionId);
-
-    if (resolvedSessionId !== sessionId) return;
-
-    const remaining = sessions.filter((session) => session.id !== sessionId);
-    const nextSessionId = remaining[0]?.id ?? null;
-    setCurrentSessionId(nextSessionId);
-    if (nextSessionId) {
-      storage.set(CURRENT_SESSION_STORAGE_KEY, nextSessionId);
-    } else {
-      storage.remove(CURRENT_SESSION_STORAGE_KEY);
-    }
-  };
-
-  const { sidebarOpen, toggleSidebar } = useSidebar();
+  const { sidebarOpen: _sidebarOpen, toggleSidebar } = useSidebar();
   
   return (
     <div className={cn('flex h-full w-full bg-background', className)}>
@@ -271,6 +283,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                             void loadMessages(true);
                         }}
                         streamingState={streamingState}
+                        activeStreamingStates={activeStreamingStates}
+                        participants={currentSession?.participants}
                         />
                     </div>
                     <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
@@ -292,7 +306,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     </div>
                 </div>
               )}
-              {activeTab === 'files' && <SessionFiles sessionId={resolvedSessionId} />}
+              {activeTab === 'files' && <SessionFiles sessionId={resolvedSessionId} refreshToken={fileRefreshTick} />}
               {activeTab === 'tasks' && <SessionTasks sessionId={resolvedSessionId} />}
             </>
           ) : (
@@ -357,25 +371,38 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                 <section>
                   <h3 className="mb-3 text-sm font-medium text-muted-foreground">会话团队</h3>
                   <div className="space-y-2">
-                    {(currentSession?.participants || []).map((participant) => (
-                      <div key={participant.id} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
-                        <div className="flex h-8 w-8 items-center justify-center bg-primary/10 text-sm font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
-                          {participant.name.charAt(0)}
+                    {(currentSession?.participants || []).map((participant) => {
+                      const participantName = typeof participant.name === 'string' && participant.name.trim().length > 0
+                        ? participant.name.trim()
+                        : typeof participant.role === 'string' && participant.role.trim().length > 0
+                          ? participant.role.trim()
+                          : 'Unknown';
+                      const participantInitial = participantName.charAt(0).toUpperCase();
+                      const participantRole = typeof participant.role === 'string' && participant.role.trim().length > 0
+                        ? participant.role.trim()
+                        : 'unknown';
+                      const participantStatus = participant.status || 'offline';
+
+                      return (
+                        <div key={participant.id} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                          <div className="flex h-8 w-8 items-center justify-center bg-primary/10 text-sm font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
+                            {participantInitial}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-bold">{participantName}</p>
+                            <p className="text-xs text-muted-foreground">{participantRole}</p>
+                          </div>
+                          <div className={cn(
+                            'h-2.5 w-2.5 border border-border',
+                            participantStatus === 'offline'
+                              ? 'bg-neutral-300'
+                              : participantStatus === 'busy'
+                                ? 'bg-amber-500'
+                                : 'bg-green-500'
+                          )} style={{ borderRadius: "50% 50% 50% 50% / 60% 40% 60% 40%" }} />
                         </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-bold">{participant.name}</p>
-                          <p className="text-xs text-muted-foreground">{participant.role}</p>
-                        </div>
-                        <div className={cn(
-                          'h-2.5 w-2.5 border border-border',
-                          participant.status === 'offline'
-                            ? 'bg-neutral-300'
-                            : participant.status === 'busy'
-                              ? 'bg-amber-500'
-                              : 'bg-green-500'
-                        )} style={{ borderRadius: "50% 50% 50% 50% / 60% 40% 60% 40%" }} />
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               </div>

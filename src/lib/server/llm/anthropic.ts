@@ -5,8 +5,6 @@ import type {
   LLMMessage,
   ContentBlock,
   ToolDefinition,
-  ToolUseBlock,
-  ToolResultBlock,
   StopReason,
 } from './types'
 

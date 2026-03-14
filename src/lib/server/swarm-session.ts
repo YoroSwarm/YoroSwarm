@@ -124,17 +124,24 @@ export async function getLeadAgentForSession(swarmSessionId: string) {
   const session = await prisma.swarmSession.findUnique({ where: { id: swarmSessionId } })
   if (!session) return null
 
+  // 1. 首先尝试使用 session.leadAgentId
   if (session.leadAgentId) {
     const lead = await prisma.agent.findUnique({ where: { id: session.leadAgentId } })
-    if (lead) return lead
+    if (lead) {
+      return lead
+    }
+    // leadAgentId 存在但 agent 不存在（可能已被删除），继续查找
+    console.warn(`[getLeadAgentForSession] session.leadAgentId ${session.leadAgentId} not found in agents table, searching for alternative`)
   }
 
+  // 2. 查找 role = 'team_lead' 的 agent
   const lead = await prisma.agent.findFirst({
     where: { swarmSessionId, role: 'team_lead' },
     orderBy: { createdAt: 'asc' },
   })
 
   if (lead) {
+    // 更新 session.leadAgentId 以保持一致性
     await prisma.swarmSession.update({
       where: { id: swarmSessionId },
       data: { leadAgentId: lead.id },
@@ -142,10 +149,17 @@ export async function getLeadAgentForSession(swarmSessionId: string) {
     return lead
   }
 
-  return prisma.agent.findFirst({
+  // 3. 最后尝试查找该 session 中的任何 agent
+  const anyAgent = await prisma.agent.findFirst({
     where: { swarmSessionId },
     orderBy: { createdAt: 'asc' },
   })
+
+  if (!anyAgent) {
+    console.warn(`[getLeadAgentForSession] No agents found for session: ${swarmSessionId}`)
+  }
+
+  return anyAgent
 }
 
 export async function getOrCreateExternalConversation(swarmSessionId: string, userId: string, title?: string | null) {

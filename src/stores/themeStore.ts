@@ -12,7 +12,7 @@ interface ThemeActions {
 
 type ThemeStore = ThemeState & ThemeActions;
 
-const getSystemTheme = (): 'light' | 'dark' => {
+const _getSystemTheme = (): 'light' | 'dark' => {
   if (typeof window === 'undefined') return 'light';
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     return 'dark';
@@ -32,11 +32,11 @@ const applyTheme = (theme: 'light' | 'dark') => {
 
 export const useThemeStore = create<ThemeStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       theme: 'system',
       resolvedTheme: 'light',
 
-      setTheme: (theme) => {
+      setTheme: (_theme) => {
         // Force light mode
         applyTheme('light');
         set({ theme: 'light', resolvedTheme: 'light' });

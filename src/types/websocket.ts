@@ -28,9 +28,9 @@ export interface WebSocketMessage {
   requires_ack?: boolean;
 }
 
-export type AgentStatus = 'created' | 'initializing' | 'idle' | 'running' | 'paused' | 'terminating' | 'terminated' | 'error';
+export type AgentStatus = 'created' | 'initializing' | 'idle' | 'busy' | 'running' | 'paused' | 'terminating' | 'terminated' | 'error';
 
-export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
+export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
 
 export interface AgentStatusUpdate {
   agent_id: string;
@@ -107,17 +107,20 @@ export interface AgentThinkingPayload {
   status: 'start' | 'thinking' | 'end';
   content?: string;
   timestamp: string;
+  seq?: number;
 }
 
 export interface ToolActivityPayload {
   agent_id: string;
   agent_name: string;
   swarm_session_id: string;
+  tool_call_id: string;
   tool_name: string;
   status: 'calling' | 'completed' | 'error';
   input_summary?: string;
   result_summary?: string;
   timestamp: string;
+  seq?: number;
 }
 
 export interface WebSocketSubscription {

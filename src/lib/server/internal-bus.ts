@@ -1,5 +1,66 @@
 import prisma from '@/lib/db'
 import { appendAgentContextEntry } from '@/lib/server/agent-context'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
+
+function normalizeAgentRef(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, '')
+}
+
+function buildAgentLookupKeys(agent: { id: string; name: string; role: string }): string[] {
+  return [agent.id, agent.name, agent.role]
+    .map(value => value.trim())
+    .filter(Boolean)
+}
+
+export async function resolveAgentInSession(
+  swarmSessionId: string,
+  agentRef: string,
+  options: {
+    excludeAgentIds?: string[]
+  } = {}
+) {
+  const trimmedRef = agentRef.trim()
+  if (!trimmedRef) return null
+
+  const candidates = await prisma.agent.findMany({
+    where: {
+      swarmSessionId,
+      status: { not: 'OFFLINE' },
+      ...(options.excludeAgentIds?.length ? { id: { notIn: options.excludeAgentIds } } : {}),
+    },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      swarmSessionId: true,
+      name: true,
+      role: true,
+      status: true,
+      kind: true,
+    },
+  })
+
+  const exactId = candidates.find(agent => agent.id === trimmedRef)
+  if (exactId) return exactId
+
+  const normalizedRef = normalizeAgentRef(trimmedRef)
+  const exactMatch = candidates.find(agent =>
+    buildAgentLookupKeys(agent).some(key => normalizeAgentRef(key) === normalizedRef)
+  )
+  if (exactMatch) return exactMatch
+
+  const fuzzyMatches = candidates.filter(agent =>
+    buildAgentLookupKeys(agent).some(key => {
+      const normalizedKey = normalizeAgentRef(key)
+      return normalizedKey.includes(normalizedRef) || normalizedRef.includes(normalizedKey)
+    })
+  )
+
+  if (fuzzyMatches.length === 1) {
+    return fuzzyMatches[0]
+  }
+
+  return null
+}
 
 export async function createInternalThread(input: {
   swarmSessionId: string
@@ -26,6 +87,26 @@ export async function sendInternalMessage(input: {
   content: string
   metadata?: Record<string, unknown> | null
 }) {
+  const [thread, sender, recipient] = await Promise.all([
+    prisma.internalThread.findUnique({ where: { id: input.threadId } }),
+    prisma.agent.findUnique({ where: { id: input.senderAgentId } }),
+    input.recipientAgentId
+      ? prisma.agent.findUnique({ where: { id: input.recipientAgentId } })
+      : Promise.resolve(null),
+  ])
+
+  if (!thread || thread.swarmSessionId !== input.swarmSessionId) {
+    throw new Error(`INVALID_INTERNAL_THREAD:${input.threadId}`)
+  }
+
+  if (!sender || sender.swarmSessionId !== input.swarmSessionId) {
+    throw new Error(`INVALID_SENDER_AGENT:${input.senderAgentId}`)
+  }
+
+  if (input.recipientAgentId && (!recipient || recipient.swarmSessionId !== input.swarmSessionId)) {
+    throw new Error(`INVALID_RECIPIENT_AGENT:${input.recipientAgentId}`)
+  }
+
   const message = await prisma.internalMessage.create({
     data: {
       swarmSessionId: input.swarmSessionId,
@@ -53,7 +134,278 @@ export async function sendInternalMessage(input: {
       },
       visibility: 'private',
     })
+
+    try {
+      const { bridgeInternalMessage } = await import('./cognitive-inbox/message-bridge')
+      await bridgeInternalMessage(input.swarmSessionId, message.id)
+    } catch (error) {
+      console.error('[InternalBus] Failed to bridge internal message into cognitive inbox:', error)
+    }
   }
 
   return message
+}
+
+/**
+ * 广播消息给所有团队成员（除发送者外）
+ * 用于队友间直接通信和团队公告
+ */
+export async function broadcastToTeam(input: {
+  swarmSessionId: string
+  senderAgentId: string
+  messageType: string
+  content: string
+  metadata?: Record<string, unknown> | null
+  excludeAgentIds?: string[] // 额外排除的agent ID列表
+}) {
+  // 获取所有活跃的团队成员
+  const teammates = await prisma.agent.findMany({
+    where: {
+      swarmSessionId: input.swarmSessionId,
+      status: { not: 'OFFLINE' },
+      id: { not: input.senderAgentId }, // 排除发送者
+    },
+  })
+
+  // 进一步排除指定列表
+  const excludeSet = new Set(input.excludeAgentIds || [])
+  const recipients = teammates.filter(t => !excludeSet.has(t.id))
+
+  // 创建广播线程
+  const thread = await createInternalThread({
+    swarmSessionId: input.swarmSessionId,
+    threadType: 'team_broadcast',
+    subject: `Broadcast from ${input.senderAgentId}`,
+  })
+
+  // 并行发送消息给所有接收者
+  const messages = await Promise.all(
+    recipients.map(recipient =>
+      sendInternalMessage({
+        swarmSessionId: input.swarmSessionId,
+        threadId: thread.id,
+        senderAgentId: input.senderAgentId,
+        recipientAgentId: recipient.id,
+        messageType: input.messageType,
+        content: input.content,
+        metadata: {
+          ...input.metadata,
+          isBroadcast: true,
+          totalRecipients: recipients.length,
+        },
+      })
+    )
+  )
+
+  // 发布实时消息通知
+  const sender = await prisma.agent.findUnique({
+    where: { id: input.senderAgentId },
+  })
+
+  publishRealtimeMessage(
+    {
+      type: 'internal_message',
+      payload: {
+        action: 'team_broadcast',
+        sender_id: input.senderAgentId,
+        sender_name: sender?.name || 'Unknown',
+        message_type: input.messageType,
+        content: input.content.slice(0, 200),
+        recipient_count: recipients.length,
+        swarm_session_id: input.swarmSessionId,
+        timestamp: new Date().toISOString(),
+      },
+    },
+    { sessionId: input.swarmSessionId }
+  )
+
+  return {
+    threadId: thread.id,
+    messageCount: messages.length,
+    recipientIds: recipients.map(r => r.id),
+    messages,
+  }
+}
+
+/**
+ * 发送点对点消息给特定队友
+ * 用于直接的队友间通信
+ */
+export async function sendPeerToPeerMessage(input: {
+  swarmSessionId: string
+  senderAgentId: string
+  recipientAgentId: string
+  messageType: string
+  content: string
+  metadata?: Record<string, unknown> | null
+}) {
+  const recipient = await resolveAgentInSession(input.swarmSessionId, input.recipientAgentId, {
+    excludeAgentIds: [input.senderAgentId],
+  })
+
+  if (!recipient) {
+    throw new Error(`Teammate not found: ${input.recipientAgentId}`)
+  }
+
+  // 创建或获取P2P线程
+  const threadId = await getOrCreateP2PThread(
+    input.swarmSessionId,
+    input.senderAgentId,
+    recipient.id
+  )
+
+  const message = await sendInternalMessage({
+    swarmSessionId: input.swarmSessionId,
+    threadId,
+    senderAgentId: input.senderAgentId,
+    recipientAgentId: recipient.id,
+    messageType: input.messageType,
+    content: input.content,
+    metadata: {
+      ...input.metadata,
+      isPeerToPeer: true,
+    },
+  })
+
+  // 获取发送者信息用于实时通知
+  const sender = await prisma.agent.findUnique({ where: { id: input.senderAgentId } })
+
+  publishRealtimeMessage(
+    {
+      type: 'internal_message',
+      payload: {
+        action: 'peer_message',
+        sender_id: input.senderAgentId,
+        sender_name: sender?.name || 'Unknown',
+        recipient_id: recipient.id,
+        recipient_name: recipient.name || 'Unknown',
+        message_type: input.messageType,
+        content: input.content.slice(0, 200),
+        swarm_session_id: input.swarmSessionId,
+        timestamp: new Date().toISOString(),
+      },
+    },
+    { sessionId: input.swarmSessionId }
+  )
+
+  return message
+}
+
+/**
+ * 获取或创建P2P线程
+ * 确保两个agent之间有唯一的通信线程
+ */
+async function getOrCreateP2PThread(
+  swarmSessionId: string,
+  agentA: string,
+  agentB: string
+): Promise<string> {
+  // 使用排序后的ID生成一致的线程类型标识
+  const sortedIds = [agentA, agentB].sort()
+  const threadType = `p2p_${sortedIds[0]}_${sortedIds[1]}`
+
+  let thread = await prisma.internalThread.findFirst({
+    where: {
+      swarmSessionId,
+      threadType,
+    },
+  })
+
+  if (!thread) {
+    const [agentAData, agentBData] = await Promise.all([
+      prisma.agent.findUnique({ where: { id: agentA } }),
+      prisma.agent.findUnique({ where: { id: agentB } }),
+    ])
+
+    thread = await createInternalThread({
+      swarmSessionId,
+      threadType,
+      subject: `P2P: ${agentAData?.name || agentA} ↔ ${agentBData?.name || agentB}`,
+    })
+  }
+
+  return thread.id
+}
+
+/**
+ * 获取团队成员列表（供新创建的队友感知其他队友）
+ */
+export async function getTeamRoster(swarmSessionId: string, excludeAgentId?: string) {
+  const teammates = await prisma.agent.findMany({
+    where: {
+      swarmSessionId,
+      status: { not: 'OFFLINE' },
+      ...(excludeAgentId ? { id: { not: excludeAgentId } } : {}),
+    },
+    orderBy: { createdAt: 'asc' },
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      description: true,
+      status: true,
+      capabilities: true,
+      createdAt: true,
+    },
+  })
+
+  return teammates.map(t => ({
+    ...t,
+    capabilities: t.capabilities ? JSON.parse(t.capabilities) : [],
+  }))
+}
+
+/**
+ * 为新创建的队友初始化团队感知
+ * 向新队友介绍现有团队成员
+ */
+export async function initializeTeamAwareness(input: {
+  swarmSessionId: string
+  newAgentId: string
+  leadAgentId: string
+}) {
+  const roster = await getTeamRoster(input.swarmSessionId, input.newAgentId)
+
+  if (roster.length === 0) {
+    return { hasExistingTeammates: false }
+  }
+
+  // 构建团队介绍信息
+  const teamInfo = roster
+    .map(t => `- ${t.name} (角色: ${t.role}, 状态: ${t.status})`)
+    .join('\n')
+
+  const introMessage = `欢迎来到团队！当前团队成员:\n${teamInfo}\n\n你可以使用 send_message_to_teammate 工具与他们直接通信协作。`
+
+  // 向新agent添加上下文条目
+  await appendAgentContextEntry({
+    swarmSessionId: input.swarmSessionId,
+    agentId: input.newAgentId,
+    sourceType: 'system',
+    sourceId: null,
+    entryType: 'team_introduction',
+    content: introMessage,
+    metadata: {
+      existingTeammates: roster.map(t => ({ id: t.id, name: t.name, role: t.role })),
+    },
+    visibility: 'private',
+  })
+
+  // 通知现有队友有新成员加入
+  await broadcastToTeam({
+    swarmSessionId: input.swarmSessionId,
+    senderAgentId: input.leadAgentId,
+    messageType: 'team_update',
+    content: `新团队成员已加入！请欢迎新队友。`,
+    metadata: {
+      event: 'teammate_joined',
+      newAgentId: input.newAgentId,
+    },
+  })
+
+  return {
+    hasExistingTeammates: true,
+    teammateCount: roster.length,
+    teammates: roster,
+  }
 }

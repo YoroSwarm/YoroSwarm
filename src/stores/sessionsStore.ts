@@ -1,8 +1,18 @@
 'use client';
 
 import { create } from 'zustand';
-import type { Session } from '@/types/chat';
+import type { Session, Agent } from '@/types/chat';
 import { swarmSessionsApi, type SwarmSessionResponse } from '@/lib/api/swarm-sessions';
+
+function normalizeParticipantName(name: string | null | undefined, fallbackRole: string): string {
+  const normalizedName = typeof name === 'string' ? name.trim() : '';
+  if (normalizedName) return normalizedName;
+
+  const normalizedRole = typeof fallbackRole === 'string' ? fallbackRole.trim() : '';
+  if (normalizedRole) return normalizedRole;
+
+  return 'Unknown';
+}
 
 function convertSession(session: SwarmSessionResponse): Session {
   const lead = session.agents.find((agent) => agent.id === session.lead_agent_id);
@@ -13,7 +23,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     description: session.goal,
     participants: session.agents.map((agent) => ({
       id: agent.id,
-      name: agent.name,
+      name: normalizeParticipantName(agent.name, agent.role),
       role: agent.id === session.lead_agent_id ? 'lead' : 'teammate',
       status: agent.status === 'offline' ? 'offline' : agent.status === 'busy' ? 'busy' : 'online',
     })),
@@ -52,6 +62,7 @@ interface SessionsActions {
   deleteSession: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   setSessions: (sessions: Session[] | ((prev: Session[]) => Session[])) => void;
+  updateSessionParticipant: (sessionId: string, agent: { id: string; name: string; role?: string; status?: string }) => void;
 }
 
 export const useSessionsStore = create<SessionsState & SessionsActions>((set) => ({
@@ -108,5 +119,48 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
     } else {
       set({ sessions });
     }
+  },
+
+  updateSessionParticipant: (sessionId, agent) => {
+    set((state) => ({
+      sessions: state.sessions.map((session) => {
+        if (session.id !== sessionId) return session;
+
+        const normalizedId = typeof agent.id === 'string' ? agent.id.trim() : '';
+        if (!normalizedId) {
+          return session;
+        }
+
+        const existingIndex = session.participants.findIndex((p) => p.id === normalizedId);
+        const normalizedStatus = agent.status === 'offline' ? 'offline' : agent.status === 'busy' ? 'busy' : 'online';
+        const normalizedName = normalizeParticipantName(agent.name, agent.role || 'teammate');
+
+        if (existingIndex >= 0) {
+          // Update existing participant
+          const updatedParticipants = [...session.participants];
+          updatedParticipants[existingIndex] = {
+            ...updatedParticipants[existingIndex],
+            name: normalizedName || updatedParticipants[existingIndex].name,
+            role: agent.role || updatedParticipants[existingIndex].role,
+            status: normalizedStatus as Agent['status'],
+          };
+          return { ...session, participants: updatedParticipants };
+        } else {
+          // Add new participant
+          return {
+            ...session,
+            participants: [
+              ...session.participants.filter((participant) => participant.id !== normalizedId),
+              {
+                id: normalizedId,
+                name: normalizedName,
+                role: (agent.role as Agent['role']) || 'teammate',
+                status: normalizedStatus as Agent['status'],
+              },
+            ],
+          };
+        }
+      }),
+    }));
   },
 }));

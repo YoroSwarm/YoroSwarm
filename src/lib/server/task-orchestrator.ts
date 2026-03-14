@@ -2,7 +2,7 @@ import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { appendAgentContextEntry } from '@/lib/server/agent-context'
 import { sendInternalMessage, createInternalThread } from '@/lib/server/internal-bus'
-import { mapDbStatusToApi, mapApiStatusToDb, serializeRealtimeTaskUpdate, serializeRealtimeAgentStatus } from '@/lib/server/swarm'
+import { mapDbStatusToApi, serializeRealtimeTaskUpdate, serializeRealtimeAgentStatus } from '@/lib/server/swarm'
 import { TeamLeadTaskStatus } from '@prisma/client'
 
 /**

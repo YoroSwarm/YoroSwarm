@@ -21,6 +21,7 @@ export interface AgentLoopOptions {
   model?: string
   maxIterations?: number
   onThinking?: (text: string) => void
+  stopOnSuccessfulTools?: string[]
 }
 
 /**
@@ -39,11 +40,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     executeTool,
     model,
     maxIterations = MAX_ITERATIONS,
+    stopOnSuccessfulTools = [],
   } = options
 
   const messages: LLMMessage[] = [...options.contextMessages]
   let totalToolCalls = 0
   const contextEntriesAdded: string[] = []
+  const thinkingContent: string[] = []
+  const toolCalls: { toolName: string; status: 'calling' | 'completed' | 'error'; inputSummary?: string; resultSummary?: string; timestamp: string }[] = []
+  const singleUseToolsPerRun = new Set(['reply_to_user', 'get_team_roster'])
+  const usedSingleUseTools = new Set<string>()
 
   // Broadcast agent status
   publishRealtimeMessage(
@@ -123,8 +129,14 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const textContent = extractTextContent(response)
     const toolUseBlocks = extractToolUseBlocks(response)
 
+    // Message sequence counter for this iteration to ensure ordering
+    let messageSeq = 0
+
     // Broadcast thinking content if LLM returned text alongside tool calls
     if (textContent) {
+      // Record thinking content for persistence
+      thinkingContent.push(textContent)
+
       publishRealtimeMessage(
         {
           type: 'agent_thinking',
@@ -135,6 +147,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             status: 'thinking',
             content: textContent,
             timestamp: new Date().toISOString(),
+            seq: messageSeq++,
           },
         },
         { sessionId: swarmSessionId }
@@ -149,9 +162,29 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       const toolResults: ToolResultBlock[] = []
 
       for (const toolUse of toolUseBlocks) {
+        if (singleUseToolsPerRun.has(toolUse.name) && usedSingleUseTools.has(toolUse.name)) {
+          console.warn(`[AgentLoop][${agentName}] Skipping repeated single-use tool: ${toolUse.name}`)
+          toolCalls.push({
+            toolName: toolUse.name,
+            status: 'error',
+            inputSummary: JSON.stringify(toolUse.input).slice(0, 100),
+            resultSummary: 'Skipped repeated single-use tool invocation in the same loop',
+            timestamp: new Date().toISOString(),
+          })
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: '工具执行失败: 同一轮处理中不允许重复调用该工具。',
+            is_error: true,
+          })
+          continue
+        }
+
         totalToolCalls++
         console.log(`[AgentLoop][${agentName}] Tool call #${totalToolCalls}: ${toolUse.name}`)
 
+        // Generate unique tool call ID for this specific tool invocation
+        const toolCallId = `tc-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const inputSummary = JSON.stringify(toolUse.input).slice(0, 100)
 
         // Broadcast tool activity - calling
@@ -162,10 +195,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               agent_id: agentId,
               agent_name: agentName,
               swarm_session_id: swarmSessionId,
+              tool_call_id: toolCallId,
               tool_name: toolUse.name,
               status: 'calling',
               input_summary: inputSummary,
               timestamp: new Date().toISOString(),
+              seq: messageSeq++,
             },
           },
           { sessionId: swarmSessionId }
@@ -192,6 +227,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         let isError = false
         try {
           result = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>)
+          if (!isError && singleUseToolsPerRun.has(toolUse.name)) {
+            usedSingleUseTools.add(toolUse.name)
+          }
         } catch (error) {
           isError = true
           result = `工具执行失败: ${error instanceof Error ? error.message : 'Unknown error'}`
@@ -206,6 +244,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               agent_id: agentId,
               agent_name: agentName,
               swarm_session_id: swarmSessionId,
+              tool_call_id: toolCallId,
               tool_name: toolUse.name,
               status: isError ? 'error' : 'completed',
               result_summary: result.slice(0, 100),
@@ -215,6 +254,19 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           { sessionId: swarmSessionId }
         )
 
+        const shouldStopAfterTool = !isError
+          && stopOnSuccessfulTools.includes(toolUse.name)
+          && !result.includes('\"success\":false')
+
+        // Record tool call for persistence (format compatible with frontend)
+        toolCalls.push({
+          toolName: toolUse.name,
+          status: isError ? 'error' : 'completed',
+          inputSummary: inputSummary,
+          resultSummary: result.slice(0, 200),
+          timestamp: new Date().toISOString(),
+        })
+
         toolResults.push({
           type: 'tool_result',
           tool_use_id: toolUse.id,
@@ -222,36 +274,63 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           is_error: isError,
         } satisfies ToolResultBlock)
 
+        if (shouldStopAfterTool) {
+          messages.push({ role: 'user', content: toolResults })
+
+          publishRealtimeMessage(
+            {
+              type: 'agent_thinking',
+              payload: {
+                agent_id: agentId,
+                agent_name: agentName,
+                swarm_session_id: swarmSessionId,
+                status: 'end',
+                timestamp: new Date().toISOString(),
+              },
+            },
+            { sessionId: swarmSessionId }
+          )
+
+          return {
+            finalText: textContent || '',
+            toolCallsMade: totalToolCalls,
+            iterationsUsed: iteration + 1,
+            contextEntriesAdded,
+            thinkingContent,
+            toolCalls,
+          }
+        }
+
         // Record tool call and result in context for persistence/recovery
-        const entryId = `tool-${toolUse.name}-${Date.now()}`
         await appendAgentContextEntry({
           swarmSessionId,
           agentId,
           sourceType: 'tool',
-          sourceId: toolUse.name,
+          sourceId: toolCallId, // Use toolCallId as sourceId for linking
           entryType: 'tool_call',
           content: `调用工具: ${toolUse.name}`,
           metadata: {
             toolUseId: toolUse.id,
             toolName: toolUse.name,
             toolInput: toolUse.input,
+            toolCallId, // Store for matching with tool_result
           },
         })
         await appendAgentContextEntry({
           swarmSessionId,
           agentId,
           sourceType: 'tool',
-          sourceId: toolUse.name,
+          sourceId: toolCallId, // Link to the tool_call entry
           entryType: 'tool_result',
-          content: `[工具: ${toolUse.name}] ${isError ? '失败' : '成功'}: ${result.slice(0, 500)}`,
+          content: result.slice(0, 500),
           metadata: {
             toolUseId: toolUse.id,
             toolName: toolUse.name,
             isError,
             resultContent: result.slice(0, 2000),
+            toolCallId, // Store for matching with tool_call
           },
         })
-        contextEntriesAdded.push(entryId)
       }
 
       // Add tool results as next user message
@@ -303,6 +382,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         toolCallsMade: totalToolCalls,
         iterationsUsed: iteration + 1,
         contextEntriesAdded,
+        thinkingContent: thinkingContent.length > 0 ? thinkingContent : undefined,
+        toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
       }
     }
   }
@@ -314,5 +395,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     toolCallsMade: totalToolCalls,
     iterationsUsed: maxIterations,
     contextEntriesAdded,
+    thinkingContent: thinkingContent.length > 0 ? thinkingContent : undefined,
+    toolCalls: toolCalls.length > 0 ? toolCalls : undefined,
   }
 }

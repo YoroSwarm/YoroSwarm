@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { swarmSessionsApi, type ExternalMessageResponse, type SendExternalMessageRequest } from '@/lib/api/swarm-sessions';
 import { filesApi } from '@/lib/api/files';
-import type { Agent, Message } from '@/types/chat';
+import type { Agent, Message, ToolCall } from '@/types/chat';
 import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload } from '@/types/websocket';
 
 export interface ToolCallState {
@@ -14,9 +14,24 @@ export interface ToolCallState {
   timestamp: string;
 }
 
+export interface AgentStreamingState {
+  isThinking: boolean;
+  agentName: string;
+  agentId: string;
+  role: 'lead' | 'teammate';
+  thinkingContent: string[];
+  toolCalls: ToolCallState[];
+  lastUpdatedAt: number;
+}
+
+// Map of agent_id -> streaming state
+export type StreamingStateMap = Map<string, AgentStreamingState>;
+
+// For backward compatibility - returns lead agent's state or empty
 export interface StreamingState {
   isThinking: boolean;
   agentName: string;
+  agentId: string;
   thinkingContent: string[];
   toolCalls: ToolCallState[];
 }
@@ -39,6 +54,16 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
   const lead = participants.find((participant) => participant.role === 'lead');
   const isUser = message.sender_type === 'user';
 
+  // 从 metadata 中提取附件信息
+  const metadataAttachments = (message.metadata as { attachments?: Array<{ fileId: string; fileName: string; mimeType: string }> })?.attachments;
+  const attachments = metadataAttachments?.map((att) => ({
+    id: att.fileId,
+    name: att.fileName,
+    type: (att.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
+    url: `/api/files/${att.fileId}`,
+    mimeType: att.mimeType,
+  }));
+
   return {
     id: message.id,
     sessionId: message.swarm_session_id,
@@ -52,8 +77,9 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
     status: 'received',
     createdAt: message.created_at,
     metadata: message.metadata as Message['metadata'],
-    toolCalls: (message.metadata as any)?.toolCalls,
-    thinkingContent: (message.metadata as any)?.thinkingContent,
+    toolCalls: (message.metadata as { toolCalls?: ToolCall[] })?.toolCalls,
+    thinkingContent: (message.metadata as { thinkingContent?: string[] })?.thinkingContent,
+    attachments,
   };
 }
 
@@ -64,12 +90,59 @@ export function useMessages(options: UseMessagesOptions) {
   const [error, setError] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const optimisticIds = useRef(new Set<string>());
-  const [streamingState, setStreamingState] = useState<StreamingState>({
-    isThinking: false,
-    agentName: '',
-    thinkingContent: [],
-    toolCalls: [],
-  });
+  const [streamingStateMap, setStreamingStateMap] = useState<StreamingStateMap>(new Map());
+
+  // Get all active streaming states (agents that are thinking or have recent activity)
+  // Also include agents that are marked as 'busy' in participants
+  const activeStreamingStates = useMemo(() => {
+    const now = Date.now();
+    const thirtySecondsAgo = now - 30000;
+
+    // Start with states from streamingStateMap
+    const states = Array.from(streamingStateMap.values()).filter(
+      (state) => state.isThinking || state.toolCalls.some((tool) => tool.status === 'calling') || state.lastUpdatedAt > thirtySecondsAgo
+    );
+
+    // Also include busy agents from participants that aren't already in the map
+    const busyAgents = participants.filter(
+      (p) => p.status === 'busy' && !streamingStateMap.has(p.id)
+    );
+
+    busyAgents.forEach((agent) => {
+      states.push({
+        agentId: agent.id,
+        agentName: agent.name,
+        role: (agent.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate',
+        isThinking: true, // Busy agents are considered thinking
+        thinkingContent: [],
+        toolCalls: [],
+        lastUpdatedAt: now,
+      });
+    });
+
+    return states;
+  }, [streamingStateMap, participants]);
+
+  // For backward compatibility - returns lead's state or first active state
+  const streamingState: StreamingState = useMemo(() => {
+    const active = activeStreamingStates[0];
+    if (active) {
+      return {
+        isThinking: active.isThinking,
+        agentName: active.agentName,
+        agentId: active.agentId,
+        thinkingContent: active.thinkingContent,
+        toolCalls: active.toolCalls,
+      };
+    }
+    return {
+      isThinking: false,
+      agentName: '',
+      agentId: '',
+      thinkingContent: [],
+      toolCalls: [],
+    };
+  }, [activeStreamingStates]);
 
   const participantMap = useMemo(() => participants, [participants]);
 
@@ -79,8 +152,113 @@ export function useMessages(options: UseMessagesOptions) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await swarmSessionsApi.getExternalMessages(sessionId);
-      setMessages(response.items.map((message) => convertExternalMessage(message, participantMap)));
+      // Load external messages and agent activities in parallel
+      const [messagesResponse, activitiesResponse] = await Promise.all([
+        swarmSessionsApi.getExternalMessages(sessionId),
+        swarmSessionsApi.getAgentActivities(sessionId),
+      ]);
+
+      // Convert external messages
+      const externalMessages = messagesResponse.items.map((message) => convertExternalMessage(message, participantMap));
+
+      // Convert agent activities to individual messages (chronological order)
+      // Process in order to handle tool_result -> tool_call associations
+      const activityMessages: Message[] = [];
+
+      for (const activity of activitiesResponse.items) {
+        const isToolCall = activity.activityType === 'tool_call';
+        const isToolResult = activity.activityType === 'tool_result';
+
+        if (activity.activityType === 'thinking') {
+          activityMessages.push({
+            id: activity.id,
+            sessionId,
+            type: 'text' as const,
+            content: activity.content,
+            sender: {
+              id: activity.agentId,
+              type: 'agent' as const,
+              name: activity.agentName,
+            },
+            status: 'received' as const,
+            createdAt: activity.createdAt,
+            metadata: {
+              activityType: 'thinking',
+            },
+            thinkingContent: [activity.content],
+          });
+        } else if (isToolCall) {
+          activityMessages.push({
+            id: activity.id,
+            sessionId,
+            type: 'text' as const,
+            content: `调用工具: ${activity.metadata?.toolName || 'unknown'}`,
+            sender: {
+              id: activity.agentId,
+              type: 'agent' as const,
+              name: activity.agentName,
+            },
+            status: 'received' as const,
+            createdAt: activity.createdAt,
+            metadata: {
+              activityType: 'tool_call',
+              toolName: activity.metadata?.toolName || 'unknown',
+              toolCallId: activity.metadata?.toolCallId,
+            },
+            toolCalls: [{
+              toolName: activity.metadata?.toolName || 'unknown',
+              status: 'calling' as const,
+              inputSummary: activity.metadata?.toolInput,
+              timestamp: activity.createdAt,
+            }],
+          });
+        } else if (isToolResult) {
+          // Find the matching tool_call message by toolCallId, or fallback to agent+name
+          const toolCallId = activity.metadata?.toolCallId;
+          let matchingToolCallIndex: number;
+
+          if (toolCallId) {
+            // Exact match by toolCallId
+            matchingToolCallIndex = [...activityMessages].reverse().findIndex(
+              (m) => m.metadata?.activityType === 'tool_call' &&
+                    m.metadata?.toolCallId === toolCallId
+            );
+          } else {
+            // Fallback: match by agent + toolName + pending status
+            matchingToolCallIndex = [...activityMessages].reverse().findIndex(
+              (m) => m.metadata?.activityType === 'tool_call' &&
+                    m.sender.id === activity.agentId &&
+                    m.metadata?.toolName === activity.metadata?.toolName &&
+                    m.toolCalls?.[0]?.status === 'calling'
+            );
+          }
+
+          if (matchingToolCallIndex >= 0) {
+            const actualIndex = activityMessages.length - 1 - matchingToolCallIndex;
+            const toolCallMsg = activityMessages[actualIndex];
+            if (toolCallMsg.toolCalls?.[0]) {
+              toolCallMsg.toolCalls[0].status = activity.metadata?.isError ? 'error' : 'completed';
+              toolCallMsg.toolCalls[0].resultSummary = activity.content;
+              toolCallMsg.metadata = {
+                ...toolCallMsg.metadata,
+                hasResult: true,
+                isError: activity.metadata?.isError,
+              };
+            }
+          }
+          // If no matching tool_call found, skip this result (orphaned result)
+        }
+      }
+
+      // Merge external messages and activity messages, sort by createdAt
+      const allMessages = [...externalMessages, ...activityMessages];
+      allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+      setMessages(allMessages);
+
+      // Clear streaming state since historical activities are now displayed as messages
+      setStreamingStateMap(new Map());
+
       setHasMore(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载消息失败');
@@ -89,11 +267,28 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }, [participantMap, sessionId]);
 
+  const streamingStateMapRef = useRef(streamingStateMap);
+  useEffect(() => {
+    streamingStateMapRef.current = streamingStateMap;
+  }, [streamingStateMap]);
+
   const appendRealtimeMessage = useCallback((incoming: IncomingRealtimeMessage) => {
     if (!sessionId) return;
     const targetSessionId = incoming.swarm_session_id;
     if (targetSessionId !== sessionId) return;
 
+    // 从 metadata 中提取附件信息
+    const metadataAttachments = (incoming.metadata as { attachments?: Array<{ fileId: string; fileName: string; mimeType: string }> })?.attachments;
+    const attachments = metadataAttachments?.map((att) => ({
+      id: att.fileId,
+      name: att.fileName,
+      type: (att.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
+      url: `/api/files/${att.fileId}`,
+      mimeType: att.mimeType,
+    }));
+
+    // Simple conversion - don't merge streaming state data
+    // Each activity (thinking, tool_call) is now a separate message
     const converted: Message = {
       id: incoming.id,
       sessionId,
@@ -109,8 +304,7 @@ export function useMessages(options: UseMessagesOptions) {
       status: 'received',
       createdAt: incoming.created_at || incoming.timestamp,
       metadata: incoming.metadata as Message['metadata'],
-      toolCalls: (incoming.metadata as any)?.toolCalls,
-      thinkingContent: (incoming.metadata as any)?.thinkingContent,
+      attachments,
     };
 
     setMessages((prev) => {
@@ -120,6 +314,27 @@ export function useMessages(options: UseMessagesOptions) {
 
       return [...prev, converted];
     });
+
+    // Clear streaming state for this agent after message is added
+    const senderStreamingState = streamingStateMapRef.current.get(incoming.sender_id);
+    if (senderStreamingState) {
+      setTimeout(() => {
+        setStreamingStateMap((prev) => {
+          const newMap = new Map(prev);
+          const agentState = newMap.get(incoming.sender_id);
+          if (agentState) {
+            newMap.set(incoming.sender_id, {
+              ...agentState,
+              isThinking: false,
+              thinkingContent: [],
+              toolCalls: [],
+              lastUpdatedAt: Date.now(),
+            });
+          }
+          return newMap;
+        });
+      }, 100);
+    }
   }, [participantMap, sessionId]);
 
   const sendMessage = useCallback(async (
@@ -212,61 +427,288 @@ export function useMessages(options: UseMessagesOptions) {
       setError(err instanceof Error ? err.message : '发送消息失败');
       throw err;
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadMessages, participantMap, sessionId]);
 
   const handleStreamEvent = useCallback((type: string, payload: unknown) => {
     if (type === 'agent_thinking') {
       const data = payload as AgentThinkingPayload;
-      if (data.status === 'start') {
-        setStreamingState({
-          isThinking: true,
-          agentName: data.agent_name,
-          thinkingContent: [],
-          toolCalls: [],
+      const agentId = data.agent_id;
+
+      // Update streaming state for auto-scroll and indicators
+      setStreamingStateMap((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(agentId);
+
+        if (data.status === 'start') {
+          newMap.set(agentId, {
+            agentId,
+            agentName: data.agent_name,
+            role: existing?.role || 'teammate',
+            isThinking: true,
+            thinkingContent: [],
+            toolCalls: existing?.toolCalls || [],
+            lastUpdatedAt: Date.now(),
+          });
+        } else if (data.status === 'thinking' && data.content) {
+          const current = newMap.get(agentId);
+          if (current) {
+            const lastContent = current.thinkingContent[current.thinkingContent.length - 1];
+            if (lastContent !== data.content) {
+              newMap.set(agentId, {
+                ...current,
+                thinkingContent: [...current.thinkingContent, data.content],
+                lastUpdatedAt: Date.now(),
+              });
+            }
+          } else {
+            newMap.set(agentId, {
+              agentId,
+              agentName: data.agent_name,
+              role: 'teammate',
+              isThinking: true,
+              thinkingContent: [data.content],
+              toolCalls: [],
+              lastUpdatedAt: Date.now(),
+            });
+          }
+        } else if (data.status === 'end') {
+          const current = newMap.get(agentId);
+          if (current) {
+            const hasPendingTools = current.toolCalls.some((tool) => tool.status === 'calling');
+            if (!hasPendingTools) {
+              newMap.delete(agentId);
+            } else {
+              newMap.set(agentId, {
+                ...current,
+                isThinking: false,
+                lastUpdatedAt: Date.now(),
+              });
+            }
+          }
+        }
+        return newMap;
+      });
+
+      // Also create individual message for chronological display
+      if (data.status === 'thinking' && data.content) {
+        const thinkingMessage: Message = {
+          id: `thinking-${agentId}-${Date.now()}`,
+          sessionId: sessionId || '',
+          type: 'text',
+          content: data.content,
+          sender: {
+            id: agentId,
+            type: 'agent',
+            name: data.agent_name,
+          },
+          status: 'received',
+          createdAt: data.timestamp || new Date().toISOString(),
+          metadata: {
+            activityType: 'thinking',
+            seq: data.seq,
+          },
+          thinkingContent: [data.content],
+        };
+
+        setMessages((prev) => {
+          // Check for duplicate content
+          const lastMessage = prev[prev.length - 1];
+          if (lastMessage?.metadata?.activityType === 'thinking' &&
+              lastMessage.sender.id === agentId &&
+              lastMessage.content === data.content) {
+            return prev;
+          }
+          // Add message and sort by timestamp, then by seq
+          const newMessages = [...prev, thinkingMessage];
+          return newMessages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            // If same timestamp, sort by seq
+            const seqA = a.metadata?.seq ?? 0;
+            const seqB = b.metadata?.seq ?? 0;
+            return seqA - seqB;
+          });
         });
-      } else if (data.status === 'thinking' && data.content) {
-        setStreamingState((prev) => ({
-          ...prev,
-          thinkingContent: [...prev.thinkingContent, data.content!],
-        }));
-      } else if (data.status === 'end') {
-        setStreamingState((prev) => ({
-          ...prev,
-          isThinking: false,
-        }));
       }
     } else if (type === 'tool_activity') {
       const data = payload as ToolActivityPayload;
-      setStreamingState((prev) => {
-        const existingIndex = prev.toolCalls.findIndex(
-          (tc) => tc.toolName === data.tool_name && tc.status === 'calling'
-        );
+      const agentId = data.agent_id;
+
+      // Update streaming state for auto-scroll and indicators
+      setStreamingStateMap((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(agentId);
+
         if (data.status === 'calling') {
-          return {
-            ...prev,
+          const currentToolCalls = existing?.toolCalls || [];
+          newMap.set(agentId, {
+            agentId,
+            agentName: data.agent_name,
+            role: existing?.role || 'teammate',
+            isThinking: existing?.isThinking ?? true,
+            thinkingContent: existing?.thinkingContent || [],
             toolCalls: [
-              ...prev.toolCalls,
+              ...currentToolCalls,
               {
                 toolName: data.tool_name,
                 status: 'calling',
                 inputSummary: data.input_summary,
-                timestamp: data.timestamp,
+                timestamp: data.timestamp || new Date().toISOString(),
               },
             ],
-          };
-        } else if (existingIndex >= 0) {
-          const updated = [...prev.toolCalls];
-          updated[existingIndex] = {
-            ...updated[existingIndex],
-            status: data.status,
-            resultSummary: data.result_summary,
-          };
-          return { ...prev, toolCalls: updated };
+            lastUpdatedAt: Date.now(),
+          });
+        } else {
+          const current = newMap.get(agentId);
+          if (current) {
+            const toolIndex = current.toolCalls.findIndex(
+              (tc) => tc.toolName === data.tool_name && tc.status === 'calling'
+            );
+            if (toolIndex >= 0) {
+              const updatedToolCalls = [...current.toolCalls];
+              updatedToolCalls[toolIndex] = {
+                ...updatedToolCalls[toolIndex],
+                status: data.status,
+                resultSummary: data.result_summary,
+              };
+              newMap.set(agentId, {
+                ...current,
+                toolCalls: updatedToolCalls,
+                lastUpdatedAt: Date.now(),
+              });
+              const updated = newMap.get(agentId);
+              if (updated && !updated.isThinking && !updated.toolCalls.some((tool) => tool.status === 'calling')) {
+                newMap.delete(agentId);
+              }
+            }
+          }
         }
-        return prev;
+        return newMap;
       });
+
+      // Create/update individual message for chronological display
+      if (data.status === 'calling') {
+        const toolMessageId = data.tool_call_id || `tool-call-${agentId}-${data.timestamp || Date.now()}-${data.seq ?? 0}-${data.tool_name}`;
+        const toolCallMessage: Message = {
+          id: toolMessageId,
+          sessionId: sessionId || '',
+          type: 'text',
+          content: `调用工具: ${data.tool_name}`,
+          sender: {
+            id: agentId,
+            type: 'agent',
+            name: data.agent_name,
+          },
+          status: 'received',
+          createdAt: data.timestamp || new Date().toISOString(),
+          metadata: {
+            activityType: 'tool_call',
+            toolName: data.tool_name,
+            toolCallId: data.tool_call_id,
+            seq: data.seq,
+          },
+          toolCalls: [{
+            toolName: data.tool_name,
+            status: 'calling',
+            inputSummary: data.input_summary,
+            timestamp: data.timestamp || new Date().toISOString(),
+          }],
+        };
+
+        setMessages((prev) => {
+          if (prev.some((message) => message.id === toolMessageId)) {
+            return prev;
+          }
+          const newMessages = [...prev, toolCallMessage];
+          return newMessages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            const seqA = a.metadata?.seq ?? 0;
+            const seqB = b.metadata?.seq ?? 0;
+            return seqA - seqB;
+          });
+        });
+      } else {
+        // Update existing tool_call message with result instead of creating new message
+        setMessages((prev) => {
+          // Find the matching tool_call message by tool_call_id, or fallback to agent+name matching
+          let toolCallIndex = [...prev].reverse().findIndex(
+            (m) => m.metadata?.activityType === 'tool_call' &&
+                  m.metadata?.toolCallId === data.tool_call_id
+          );
+
+          // Fallback: if no exact tool_call_id match, find by agent+name+status
+          if (toolCallIndex < 0) {
+            toolCallIndex = [...prev].reverse().findIndex(
+              (m) => m.metadata?.activityType === 'tool_call' &&
+                    m.sender.id === agentId &&
+                    m.metadata?.toolName === data.tool_name &&
+                    m.toolCalls?.[0]?.status === 'calling'
+            );
+          }
+
+          if (toolCallIndex >= 0) {
+            const actualIndex = prev.length - 1 - toolCallIndex;
+            const updatedMessages = [...prev];
+            const message = updatedMessages[actualIndex];
+
+            updatedMessages[actualIndex] = {
+              ...message,
+              toolCalls: [{
+                ...message.toolCalls![0],
+                status: data.status,
+                resultSummary: data.result_summary,
+              }],
+              metadata: {
+                ...message.metadata,
+                hasResult: true,
+                isError: data.status === 'error',
+              },
+            };
+            return updatedMessages;
+          }
+
+          // If no matching tool_call found, create a standalone result message (fallback)
+          const fallbackResultId = data.tool_call_id
+            ? `tool-result-${data.tool_call_id}`
+            : `tool-result-${agentId}-${data.timestamp || Date.now()}-${data.seq ?? 0}-${data.tool_name}`;
+          const toolResultMessage: Message = {
+            id: fallbackResultId,
+            sessionId: sessionId || '',
+            type: 'text',
+            content: data.result_summary || '',
+            sender: {
+              id: agentId,
+              type: 'agent',
+              name: data.agent_name,
+            },
+            status: 'received',
+            createdAt: data.timestamp || new Date().toISOString(),
+            metadata: {
+              activityType: 'tool_result',
+              isError: data.status === 'error',
+              seq: data.seq,
+            },
+          };
+          if (prev.some((message) => message.id === fallbackResultId)) {
+            return prev;
+          }
+          const newMessages = [...prev, toolResultMessage];
+          return newMessages.sort((a, b) => {
+            const timeA = new Date(a.createdAt).getTime();
+            const timeB = new Date(b.createdAt).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            const seqA = a.metadata?.seq ?? 0;
+            const seqB = b.metadata?.seq ?? 0;
+            return seqA - seqB;
+          });
+        });
+      }
     }
-  }, []);
+  }, [sessionId]);
 
   useEffect(() => {
     if (autoLoad && sessionId) {
@@ -310,7 +752,9 @@ export function useMessages(options: UseMessagesOptions) {
     loadMessages,
     sendMessage,
     appendRealtimeMessage,
-    streamingState,
+    streamingState, // Backward compatibility - returns first active state
+    streamingStateMap,
+    activeStreamingStates, // Array of all active agent states
     handleStreamEvent,
   };
 }

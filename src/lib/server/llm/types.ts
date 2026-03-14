@@ -60,7 +60,7 @@ export interface LLMCallOptions {
   temperature?: number
 }
 
-export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens'
+export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'tool_exit'
 
 export interface LLMResponse {
   content: ContentBlock[]
@@ -77,6 +77,20 @@ export interface AgentLoopResult {
   toolCallsMade: number
   iterationsUsed: number
   contextEntriesAdded: string[]
+  thinkingContent?: string[]
+  toolCalls?: PersistedToolCallRecord[]
+}
+
+/**
+ * 持久化到数据库的工具调用记录格式
+ * 与前端 ToolCallRecord 接口兼容
+ */
+export interface PersistedToolCallRecord {
+  toolName: string
+  status: 'calling' | 'completed' | 'error'
+  inputSummary?: string
+  resultSummary?: string
+  timestamp: string
 }
 
 // ============================================
