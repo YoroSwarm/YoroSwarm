@@ -112,7 +112,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'update_self_todo',
-    description: '对 Lead 私有待办做单步操作。用于跟踪多阶段任务进度。一次调用只做一种操作：clear / add / insert / delete / update。clear=清空全部待办；add=追加一项到末尾；insert=插入到指定位置；delete=删除一项；update=仅允许更新已有项的 status，不能改 title/details/category/sourceRef。状态语义：pending=尚未开始，in_progress=进行中，completed=已全部交付。对于复杂多阶段任务（如包含分析、报告、讲稿、PPT等），应为每个阶段创建独立的 Todo 项，便于跟踪整体进度。'
+    description: '对 Lead 私有待办做单步操作。用于跟踪多阶段任务进度。一次调用只做一种操作：clear / add / insert / delete / update。clear=清空全部待办；add=追加一项到末尾；insert=插入到指定位置；delete=删除一项；update=仅允许更新已有项的 status，不能改 title/details/category/sourceRef。状态语义：pending=尚未开始，in_progress=进行中，completed=已全部交付。对于复杂多阶段任务（如包含分析、报告、讲稿、PPT等），应为每个阶段创建独立的 Todo 项，便于跟踪整体进度。',
     input_schema: {
       type: 'object' as const,
       properties: {
