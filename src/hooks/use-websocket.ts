@@ -86,6 +86,7 @@ export type WebSocketMessageType =
   | 'disconnected'
   | 'message'
   | 'agent_status'
+  | 'execution_update'
   | 'task_update'
   | 'chat_message'
   | 'internal_message'

@@ -136,30 +136,44 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
             { label: '内容', value: input.content, truncate: true },
           ],
         };
-      case 'write_artifact':
+      case 'list_workspace_files':
         return {
-          icon: '📝',
-          title: '创建工件',
+          icon: '📂',
+          title: '列出工作区',
           fields: [
-            { label: '标题', value: input.title },
-            { label: '类型', value: input.kind },
-            ...(input.summary ? [{ label: '摘要', value: input.summary, truncate: true }] : []),
+            { label: '目录', value: input.directory_path || '/' },
+            { label: '递归', value: input.recursive ? '是' : '否' },
           ],
         };
-      case 'write_file':
+      case 'create_workspace_directory':
+        return {
+          icon: '📁',
+          title: '新建目录',
+          fields: [{ label: '路径', value: input.path }],
+        };
+      case 'create_workspace_file':
         return {
           icon: '📄',
-          title: '写入文件',
+          title: '新建文件',
           fields: [
-            { label: '文件名', value: input.filename },
+            { label: '路径', value: input.path },
             ...(input.mime_type ? [{ label: '类型', value: input.mime_type }] : []),
           ],
         };
-      case 'read_file':
+      case 'replace_workspace_file':
+        return {
+          icon: '📝',
+          title: '替换文件',
+          fields: [
+            { label: '路径', value: input.path },
+            ...(input.mime_type ? [{ label: '类型', value: input.mime_type }] : []),
+          ],
+        };
+      case 'read_workspace_file':
         return {
           icon: '📖',
           title: '读取文件',
-          fields: [{ label: '文件ID', value: input.file_id }],
+          fields: [{ label: '路径', value: input.path }],
         };
       case 'report_task_completion':
         return {
@@ -197,9 +211,11 @@ function getToolDisplayName(toolName: string | undefined): string {
     'assign_task': '分配任务',
     'send_message_to_teammate': '发送消息',
     'send_message_to_lead': '消息 Lead',
-    'write_artifact': '创建工件',
-    'write_file': '写入文件',
-    'read_file': '读取文件',
+    'list_workspace_files': '列出工作区',
+    'create_workspace_directory': '新建目录',
+    'create_workspace_file': '新建文件',
+    'replace_workspace_file': '替换文件',
+    'read_workspace_file': '读取文件',
     'report_task_completion': '报告完成',
   };
   return nameMap[toolName] || toolName;
@@ -275,30 +291,40 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
       }
       return { type: 'success', content: output };
       
-    case 'write_file':
+    case 'create_workspace_directory':
       if (parsedOutput) {
         const fields: ToolOutputField[] = [
-          { label: '文件ID', value: String(parsedOutput.fileId || parsedOutput.id || '-') },
-          { label: '文件名', value: String(parsedOutput.filename || parsedOutput.name || '-') },
+          { label: '路径', value: String(parsedOutput.path || '-') },
+          { label: '类型', value: 'directory' },
+        ];
+        return { type: 'fields', content: output, fields };
+      }
+      return { type: 'success', content: output };
+
+    case 'create_workspace_file':
+    case 'replace_workspace_file':
+      if (parsedOutput) {
+        const fields: ToolOutputField[] = [
+          { label: '文件ID', value: String(parsedOutput.file_id || parsedOutput.id || '-') },
+          { label: '路径', value: String(parsedOutput.path || '-') },
           { label: '大小', value: String(parsedOutput.size ? `${parsedOutput.size} 字节` : '-') },
+          { label: '操作', value: String(parsedOutput.operation || '-') },
         ];
         return { type: 'fields', content: output, fields };
       }
       return { type: 'success', content: output };
-      
-    case 'write_artifact':
-      if (parsedOutput) {
-        const fields: ToolOutputField[] = [
-          { label: '工件ID', value: String(parsedOutput.artifact_id || parsedOutput.id || '-') },
-          { label: '标题', value: String(parsedOutput.title || '-') },
-          { label: '类型', value: String(parsedOutput.kind || '-') },
-        ];
-        return { type: 'fields', content: output, fields };
+
+    case 'list_workspace_files':
+      if (parsedOutput && Array.isArray(parsedOutput.entries)) {
+        return {
+          type: 'list',
+          content: output,
+          items: parsedOutput.entries.map((entry: { path?: string; type?: string }) => `${entry.type === 'directory' ? '📁' : '📄'} ${entry.path || '-'}`),
+        };
       }
-      return { type: 'success', content: output };
-      
-    case 'read_file':
-      // For read_file, the output is usually the file content
+      return { type: 'text', content: output };
+
+    case 'read_workspace_file':
       return { type: 'code', content: output, language: 'text' };
       
     case 'reply_to_user':

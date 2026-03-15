@@ -3,6 +3,7 @@ export type WebSocketMessageType =
   | 'disconnected'
   | 'message'
   | 'agent_status'
+  | 'execution_update'
   | 'task_update'
   | 'chat_message'
   | 'internal_message'
@@ -42,6 +43,20 @@ export interface AgentStatusUpdate {
   last_active_at?: string;
   swarm_session_id?: string;
   message?: string;
+  timestamp: string;
+}
+
+export interface ExecutionStatusUpdate {
+  execution_id: string;
+  agent_id: string;
+  agent_name: string;
+  swarm_session_id: string;
+  status: 'active' | 'interrupted' | 'completed' | 'cancelled';
+  kind: 'message_batch' | 'deep_work' | 'tool_driven' | 'recovery' | 'idle';
+  description: string;
+  work_unit_key?: string;
+  interruption_count: number;
+  source_message_ids?: string[];
   timestamp: string;
 }
 

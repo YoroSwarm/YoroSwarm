@@ -117,9 +117,12 @@ function convertFromAnthropicResponse(response: Anthropic.Message): LLMResponse 
     content,
     stopReason,
     model: response.model,
+    provider: 'anthropic',
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
+      cacheCreationTokens: response.usage.cache_creation_input_tokens || 0,
+      cacheReadTokens: response.usage.cache_read_input_tokens || 0,
     },
   }
 }

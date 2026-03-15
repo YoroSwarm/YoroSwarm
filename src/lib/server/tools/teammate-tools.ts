@@ -2,81 +2,108 @@ import type { ToolDefinition } from '../llm/types'
 
 export const teammateTools: ToolDefinition[] = [
   {
-    name: 'write_artifact',
-    description: '创建或写入一个工件（文档、代码、分析报告等）。工件会保存在系统中供团队和用户使用。',
+    name: 'list_workspace_files',
+    description: '列出当前会话工作区中的文件和目录。可按目录查看，也可递归列出整个工作区。',
     input_schema: {
       type: 'object' as const,
       properties: {
-        title: {
+        directory_path: {
           type: 'string',
-          description: '工件标题',
+          description: '要查看的目录，相对工作区根目录；留空表示根目录',
         },
-        content: {
-          type: 'string',
-          description: '工件的完整内容',
-        },
-        kind: {
-          type: 'string',
-          enum: ['document', 'code', 'analysis', 'report', 'spreadsheet', 'outline', 'other'],
-          description: '工件类型',
-        },
-        summary: {
-          type: 'string',
-          description: '工件的简短摘要',
+        recursive: {
+          type: 'boolean',
+          description: '是否递归列出子目录中的全部文件',
         },
       },
-      required: ['title', 'content', 'kind'],
+      required: [],
     },
   },
   {
-    name: 'write_file',
-    description: '创建一个文件并保存到系统中，用户可以下载。适用于创建代码文件、文档、报告等。',
+    name: 'read_workspace_file',
+    description: '读取当前会话工作区中的文件内容，使用相对路径而不是文件ID。',
     input_schema: {
       type: 'object' as const,
       properties: {
-        filename: {
+        path: {
           type: 'string',
-          description: '文件名（包含扩展名），如 "report.md", "analysis.py", "data.csv"',
+          description: '文件相对路径，例如 "reports/emma-analysis.md"',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'create_workspace_directory',
+    description: '在当前会话工作区中创建真实目录。目录将直接创建在文件系统中，后续可供文件写入和 shell 使用。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '要创建的目录相对路径，例如 "reports/week1"',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'create_workspace_file',
+    description: '在当前会话工作区中新建文件；如目录不存在会自动创建。若文件已存在则报错。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '新文件的相对路径，例如 "notes/outline.md"',
         },
         content: {
           type: 'string',
-          description: '文件的完整内容',
+          description: '文件完整内容',
         },
         mime_type: {
           type: 'string',
-          description: '文件MIME类型，如 "text/markdown", "text/plain", "application/json"。如不指定将根据扩展名自动推断。',
+          description: 'MIME 类型；不传则根据扩展名推断',
         },
       },
-      required: ['filename', 'content'],
+      required: ['path', 'content'],
     },
   },
   {
-    name: 'read_file',
-    description: '读取一个已上传的文件内容。通过文件ID获取文件信息。',
+    name: 'replace_workspace_file',
+    description: '替换当前会话工作区中已有文件的内容。目标文件必须已存在。',
     input_schema: {
       type: 'object' as const,
       properties: {
-        file_id: {
+        path: {
           type: 'string',
-          description: '要读取的文件ID',
+          description: '要替换的文件相对路径',
+        },
+        content: {
+          type: 'string',
+          description: '新的完整文件内容',
+        },
+        mime_type: {
+          type: 'string',
+          description: 'MIME 类型；不传则沿用现有类型或根据扩展名推断',
         },
       },
-      required: ['file_id'],
+      required: ['path', 'content'],
     },
   },
   {
     name: 'report_task_completion',
-    description: '向 Lead 汇报任务完成情况。必须在任务完成时调用此工具。',
+    description: '向 Lead 汇报任务完成情况。只有在任务目标已经真正达成时才能调用；未调用该工具，系统会视为任务仍未完成。',
     input_schema: {
       type: 'object' as const,
       properties: {
         report: {
           type: 'string',
-          description: '任务完成的详细报告，包括结果摘要和关键发现',
+          description: '任务完成的详细报告，包括交付结果、关键发现、验证结论或后续使用说明',
         },
         result_summary: {
           type: 'string',
-          description: '简短的结果摘要（一到两句话）',
+          description: '简短的结果摘要（一到两句话），便于 Lead 快速判断是否可以进入下一阶段',
         },
       },
       required: ['report'],
@@ -103,7 +130,7 @@ export const teammateTools: ToolDefinition[] = [
   },
   {
     name: 'send_message_to_teammate',
-    description: '向特定队友发送直接消息，用于协作、同步信息或讨论相关任务。',
+    description: '向特定队友发送直接消息，用于协作、同步信息、讨论相关任务，或发送 execution control 指令。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -117,8 +144,8 @@ export const teammateTools: ToolDefinition[] = [
         },
         message_type: {
           type: 'string',
-          enum: ['coordination', 'info_share', 'question', 'response'],
-          description: '消息类型：coordination=协调工作, info_share=分享信息, question=提问, response=回复',
+          enum: ['coordination', 'info_share', 'question', 'response', 'pause_execution', 'resume_execution', 'cancel_execution', 'supersede_execution'],
+          description: '消息类型：coordination=协调工作, info_share=分享信息, question=提问, response=回复，也可发送 execution control 指令',
         },
       },
       required: ['teammate_id', 'content', 'message_type'],

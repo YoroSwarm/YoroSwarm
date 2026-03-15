@@ -20,6 +20,8 @@ type SessionTask = {
   status: string;
   priority: string;
   assigned_agent_id?: string;
+  dependency_ids?: string[];
+  is_locked?: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +32,8 @@ const convertTask = (task: SessionTask): Task => ({
   description: task.description,
   status: (task.status as Task['status']) || 'pending',
   assignedTo: task.assigned_agent_id,
+  dependencyIds: task.dependency_ids,
+  isLocked: task.is_locked,
   priority: (task.priority as Task['priority']) || 'medium',
   createdAt: task.created_at,
   updatedAt: task.updated_at,

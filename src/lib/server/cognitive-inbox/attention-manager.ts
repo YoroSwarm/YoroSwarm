@@ -20,15 +20,24 @@ import {
   type MessagePriority,
 } from './cognitive-state'
 import {
+  getRuntimeControl,
   getCognitiveRuntime,
   transitionState,
   createSnapshot,
   resumeSnapshot,
+  startExecution,
+  interruptExecution,
+  resumeExecution,
+  completeExecution,
   markMessageProcessing,
   markMessageCompleted,
   deferMessage,
   reviveDeferredMessages,
   onCognitiveEvent,
+  isControlPlaneMessage,
+  isHardInterruptMessage,
+  isSoftInterruptMessage,
+  pruneInvalidMessages,
 } from './cognitive-engine'
 import type { ToolExecutor } from '../agent-loop'
 import type { ToolDefinition, LLMMessage } from '../llm/types'
@@ -54,6 +63,9 @@ export interface CurrentWorkContext {
   estimatedTimeToComplete: 'seconds' | 'minutes' | 'long'
   partialResult?: string
   thinking?: string
+  executionId?: string
+  workUnitKey?: string
+  sourceMessageIds?: string[]
 }
 
 /**
@@ -99,6 +111,8 @@ export async function startAttentionLoop(
 
       const runtime = getCognitiveRuntime(swarmSessionId, agentId)
       if (!runtime) continue
+
+      pruneInvalidMessages(runtime)
 
       if (runtime.inbox.pending.length === 0 && runtime.inbox.deferred.length > 0) {
         reviveDeferredMessages(swarmSessionId, agentId)
@@ -148,7 +162,7 @@ export function updateWorkContext(
 ): void {
   const runtime = getCognitiveRuntime(swarmSessionId, agentId)
   if (runtime) {
-    runtime.currentWorkContext = {
+    const nextContext = {
       ...(runtime.currentWorkContext ?? {
         type: 'idle',
         description: 'Agent is idle',
@@ -157,6 +171,25 @@ export function updateWorkContext(
         estimatedTimeToComplete: 'seconds',
       }),
       ...context,
+    }
+
+    runtime.currentWorkContext = nextContext
+
+    if (nextContext.type !== 'idle') {
+      const execution = startExecution(swarmSessionId, agentId, {
+        kind: nextContext.type === 'processing_messages'
+          ? 'message_batch'
+          : nextContext.type === 'executing_task' || nextContext.type === 'planning' || nextContext.type === 'evaluating_task'
+            ? 'deep_work'
+            : 'tool_driven',
+        description: nextContext.description,
+        workUnitKey: nextContext.workUnitKey,
+        sourceMessageIds: nextContext.sourceMessageIds,
+      })
+
+      if (execution) {
+        runtime.currentWorkContext.executionId = execution.id
+      }
     }
   }
 }
@@ -180,9 +213,39 @@ async function checkAndDecide(
   },
   onProcessMessages: (messages: InboxMessage[], context: CurrentWorkContext) => Promise<unknown>
 ): Promise<void> {
+  pruneInvalidMessages(runtime)
+
   // 过滤出待处理的消息
   const pendingMessages = runtime.inbox.pending.filter((m) => m.status === 'pending')
   if (pendingMessages.length === 0) return
+
+  const executionControlHandled = await handleExecutionControlMessages(runtime, pendingMessages)
+  if (executionControlHandled) {
+    return
+  }
+
+  const hardInterruptMessages = pendingMessages.filter(isHardInterruptMessage)
+  if (hardInterruptMessages.length > 0) {
+    const runtimeDecision: AttentionDecision = {
+      shouldProcess: true,
+      shouldInterrupt: runtime.currentState === 'FOCUSED' || runtime.currentState === 'PROCESSING',
+      shouldBatch: hardInterruptMessages.length > 1,
+      shouldSaveContext: runtime.currentState === 'FOCUSED',
+      reasoning: 'Runtime prioritized hard-interrupt control message(s)',
+      messagesToProcess: hardInterruptMessages.map(message => message.id),
+      messagesToDefer: pendingMessages
+        .filter(message => !hardInterruptMessages.some(hard => hard.id === message.id))
+        .map(message => message.id),
+    }
+
+    await executeAttentionDecision(runtime, runtimeDecision, pendingMessages)
+    if (runtimeDecision.shouldBatch) {
+      await handleBatchProcess(runtime, hardInterruptMessages, currentContext, llmConfig, onProcessMessages)
+    } else {
+      await handleProcessNow(runtime, hardInterruptMessages, currentContext, llmConfig, onProcessMessages)
+    }
+    return
+  }
 
   if (pendingMessages.every(shouldSilentlyIgnoreMessage)) {
     for (const message of pendingMessages) {
@@ -206,10 +269,15 @@ async function checkAndDecide(
   try {
     // 调用 LLM 做出决策
     const response = await callLLM({
-      systemPrompt: '你是一个智能注意力管理助手，帮助Agent决定如何处理收件箱中的消息。',
+      systemPrompt: '你协助 Agent 决定如何处理收件箱中的消息。根据当前工作状态和消息的重要程度，判断立即处理、稍后处理或忽略。',
       messages,
       tools: attentionDecisionTools,
       model: process.env.ATTENTION_MANAGER_MODEL || undefined,
+      usageContext: {
+        swarmSessionId: runtime.swarmSessionId,
+        agentId: runtime.agentId,
+        requestKind: 'attention_manager',
+      },
     })
 
     // 提取工具调用决策
@@ -294,12 +362,105 @@ async function checkAndDecide(
   }
 }
 
+async function handleExecutionControlMessages(
+  runtime: CognitiveRuntime,
+  pendingMessages: InboxMessage[]
+): Promise<boolean> {
+  const controlMessages = pendingMessages.filter(message => {
+    const controlType = getRuntimeControl(message).controlType
+    return controlType === 'pause_execution'
+      || controlType === 'resume_execution'
+      || controlType === 'cancel_execution'
+      || controlType === 'supersede_execution'
+  })
+
+  if (controlMessages.length === 0) {
+    return false
+  }
+
+  for (const message of controlMessages) {
+    const controlType = getRuntimeControl(message).controlType
+    switch (controlType) {
+      case 'pause_execution': {
+        if (runtime.currentExecution?.status === 'active') {
+          interruptExecution(runtime.swarmSessionId, runtime.agentId, `Paused by control message ${message.id}`)
+          transitionState(runtime.swarmSessionId, runtime.agentId, 'INTERRUPTED', 'Execution paused by control plane')
+          if (runtime.currentWorkContext) {
+            await createSnapshot(runtime.swarmSessionId, runtime.agentId, 'Execution paused by control plane', {
+              currentTask: {
+                type: runtime.currentWorkContext.type,
+                description: runtime.currentWorkContext.description,
+                progress: runtime.currentWorkContext.progress,
+                partialResult: runtime.currentWorkContext.partialResult,
+              },
+              conversationContext: { messages: [] },
+            })
+          }
+        }
+        break
+      }
+      case 'resume_execution': {
+        if (runtime.currentExecution?.status === 'interrupted') {
+          resumeExecution(runtime.swarmSessionId, runtime.agentId, {
+            description: runtime.currentExecution.description,
+            sourceMessageIds: runtime.currentExecution.sourceMessageIds,
+          })
+          transitionState(runtime.swarmSessionId, runtime.agentId, 'RECOVERING', 'Execution resume requested by control plane')
+        }
+        break
+      }
+      case 'cancel_execution': {
+        if (runtime.currentExecution) {
+          completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
+          transitionState(runtime.swarmSessionId, runtime.agentId, 'IDLE', 'Execution cancelled by control plane')
+        }
+        break
+      }
+      case 'supersede_execution': {
+        if (runtime.currentExecution) {
+          completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
+        }
+        transitionState(runtime.swarmSessionId, runtime.agentId, 'IDLE', 'Execution superseded by control plane')
+        break
+      }
+      default:
+        break
+    }
+
+    markMessageCompleted(runtime.swarmSessionId, runtime.agentId, message.id, {
+      control_plane: true,
+      control_type: controlType,
+    })
+  }
+
+  return true
+}
+
 /**
  * 基于规则快速做出注意力决策（无需 LLM）
  */
 function shouldSilentlyIgnoreMessage(message: InboxMessage): boolean {
-  return message.type === 'broadcast'
-    && (message.priority === 'low' || message.priority === 'background')
+  const trimmed = message.content.replace(/\s+/g, ' ').trim()
+  const isWelcomeLike = message.type === 'broadcast'
+    || /欢迎来到团队|欢迎新成员|team update|welcome to the team|请欢迎新队友/i.test(trimmed)
+
+  if (isWelcomeLike && (message.priority === 'low' || message.priority === 'background')) {
+    return true
+  }
+
+  if (isControlPlaneMessage(message)) {
+    return false
+  }
+
+  if (message.type === 'broadcast' && (message.priority === 'low' || message.priority === 'background')) {
+    return true
+  }
+
+  if (!trimmed) {
+    return true
+  }
+
+  return /欢迎来到团队|欢迎新成员|team update|welcome to the team|请欢迎新队友/i.test(trimmed)
 }
 
 function makeAttentionDecision(
@@ -310,6 +471,10 @@ function makeAttentionDecision(
 
   if (pendingMessages.every(shouldSilentlyIgnoreMessage)) {
     return 'ignore'
+  }
+
+  if (pendingMessages.some(isHardInterruptMessage)) {
+    return 'process_now'
   }
 
   // 检查是否有 critical 消息
@@ -328,7 +493,7 @@ function makeAttentionDecision(
     case 'PROCESSING':
       // 处理中：检查是否允许中断
       if (runtime.config.stateBehaviors.PROCESSING.allowInterruption) {
-        const hasHighPriority = pendingMessages.some(m => m.priority === 'high')
+        const hasHighPriority = pendingMessages.some(m => m.priority === 'high' || isSoftInterruptMessage(m))
         if (hasHighPriority) return 'process_now'
       }
       return 'defer'
@@ -337,7 +502,7 @@ function makeAttentionDecision(
       // 深度工作中：只有 high/critical 优先级才能中断
       if (runtime.config.stateBehaviors.FOCUSED.allowInterruption) {
         const hasInterruptible = pendingMessages.some(m =>
-          m.priority === 'high' || m.priority === 'critical'
+          m.priority === 'high' || m.priority === 'critical' || isSoftInterruptMessage(m)
         )
         if (hasInterruptible) return 'process_now'
       }
@@ -375,9 +540,13 @@ function buildAttentionDecisionPrompt(
   const messageSummary = messages
     .slice(0, 10)
     .map((m) => {
+      const plane = isControlPlaneMessage(m) ? 'control' : 'work'
+      const interrupt = isHardInterruptMessage(m) ? 'hard' : isSoftInterruptMessage(m) ? 'soft' : 'none'
       const time = Math.round((Date.now() - m.receivedAt.getTime()) / 1000)
       return `- ID: ${m.id}
     优先级: [${(m.priority ?? 'normal').toUpperCase()}]
+    平面: ${plane}
+    中断等级: ${interrupt}
     来自: ${m.senderName} (${m.source})
     类型: ${m.type}
     内容: ${m.content.slice(0, 100)}${m.content.length > 100 ? '...' : ''}
@@ -385,13 +554,13 @@ function buildAttentionDecisionPrompt(
     })
     .join('\n\n')
 
-  return `## 注意力决策时刻
+  return `## 注意力决策
 
 ### 当前工作状态
 - 状态: ${currentState}
 - 工作类型: ${currentContext.type}
-- 工作描述: ${currentContext.description}
-- 完成进度: ${currentContext.progress}%
+- 工作内容: ${currentContext.description}
+- 进度: ${currentContext.progress}%
 - 是否可中断: ${currentContext.canBeInterrupted ? '是' : '否'}
 - 预计完成时间: ${currentContext.estimatedTimeToComplete}
 ${currentContext.partialResult ? `- 部分结果: ${currentContext.partialResult.slice(0, 200)}...` : ''}
@@ -403,15 +572,15 @@ ${messages.length > 10 ? `\n... 还有 ${messages.length - 10} 条消息` : ''}
 ### 决策选项
 请使用工具做出决策：
 
-1. **process_now** - 立即处理特定消息（可能中断当前工作）
-2. **defer** - 延迟处理，稍后决定
+1. **process_now** - 立即处理（可能中断当前工作）
+2. **defer** - 延迟处理
 3. **batch** - 批量处理多条消息
 4. **ignore** - 忽略（消息不够重要）
 
 ### 决策原则
-- 如果当前工作"可中断"且消息优先级为high/critical → process_now
-- 如果有多条normal优先级消息 → batch
-- 如果当前工作不可中断 → defer
+- 当前工作可中断，且消息为 high/critical 优先级 → process_now
+- 有多条 normal 优先级消息 → batch
+- 当前工作不可中断 → defer
 - 自主判断，给出理由
 
 请做出决策并说明理由。`
@@ -423,8 +592,8 @@ ${messages.length > 10 ? `\n... 还有 ${messages.length - 10} 条消息` : ''}
  * LLM 使用此工具来明确表达其决策，包括：
  * - action: 要采取的行动
  * - reasoning: 决策理由
- * - messageIds: 要处理的消息ID
- * - shouldSaveContext: 是否需要保存上下文
+ * - messageIds: 要处理的消息ID列表
+ * - shouldSaveContext: 是否需要保存当前工作上下文（如果要中断的话）
  */
 const attentionDecisionTools: ToolDefinition[] = [
   {
@@ -573,6 +742,7 @@ async function executeAttentionDecision(
 
   if (decision.shouldInterrupt && runtime.currentState === 'FOCUSED') {
     // 需要先中断当前工作
+    interruptExecution(runtime.swarmSessionId, runtime.agentId, decision.reasoning)
     const success = transitionState(
       runtime.swarmSessionId,
       runtime.agentId,
@@ -619,7 +789,22 @@ async function handleProcessNow(
   const initialState = runtime.currentState
   const wasInterrupted = initialState === 'INTERRUPTED'
 
+  const execution = startExecution(runtime.swarmSessionId, runtime.agentId, {
+    kind: messages.length > 1 ? 'message_batch' : (isDeepWorkContext(currentContext) ? 'deep_work' : 'tool_driven'),
+    description: currentContext.description,
+    workUnitKey: currentContext.workUnitKey,
+    sourceMessageIds: messages.map(message => message.id),
+  })
+
+  if (execution && runtime.currentWorkContext) {
+    runtime.currentWorkContext.executionId = execution.id
+  }
+
   if (initialState === 'INTERRUPTED') {
+    resumeExecution(runtime.swarmSessionId, runtime.agentId, {
+      description: currentContext.description,
+      sourceMessageIds: messages.map(message => message.id),
+    })
     transitionState(runtime.swarmSessionId, runtime.agentId, 'PROCESSING', 'Handling interrupt message')
   } else if (initialState === 'IDLE' || initialState === 'BATCHING' || initialState === 'COMPLETED' || initialState === 'RECOVERING') {
     transitionState(runtime.swarmSessionId, runtime.agentId, 'PROCESSING', 'Processing messages')
@@ -639,16 +824,25 @@ async function handleProcessNow(
     }
   } catch (error) {
     console.error(`[AttentionManager] Error processing messages:`, error)
+    completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
   } finally {
     if (runtime.contextStack.length > 0) {
       await resumeSnapshot(runtime.swarmSessionId, runtime.agentId)
+      resumeExecution(runtime.swarmSessionId, runtime.agentId, {
+        description: runtime.currentWorkContext?.description,
+      })
       transitionState(runtime.swarmSessionId, runtime.agentId, 'FOCUSED', 'Resumed previous work')
     } else if (deepWork && runtime.currentState === 'FOCUSED') {
+      completeExecution(runtime.swarmSessionId, runtime.agentId)
       transitionState(runtime.swarmSessionId, runtime.agentId, 'COMPLETED', 'Focused work completed')
       transitionState(runtime.swarmSessionId, runtime.agentId, 'IDLE', 'Context cleaned up')
     } else if (wasInterrupted) {
+      resumeExecution(runtime.swarmSessionId, runtime.agentId, {
+        description: runtime.currentWorkContext?.description,
+      })
       transitionState(runtime.swarmSessionId, runtime.agentId, 'FOCUSED', 'Resumed previous work')
     } else {
+      completeExecution(runtime.swarmSessionId, runtime.agentId)
       if (runtime.currentState === 'PROCESSING' || runtime.currentState === 'BATCHING' || runtime.currentState === 'COMPLETED') {
         transitionState(runtime.swarmSessionId, runtime.agentId, 'IDLE', 'Work completed')
       } else if (runtime.currentState !== 'IDLE') {

@@ -107,13 +107,6 @@ export async function DELETE(request: Request, context: RouteContext) {
     } catch {
       // File may already be deleted from disk, continue
     }
-
-    // Delete related artifacts
-    await prisma.artifact.deleteMany({
-      where: { fileId },
-    })
-
-    // Delete thumbnails
     await prisma.fileThumbnail.deleteMany({
       where: { fileId },
     })

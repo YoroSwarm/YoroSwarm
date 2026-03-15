@@ -44,7 +44,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'decompose_task',
-    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。面对主题/人物/叙事/背景等天然可并行维度时，应拆成多个并行任务。优先使用 dependsOnTaskTitles / dependsOnTaskIds 明确依赖关系；不要依赖系统猜测。为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId。若要表达同批次层级关系，可传 parentTitle。',
+    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。拆解时必须同时考虑并行性与逻辑关系：能并行的维度拆开，必须先做才能继续的步骤要通过 dependsOnTaskTitles / dependsOnTaskIds 明确声明前置任务。若是补充或深化已有工作，而不是第一次拆解，必须使用 dependsOnTaskTitles / dependsOnTaskIds 或 parentTitle / parentId 明确关联到现有任务，避免重复创建已完成维度。为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId。若要表达同批次层级关系，可传 parentTitle。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -57,9 +57,9 @@ export const leadTools: ToolDefinition[] = [
               description: { type: 'string', description: '任务的详细描述，越详细越好' },
               priority: { type: 'number', description: '优先级 1-4（1=低, 2=中, 3=高, 4=紧急）' },
               parentId: { type: 'string', description: '仅当父任务已经存在于数据库时才填写其真实任务ID' },
-              parentTitle: { type: 'string', description: '同批次任务的父任务标题；优先使用此字段表达层级关系' },
-              dependsOnTaskIds: { type: 'array', items: { type: 'string' }, description: '该任务显式依赖的已存在任务ID列表' },
-              dependsOnTaskTitles: { type: 'array', items: { type: 'string' }, description: '该任务显式依赖的任务标题列表；优先用于同批次任务依赖' },
+              parentTitle: { type: 'string', description: '同批次任务的父任务标题；优先使用此字段表达层级关系。若为补充/深化任务，应尽量填写。' },
+              dependsOnTaskIds: { type: 'array', items: { type: 'string' }, description: '该任务显式依赖的已存在任务ID列表。凡是需要等待前一步完成的任务，都应填写这里，而不是仅靠描述文本暗示。' },
+              dependsOnTaskTitles: { type: 'array', items: { type: 'string' }, description: '该任务显式依赖的任务标题列表；优先用于同批次任务依赖。凡是存在先后顺序、输入输出关系或审核后才能继续的任务，都应填写。' },
             },
             required: ['title', 'description'],
           },
@@ -89,7 +89,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'send_message_to_teammate',
-    description: '向队友发送内部消息，用于协调工作或提供额外指导。teammate_id 必须使用上下文中展示的真实队友 ID，若只知道名字，也必须使用上下文里显示的精确名字。不要使用 41、81、teammate_0 这类编造引用。所有任务完成后，不要发送仅用于礼貌确认或收尾致谢的消息。',
+    description: '向队友发送内部消息，用于补充需求、纠偏、澄清、重排优先级，或发送 execution control 指令。teammate_id 必须使用上下文中展示的真实队友 ID，若只知道名字，也必须使用上下文里显示的精确名字。不要使用 41、81、teammate_0 这类编造引用。禁止发送仅用于“收到通知”“等待其他人”“继续待命”“礼貌致谢”的消息。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -101,8 +101,86 @@ export const leadTools: ToolDefinition[] = [
           type: 'string',
           description: '消息内容',
         },
+        message_type: {
+          type: 'string',
+          enum: ['coordination', 'question', 'clarification_request', 'urgent', 'pause_execution', 'resume_execution', 'cancel_execution', 'supersede_execution'],
+          description: '消息类型。若要直接控制队友当前执行体，使用 pause_execution / resume_execution / cancel_execution / supersede_execution。',
+        },
       },
       required: ['teammate_id', 'content'],
+    },
+  },
+  {
+    name: 'update_self_todo',
+    description: '对 Lead 私有待办做单步操作。用于跟踪多阶段任务进度。一次调用只做一种操作：clear / add / insert / delete / update。clear=清空全部待办；add=追加一项到末尾；insert=插入到指定位置；delete=删除一项；update=仅允许更新已有项的 status，不能改 title/details/category/sourceRef。状态语义：pending=尚未开始，in_progress=进行中，completed=已全部交付。对于复杂多阶段任务（如包含分析、报告、讲稿、PPT等），应为每个阶段创建独立的 Todo 项，便于跟踪整体进度。'
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        operation: {
+          type: 'string',
+          enum: ['clear', 'add', 'insert', 'delete', 'update'],
+          description: '本次待办操作类型。一次调用只允许一个操作。',
+        },
+        item: {
+          type: 'object',
+          description: 'add / insert 时使用的完整待办项。',
+          properties: {
+            id: { type: 'string', description: '待办项ID。新增项必须提供稳定ID。' },
+            title: { type: 'string', description: '待办项标题' },
+            details: { type: 'string', description: '补充说明或完成标准' },
+            status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'dropped'], description: '当前状态。pending=尚未开始兑现，in_progress=已经启动但尚未完成，completed=该项承诺已全部兑现。不要提前标记 completed。' },
+            category: { type: 'string', enum: ['user_request', 'deliverable', 'coordination', 'verification', 'other'], description: '待办类别' },
+            sourceRef: { type: 'string', description: '来源引用，例如 external:messageId' },
+          },
+          required: ['id', 'title', 'status', 'category'],
+        },
+        item_id: {
+          type: 'string',
+          description: 'delete / update 时要操作的待办项ID。',
+        },
+        index: {
+          type: 'number',
+          description: 'insert 时插入位置（从 0 开始）。超界时会自动夹到合法范围。',
+        },
+        status: {
+          type: 'string',
+          enum: ['pending', 'in_progress', 'completed', 'dropped'],
+          description: 'update 时要设置的新状态。update 仅允许改状态。',
+        },
+        reason: {
+          type: 'string',
+          description: '本次更新原因，便于审计和恢复',
+        },
+      },
+      required: ['operation'],
+    },
+  },
+  {
+    name: 'verify_result',
+    description: '对队友提交的任务结果进行质量验证。可以创建专门的验证队友（Fact Checker）来交叉检验关键事实和结论。适用于高优先级任务或需要高可信度的输出。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        task_id: {
+          type: 'string',
+          description: '需要验证的已完成任务ID',
+        },
+        verification_type: {
+          type: 'string',
+          enum: ['fact_check', 'cross_validate', 'quality_review'],
+          description: '验证类型：fact_check=事实核查, cross_validate=交叉验证（创建新队友独立验证）, quality_review=质量评审',
+        },
+        focus_areas: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '需要重点验证的方面（如"数据准确性"、"逻辑一致性"、"来源可靠性"）',
+        },
+        instructions: {
+          type: 'string',
+          description: '给验证者的具体指示',
+        },
+      },
+      required: ['task_id', 'verification_type'],
     },
   },
 ]

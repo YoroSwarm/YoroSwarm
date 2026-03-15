@@ -2,8 +2,10 @@ import { callLLM, extractTextContent, extractToolUseBlocks } from './llm/client'
 import type { AgentLoopResult, ToolDefinition, LLMMessage, LLMResponse, ToolResultBlock } from './llm/types'
 import { appendAgentContextEntry } from './agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
+import { recordToolCall, getSessionToolCallCount } from './parallel-scheduler'
 
-const MAX_ITERATIONS = 20
+const MAX_ITERATIONS = 25
+const MAX_SESSION_TOOL_CALLS = 2000
 
 export type ToolExecutor = (
   name: string,
@@ -22,6 +24,14 @@ export interface AgentLoopOptions {
   maxIterations?: number
   onThinking?: (text: string) => void
   stopOnSuccessfulTools?: string[]
+  shouldStopAfterToolCall?: (input: {
+    toolName: string
+    result: string
+    isError: boolean
+    toolCalls: { toolName: string; status: 'calling' | 'completed' | 'error'; inputSummary?: string; resultSummary?: string; timestamp: string }[]
+    totalToolCalls: number
+    iteration: number
+  }) => boolean
 }
 
 /**
@@ -41,6 +51,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     model,
     maxIterations = MAX_ITERATIONS,
     stopOnSuccessfulTools = [],
+    shouldStopAfterToolCall,
   } = options
 
   const messages: LLMMessage[] = [...options.contextMessages]
@@ -89,6 +100,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages,
         tools: tools.length > 0 ? tools : undefined,
         model,
+        usageContext: {
+          swarmSessionId,
+          agentId,
+          requestKind: 'agent_loop',
+        },
       })
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : 'Unknown LLM error'
@@ -183,6 +199,20 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         totalToolCalls++
         console.log(`[AgentLoop][${agentName}] Tool call #${totalToolCalls}: ${toolUse.name}`)
 
+        // 全局工具调用计数与限制
+        recordToolCall(swarmSessionId)
+        const sessionToolCalls = getSessionToolCallCount(swarmSessionId)
+        if (sessionToolCalls > MAX_SESSION_TOOL_CALLS) {
+          console.warn(`[AgentLoop][${agentName}] Session tool call limit reached (${sessionToolCalls}/${MAX_SESSION_TOOL_CALLS})`)
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: `会话全局工具调用已达上限 (${MAX_SESSION_TOOL_CALLS})，请结束当前任务。`,
+            is_error: true,
+          })
+          continue
+        }
+
         // Generate unique tool call ID for this specific tool invocation
         const toolCallId = `tc-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         const inputSummary = JSON.stringify(toolUse.input).slice(0, 100)
@@ -267,6 +297,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           timestamp: new Date().toISOString(),
         })
 
+        const shouldStopFromCallback = !isError && Boolean(shouldStopAfterToolCall?.({
+          toolName: toolUse.name,
+          result,
+          isError,
+          toolCalls,
+          totalToolCalls,
+          iteration,
+        }))
+
         toolResults.push({
           type: 'tool_result',
           tool_use_id: toolUse.id,
@@ -274,7 +313,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           is_error: isError,
         } satisfies ToolResultBlock)
 
-        if (shouldStopAfterTool) {
+        if (shouldStopAfterTool || shouldStopFromCallback) {
           messages.push({ role: 'user', content: toolResults })
 
           publishRealtimeMessage(

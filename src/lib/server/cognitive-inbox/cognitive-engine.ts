@@ -16,15 +16,33 @@ import {
   type CognitiveEvent,
   type AttentionConfig,
   type MessagePriority,
+  type InboxMessageMetadata,
+  type InboxMessageRuntimeControl,
+  type AgentExecution,
   PriorityWeights,
 } from './cognitive-state'
 import { EventEmitter } from 'events'
+import { hydrateRuntimeFromContext, persistExecutionEvent, persistSnapshotEvent } from './cognitive-persistence'
+import prisma from '@/lib/db'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
 
 // 内存中的运行时存储
 const runtimes = new Map<string, CognitiveRuntime>()
 
 // 事件发射器
 const cognitiveEvents = new EventEmitter()
+
+function persistRuntimeEventSafely(
+  promise: Promise<void>,
+  context: { swarmSessionId: string; agentId: string; event: string }
+): void {
+  promise.catch((error) => {
+    console.error(
+      `[CognitiveEngine] Failed to persist ${context.event} for ${context.swarmSessionId}:${context.agentId}:`,
+      error
+    )
+  })
+}
 
 export interface CognitiveEngineOptions {
   agentId: string
@@ -62,6 +80,7 @@ export async function initCognitiveEngine(
       canBeInterrupted: true,
       estimatedTimeToComplete: 'seconds',
     },
+    executionHistory: [],
     stats: {
       totalMessagesProcessed: 0,
       totalSnapshotsCreated: 0,
@@ -71,6 +90,8 @@ export async function initCognitiveEngine(
     },
     config: buildDefaultConfig(options.config),
   }
+
+  await hydrateRuntimeFromContext(runtime)
 
   runtimes.set(key, runtime)
   
@@ -111,6 +132,17 @@ export async function deliverMessage(
     id: generateMessageId(),
     status: 'pending',
     receivedAt: new Date(),
+    metadata: normalizeInboxMetadata(message.metadata),
+  }
+
+  if (isMessageExpired(inboxMessage)) {
+    inboxMessage.status = 'ignored'
+    runtime.inbox.completed.push(inboxMessage.id)
+    return inboxMessage
+  }
+
+  if (shouldSupersedePendingMessages(inboxMessage)) {
+    supersedeMessages(runtime, inboxMessage)
   }
 
   // 根据当前状态和消息类型评估优先级（如果未指定）
@@ -160,12 +192,14 @@ export async function createSnapshot(
     pendingToolCalls: context.pendingToolCalls,
     resumeAttempts: 0,
     isDiscarded: false,
+    executionId: runtime.currentExecution?.id,
   }
 
   runtime.contextStack.push(snapshot)
   runtime.stats.totalSnapshotsCreated++
 
   emitEvent('snapshot_created', { snapshot }, runtime)
+  await persistSnapshotEvent(runtime, 'created', snapshot)
 
   return snapshot
 }
@@ -204,7 +238,14 @@ export async function resumeSnapshot(
 
   runtime.currentSnapshot = snapshot
 
+  if (snapshot.executionId && runtime.currentExecution?.id === snapshot.executionId) {
+    resumeExecution(swarmSessionId, agentId, {
+      description: snapshot.currentTask?.description,
+    })
+  }
+
   emitEvent('snapshot_resumed', { snapshot }, runtime)
+  await persistSnapshotEvent(runtime, 'resumed', snapshot)
 
   return snapshot
 }
@@ -219,6 +260,8 @@ export function peekNextMessage(
   const runtime = getCognitiveRuntime(swarmSessionId, agentId)
   if (!runtime) return null
 
+  pruneInvalidMessages(runtime)
+
   return runtime.inbox.pending[0] || null
 }
 
@@ -232,6 +275,8 @@ export function getMessageBatch(
 ): InboxMessage[] {
   const runtime = getCognitiveRuntime(swarmSessionId, agentId)
   if (!runtime) return []
+
+  pruneInvalidMessages(runtime)
 
   const messages: InboxMessage[] = []
   const candidates = [...runtime.inbox.pending]
@@ -271,6 +316,11 @@ export function markMessageProcessing(
 
   const message = runtime.inbox.pending.find(m => m.id === messageId)
   if (message) {
+    if (isMessageInvalid(runtime, message)) {
+      markMessageCompleted(swarmSessionId, agentId, message.id, { ignored: true, reason: 'invalid_runtime_message' })
+      return
+    }
+
     message.status = 'processing'
     runtime.inbox.processing = message
   }
@@ -329,6 +379,24 @@ export function deferMessage(
 /**
  * 将延迟队列中的消息重新放回待处理队列
  */
+function shouldDropDeferredMessage(message: InboxMessage): boolean {
+  const trimmed = message.content.replace(/\s+/g, ' ').trim()
+  const runtimeControl = getRuntimeControl(message)
+  const isLowPriority = message.priority === 'low' || message.priority === 'background'
+  const isWelcomeLike = message.type === 'broadcast'
+    || /欢迎来到团队|欢迎新成员|team update|welcome to the team|请欢迎新队友/i.test(trimmed)
+
+  if (!trimmed) {
+    return true
+  }
+
+  if (isWelcomeLike && isLowPriority) {
+    return true
+  }
+
+  return runtimeControl.plane === 'work' && message.type === 'broadcast' && isLowPriority
+}
+
 export function reviveDeferredMessages(
   swarmSessionId: string,
   agentId: string,
@@ -337,12 +405,37 @@ export function reviveDeferredMessages(
   const runtime = getCognitiveRuntime(swarmSessionId, agentId)
   if (!runtime || runtime.inbox.deferred.length === 0) return 0
 
-  const count = typeof limit === 'number'
+  pruneInvalidMessages(runtime)
+
+  if (runtime.inbox.deferred.length === 0) return 0
+
+  const maxReviveCount = typeof limit === 'number'
     ? Math.min(limit, runtime.inbox.deferred.length)
     : runtime.inbox.deferred.length
 
-  const messages = runtime.inbox.deferred.splice(0, count)
-  for (const message of messages) {
+  const deferred = runtime.inbox.deferred
+  const retainedDeferred: InboxMessage[] = []
+  const messagesToRevive: InboxMessage[] = []
+
+  for (const message of deferred) {
+    if (shouldDropDeferredMessage(message)) {
+      message.status = 'completed'
+      message.processedAt = new Date()
+      runtime.inbox.completed.push(message.id)
+      continue
+    }
+
+    if (messagesToRevive.length < maxReviveCount) {
+      messagesToRevive.push(message)
+      continue
+    }
+
+    retainedDeferred.push(message)
+  }
+
+  runtime.inbox.deferred = retainedDeferred
+
+  for (const message of messagesToRevive) {
     message.status = 'pending'
     runtime.inbox.pending.push(message)
   }
@@ -351,7 +444,198 @@ export function reviveDeferredMessages(
     PriorityWeights[b.priority ?? 'normal'] - PriorityWeights[a.priority ?? 'normal']
   )
 
-  return messages.length
+  return messagesToRevive.length
+}
+
+export function getRuntimeControl(message: InboxMessage): InboxMessageRuntimeControl {
+  return normalizeInboxMetadata(message.metadata)?.runtimeControl ?? {}
+}
+
+export function startExecution(
+  swarmSessionId: string,
+  agentId: string,
+  input: {
+    kind: AgentExecution['kind']
+    description: string
+    workUnitKey?: string
+    sourceMessageIds?: string[]
+  }
+): AgentExecution | null {
+  const runtime = getCognitiveRuntime(swarmSessionId, agentId)
+  if (!runtime) return null
+
+  const now = new Date()
+  const current = runtime.currentExecution
+  if (current && current.status === 'active') {
+    current.updatedAt = now
+    current.description = input.description || current.description
+    current.workUnitKey = input.workUnitKey ?? current.workUnitKey
+    current.sourceMessageIds = input.sourceMessageIds?.length ? input.sourceMessageIds : current.sourceMessageIds
+    return current
+  }
+
+  const execution: AgentExecution = {
+    id: generateExecutionId(),
+    kind: input.kind,
+    status: 'active',
+    startedAt: now,
+    updatedAt: now,
+    workUnitKey: input.workUnitKey,
+    description: input.description,
+    sourceMessageIds: input.sourceMessageIds || [],
+    interruptionCount: 0,
+  }
+
+  runtime.currentExecution = execution
+  runtime.executionHistory.push(execution)
+  emitEvent('execution_started', { execution }, runtime)
+  persistRuntimeEventSafely(
+    persistExecutionEvent(runtime, 'started', execution),
+    { swarmSessionId, agentId, event: 'execution_started' }
+  )
+  return execution
+}
+
+export function interruptExecution(
+  swarmSessionId: string,
+  agentId: string,
+  reason: string
+): AgentExecution | null {
+  const runtime = getCognitiveRuntime(swarmSessionId, agentId)
+  const execution = runtime?.currentExecution
+  if (!runtime || !execution || execution.status !== 'active') {
+    return null
+  }
+
+  const now = new Date()
+  execution.status = 'interrupted'
+  execution.interruptedAt = now
+  execution.updatedAt = now
+  execution.interruptionCount += 1
+  execution.lastInterruptReason = reason
+  runtime.stats.interruptionCount += 1
+
+  emitEvent('execution_interrupted', { execution, reason }, runtime)
+  persistRuntimeEventSafely(
+    persistExecutionEvent(runtime, 'interrupted', execution, { reason }),
+    { swarmSessionId, agentId, event: 'execution_interrupted' }
+  )
+  return execution
+}
+
+export function resumeExecution(
+  swarmSessionId: string,
+  agentId: string,
+  input?: {
+    description?: string
+    sourceMessageIds?: string[]
+  }
+): AgentExecution | null {
+  const runtime = getCognitiveRuntime(swarmSessionId, agentId)
+  const execution = runtime?.currentExecution
+  if (!runtime || !execution) {
+    return null
+  }
+
+  const now = new Date()
+  execution.status = 'active'
+  execution.resumedAt = now
+  execution.updatedAt = now
+  if (input?.description) execution.description = input.description
+  if (input?.sourceMessageIds?.length) execution.sourceMessageIds = input.sourceMessageIds
+  persistRuntimeEventSafely(
+    persistExecutionEvent(runtime, 'resumed', execution),
+    { swarmSessionId, agentId, event: 'execution_resumed' }
+  )
+  return execution
+}
+
+export function completeExecution(
+  swarmSessionId: string,
+  agentId: string,
+  status: Extract<AgentExecution['status'], 'completed' | 'cancelled'> = 'completed'
+): AgentExecution | null {
+  const runtime = getCognitiveRuntime(swarmSessionId, agentId)
+  const execution = runtime?.currentExecution
+  if (!runtime || !execution) {
+    return null
+  }
+
+  const now = new Date()
+  execution.status = status
+  execution.completedAt = now
+  execution.updatedAt = now
+  runtime.currentExecution = undefined
+
+  emitEvent('execution_completed', { execution }, runtime)
+  persistRuntimeEventSafely(
+    persistExecutionEvent(runtime, status, execution),
+    { swarmSessionId, agentId, event: `execution_${status}` }
+  )
+  return execution
+}
+
+export function isControlPlaneMessage(message: InboxMessage): boolean {
+  return getRuntimeControl(message).plane === 'control'
+}
+
+export function isHardInterruptMessage(message: InboxMessage): boolean {
+  return getRuntimeControl(message).interruption === 'hard'
+}
+
+export function isSoftInterruptMessage(message: InboxMessage): boolean {
+  return getRuntimeControl(message).interruption === 'soft'
+}
+
+export function isMessageExpired(message: InboxMessage, now: Date = new Date()): boolean {
+  const expiresAt = getRuntimeControl(message).expiresAt
+  if (!expiresAt) return false
+
+  const expiresMs = Date.parse(expiresAt)
+  if (Number.isNaN(expiresMs)) return false
+
+  return expiresMs <= now.getTime()
+}
+
+export function shouldSupersedePendingMessages(message: InboxMessage): boolean {
+  const control = getRuntimeControl(message)
+  return !!(control.supersedesPending || control.supersedesMessageIds?.length)
+}
+
+export function pruneInvalidMessages(
+  runtimeOrSession: CognitiveRuntime | string,
+  maybeAgentId?: string
+): number {
+  const runtime = typeof runtimeOrSession === 'string'
+    ? getCognitiveRuntime(runtimeOrSession, maybeAgentId || '')
+    : runtimeOrSession
+
+  if (!runtime) return 0
+
+  let prunedCount = 0
+  const now = new Date()
+
+  runtime.inbox.pending = runtime.inbox.pending.filter(message => {
+    if (!isMessageInvalid(runtime, message)) {
+      return true
+    }
+
+    markMessageIgnored(runtime, message, now)
+    prunedCount++
+    return false
+  })
+
+  runtime.inbox.deferred = runtime.inbox.deferred.filter(message => {
+    if (!isMessageInvalid(runtime, message)) {
+      return true
+    }
+
+    markMessageIgnored(runtime, message, now)
+    prunedCount++
+    return false
+  })
+
+  return prunedCount
 }
 
 /**
@@ -425,6 +709,14 @@ function evaluatePriority(
   currentState: CognitiveState,
   config: AttentionConfig
 ): MessagePriority {
+  const control = getRuntimeControl(message)
+  if (control.interruption === 'hard') {
+    return 'critical'
+  }
+  if (control.plane === 'control' || control.interruption === 'soft') {
+    return 'high'
+  }
+
   // 运行自定义规则
   for (const rule of config.priorityRules) {
     if (rule.condition(message, currentState)) {
@@ -456,12 +748,12 @@ function evaluatePriority(
 function isValidTransition(from: CognitiveState, to: CognitiveState): boolean {
   const validTransitions: Record<CognitiveState, CognitiveState[]> = {
     'IDLE': ['PROCESSING', 'BATCHING'],
-    'PROCESSING': ['IDLE', 'FOCUSED'],
-    'FOCUSED': ['INTERRUPTED', 'COMPLETED'],
-    'INTERRUPTED': ['PROCESSING', 'FOCUSED'],
-    'BATCHING': ['PROCESSING'],
+    'PROCESSING': ['IDLE', 'FOCUSED', 'INTERRUPTED', 'COMPLETED', 'BATCHING'],
+    'FOCUSED': ['INTERRUPTED', 'COMPLETED', 'PROCESSING', 'IDLE'],
+    'INTERRUPTED': ['PROCESSING', 'FOCUSED', 'RECOVERING', 'IDLE'],
+    'BATCHING': ['PROCESSING', 'IDLE', 'COMPLETED'],
     'RECOVERING': ['FOCUSED', 'IDLE'],
-    'COMPLETED': ['IDLE'],
+    'COMPLETED': ['IDLE', 'PROCESSING', 'FOCUSED'],
   }
 
   return validTransitions[from]?.includes(to) || false
@@ -473,6 +765,45 @@ function emitEvent(
   runtime: CognitiveRuntime
 ): void {
   cognitiveEvents.emit(type, payload, runtime)
+  void publishExecutionRealtime(type, payload, runtime)
+}
+
+async function publishExecutionRealtime(
+  type: CognitiveEvent['type'],
+  payload: unknown,
+  runtime: CognitiveRuntime
+): Promise<void> {
+  if (type !== 'execution_started' && type !== 'execution_interrupted' && type !== 'execution_completed') {
+    return
+  }
+
+  const execution = (payload as { execution?: AgentExecution }).execution
+  if (!execution) return
+
+  const agent = await prisma.agent.findUnique({
+    where: { id: runtime.agentId },
+    select: { name: true },
+  })
+
+  publishRealtimeMessage(
+    {
+      type: 'execution_update',
+      payload: {
+        execution_id: execution.id,
+        agent_id: runtime.agentId,
+        agent_name: agent?.name || 'Agent',
+        swarm_session_id: runtime.swarmSessionId,
+        status: execution.status,
+        kind: execution.kind,
+        description: execution.description,
+        work_unit_key: execution.workUnitKey,
+        interruption_count: execution.interruptionCount,
+        source_message_ids: execution.sourceMessageIds,
+        timestamp: new Date().toISOString(),
+      },
+    },
+    { sessionId: runtime.swarmSessionId }
+  )
 }
 
 function buildDefaultConfig(overrides?: Partial<AttentionConfig>): AttentionConfig {
@@ -502,6 +833,10 @@ function generateSnapshotId(): string {
   return `snap_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
 }
 
+function generateExecutionId(): string {
+  return `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+}
+
 function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]> {
   return array.reduce((acc, item) => {
     const key = keyFn(item)
@@ -510,3 +845,95 @@ function groupBy<T>(array: T[], keyFn: (item: T) => string): Record<string, T[]>
     return acc
   }, {} as Record<string, T[]>)
 }
+
+function normalizeInboxMetadata(metadata?: InboxMessage['metadata']): InboxMessageMetadata | undefined {
+  if (!metadata) return undefined
+
+  const runtimeControl = metadata.runtimeControl ?? {}
+  return {
+    ...metadata,
+    runtimeControl: {
+      plane: runtimeControl.plane === 'control' ? 'control' : 'work',
+      interruption: runtimeControl.interruption === 'hard'
+        ? 'hard'
+        : runtimeControl.interruption === 'soft'
+          ? 'soft'
+          : 'none',
+      expiresAt: typeof runtimeControl.expiresAt === 'string' ? runtimeControl.expiresAt : undefined,
+      workUnitKey: typeof runtimeControl.workUnitKey === 'string' ? runtimeControl.workUnitKey : undefined,
+      supersedesPending: runtimeControl.supersedesPending === true,
+      supersedesMessageIds: Array.isArray(runtimeControl.supersedesMessageIds)
+        ? runtimeControl.supersedesMessageIds.filter((value): value is string => typeof value === 'string')
+        : undefined,
+      controlType: typeof runtimeControl.controlType === 'string' ? runtimeControl.controlType : undefined,
+    },
+  }
+}
+
+function isMessageInvalid(runtime: CognitiveRuntime, message: InboxMessage): boolean {
+  if (message.status === 'processing') {
+    return false
+  }
+
+  return isMessageExpired(message) || isSupersededByPendingMessage(runtime, message)
+}
+
+function isSupersededByPendingMessage(runtime: CognitiveRuntime, message: InboxMessage): boolean {
+  return runtime.inbox.pending.some(candidate => {
+    if (candidate.id === message.id) return false
+    if (candidate.status !== 'pending' && candidate.status !== 'processing') return false
+    return doesMessageSupersede(candidate, message)
+  })
+}
+
+function supersedeMessages(runtime: CognitiveRuntime, incoming: InboxMessage): void {
+  const now = new Date()
+
+  runtime.inbox.pending = runtime.inbox.pending.filter(existing => {
+    if (existing.status === 'processing') return true
+    if (!doesMessageSupersede(incoming, existing)) return true
+
+    markMessageIgnored(runtime, existing, now)
+    return false
+  })
+
+  runtime.inbox.deferred = runtime.inbox.deferred.filter(existing => {
+    if (!doesMessageSupersede(incoming, existing)) return true
+
+    markMessageIgnored(runtime, existing, now)
+    return false
+  })
+}
+
+function doesMessageSupersede(incoming: InboxMessage, existing: InboxMessage): boolean {
+  const incomingControl = getRuntimeControl(incoming)
+  if (!incomingControl.supersedesPending && !incomingControl.supersedesMessageIds?.length) {
+    return false
+  }
+
+  if (incomingControl.supersedesMessageIds?.includes(existing.id)) {
+    return true
+  }
+
+  if (!incomingControl.supersedesPending) {
+    return false
+  }
+
+  const existingControl = getRuntimeControl(existing)
+  return !!incomingControl.workUnitKey
+    && incomingControl.workUnitKey === existingControl.workUnitKey
+}
+
+function markMessageIgnored(runtime: CognitiveRuntime, message: InboxMessage, now: Date): void {
+  message.status = 'ignored'
+  message.processedAt = now
+  if (!runtime.inbox.completed.includes(message.id)) {
+    runtime.inbox.completed.push(message.id)
+  }
+
+  if (runtime.inbox.processing?.id === message.id) {
+    runtime.inbox.processing = undefined
+  }
+}
+
+

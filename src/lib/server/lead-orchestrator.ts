@@ -2,11 +2,65 @@ import prisma from '@/lib/db'
 import { createTeammate, type CreateTeammateInput } from '@/lib/server/teammate-factory'
 import { appendAgentContextEntry, listAgentContextEntries } from '@/lib/server/agent-context'
 import { createInternalThread, sendInternalMessage, initializeTeamAwareness, resolveAgentInSession } from '@/lib/server/internal-bus'
-import { buildSessionTaskData } from '@/lib/server/swarm-session'
-import { appendLeadReply, getSessionAttachments, attachFilesToTask } from '@/lib/server/external-chat'
+import { appendLeadReply, getSessionAttachments } from '@/lib/server/external-chat'
+import { listExternalMessages } from '@/lib/server/external-chat'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
-import { unlockDependentTasks } from '@/lib/server/task-orchestrator'
-import { triggerTaskExecution } from '@/lib/server/parallel-scheduler'
+import { getLeadSelfTodoItems } from './lead-self-todo'
+import { decomposeTask, assignTaskToTeammate, handleTeammateReport } from './lead-orchestrator-tasks'
+
+export { decomposeTask, assignTaskToTeammate, handleTeammateReport }
+
+export function buildLeadToTeammateRuntimeControl(messageType: string, options: {
+  taskId?: string
+  queuedBehindTaskId?: string | null
+  hasPendingDependencies?: boolean
+}) {
+  const workUnitKey = options.taskId ? `task:${options.taskId}` : undefined
+
+  if (messageType === 'task_assignment') {
+    return {
+      plane: 'work',
+      interruption: options.hasPendingDependencies ? 'none' : 'soft',
+      workUnitKey,
+      supersedesPending: true,
+    }
+  }
+
+  if (messageType === 'question' || messageType === 'clarification_request') {
+    return {
+      plane: 'control',
+      interruption: 'soft',
+      workUnitKey,
+      supersedesPending: true,
+    }
+  }
+
+  if (messageType === 'urgent') {
+    return {
+      plane: 'control',
+      interruption: 'hard',
+      workUnitKey,
+    }
+  }
+
+  if (messageType === 'pause_execution' || messageType === 'resume_execution' || messageType === 'cancel_execution' || messageType === 'supersede_execution') {
+    return {
+      plane: 'control',
+      interruption: 'hard',
+      workUnitKey,
+      supersedesPending: true,
+      controlType: messageType,
+    }
+  }
+
+  return {
+    plane: 'control',
+    interruption: 'soft',
+    workUnitKey,
+    supersedesPending: true,
+  }
+}
+
 
 /**
  * Lead 编排器 - 由 LLM 驱动决策
@@ -71,99 +125,62 @@ function isSameTeammateDefinition(
   return sameDescription && sameCapabilities
 }
 
-function normalizeTaskTitle(value: string): string {
-  return value.trim().toLowerCase().replace(/\s+/g, ' ')
-}
-
-function isLeadMetaTask(task: { title: string; description?: string }): boolean {
-  const text = `${task.title} ${(task.description || '')}`.trim()
-
-  return /(跟进|跟踪|追踪|监控|等待|催办|督办|同步)/.test(text)
-    || (/汇报|报告/.test(text) && /(进度|结果|完成情况|状态)/.test(text))
-    || (/向用户/.test(text) && /(汇报|回复|告知)/.test(text))
-}
-
-function inferParentTaskTitle(task: { title: string; parentTitle?: string; description?: string }): string | null {
-  if (task.parentTitle?.trim()) return task.parentTitle.trim()
-
-  const title = task.title.trim()
-  const description = (task.description || '').trim()
-
-  if (/撰写|报告|整合/.test(title) && /分析|阅读/.test(description)) {
-    return '多角度文学分析'
-  }
-
-  if (/分析/.test(title) && /阅读|理解/.test(description)) {
-    return '阅读理解Emma小说'
-  }
-
-  return null
-}
-
 function isCeremonialCompletionMessage(content: string): boolean {
   const normalized = content.replace(/\s+/g, ' ').trim()
   if (!normalized) return false
 
-  return /感谢|谢谢|辛苦了|请确认|确认当前工作状态|确认状态|保持待命|任务顺利结束|所有任务已完成|当前无进行中的工作|all tasks (are )?complete|confirm (your )?(current )?status|thanks|thank you/i.test(normalized)
+  return /感谢|谢谢|辛苦了|请确认|确认当前工作状态|确认状态|保持待命|任务顺利结束|所有任务已完成|当前无进行中的工作|继续等待|请等待|等待其他队友|收到任务完成通知|收到完成通知|收到任务完成|all tasks (are )?complete|confirm (your )?(current )?status|wait for (the )?other teammates|thanks|thank you/i.test(normalized)
 }
 
-async function resolveDependencyTaskIds(
-  swarmSessionId: string,
-  taskRefs: string[]
-): Promise<string[]> {
-  const resolvedIds: string[] = []
-
-  for (const taskRef of taskRefs) {
-    const resolvedTask = await resolveTaskInSession(swarmSessionId, taskRef)
-    if (resolvedTask) {
-      resolvedIds.push(resolvedTask.id)
-    } else {
-      console.warn('[decomposeTask] Ignoring unresolved dependency reference: ' + taskRef)
-    }
+async function shouldSkipLeadTeammateMessage(input: {
+  swarmSessionId: string
+  teammateId: string
+  content: string
+  messageType: string
+}): Promise<{ skipped: boolean; reason?: string }> {
+  if (input.messageType !== 'coordination') {
+    return { skipped: false }
   }
 
-  return resolvedIds
-}
-async function resolveTaskInSession(swarmSessionId: string, taskRef: string) {
-  const trimmedRef = taskRef.trim()
-  if (!trimmedRef) return null
-
-  const exactId = await prisma.teamLeadTask.findFirst({
-    where: { id: trimmedRef, swarmSessionId },
-    include: { assignee: true, parent: true, subtasks: true },
-  })
-  if (exactId) return exactId
-
-  const candidates = await prisma.teamLeadTask.findMany({
-    where: {
-      swarmSessionId,
-      status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] },
-    },
-    include: { assignee: true, parent: true, subtasks: true },
-    orderBy: { createdAt: 'desc' },
-  })
-
-  const normalizedRef = normalizeTaskTitle(trimmedRef)
-  const exactTitle = candidates.find(task => normalizeTaskTitle(task.title) === normalizedRef)
-  if (exactTitle) return exactTitle
-
-  const fuzzyMatches = candidates.filter(task => {
-    const normalizedTitle = normalizeTaskTitle(task.title)
-    return normalizedTitle.includes(normalizedRef) || normalizedRef.includes(normalizedTitle)
-  })
-
-  if (fuzzyMatches.length === 1) {
-    return fuzzyMatches[0]
+  const normalized = input.content.replace(/\s+/g, ' ').trim()
+  if (!normalized) {
+    return { skipped: true, reason: 'empty_coordination_message' }
   }
 
-  return null
+  const [tasks, teammateTasks] = await Promise.all([
+    prisma.teamLeadTask.findMany({
+      where: { swarmSessionId: input.swarmSessionId },
+      select: { status: true },
+    }),
+    prisma.teamLeadTask.findMany({
+      where: {
+        swarmSessionId: input.swarmSessionId,
+        assigneeId: input.teammateId,
+      },
+      select: { status: true },
+    }),
+  ])
+
+  const hasActiveTasks = tasks.some(task => ['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(task.status))
+  const teammateHasActiveTask = teammateTasks.some(task => ['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(task.status))
+  const ceremonial = isCeremonialCompletionMessage(normalized)
+
+  if (!teammateHasActiveTask && ceremonial) {
+    return { skipped: true, reason: 'completed_teammate_ceremonial_message' }
+  }
+
+  if (!hasActiveTasks && ceremonial) {
+    return { skipped: true, reason: 'all_tasks_completed' }
+  }
+
+  return { skipped: false }
 }
 
 /**
  * 获取 Lead 的完整上下文（包括历史消息、任务状态、teammates 状态、附件）
  */
-export async function getLeadContext(swarmSessionId: string, leadAgentId: string) {
-  const [contextEntries, tasks, teammates, session, attachments] = await Promise.all([
+export async function getLeadContext(swarmSessionId: string, leadAgentId: string, userId: string) {
+  const [contextEntries, tasks, teammates, session, attachments, externalChat, selfTodos] = await Promise.all([
     listAgentContextEntries(leadAgentId, 50),
     prisma.teamLeadTask.findMany({
       where: { swarmSessionId },
@@ -178,6 +195,8 @@ export async function getLeadContext(swarmSessionId: string, leadAgentId: string
       where: { id: swarmSessionId },
     }),
     getSessionAttachments(swarmSessionId),
+    listExternalMessages(swarmSessionId, userId),
+    getLeadSelfTodoItems(leadAgentId),
   ])
 
   return {
@@ -186,6 +205,8 @@ export async function getLeadContext(swarmSessionId: string, leadAgentId: string
     teammates,
     session,
     attachments,
+    externalMessages: externalChat.messages,
+    selfTodos,
   }
 }
 
@@ -214,7 +235,18 @@ export async function provisionTeammate(
   }))
 
   if (existingMatch) {
-    throw new Error(`TEAMMATE_DEFINITION_EXISTS:${existingMatch.id}:${existingMatch.name}:${existingMatch.role}:${existingMatch.status}`)
+    return {
+      agent: {
+        id: existingMatch.id,
+        name: existingMatch.name,
+        role: existingMatch.role,
+        status: existingMatch.status,
+        description: existingMatch.description,
+        capabilities: existingMatch.capabilities,
+      },
+      teamAwareness: null,
+      reusedExisting: true,
+    }
   }
 
   // 创建队友
@@ -238,340 +270,8 @@ export async function provisionTeammate(
   return {
     ...result,
     teamAwareness: awareness,
+    reusedExisting: false,
   }
-}
-
-/**
- * Lead 拆解任务的工具函数
- * 支持附件传递
- */
-export async function decomposeTask(
-  swarmSessionId: string,
-  leadAgentId: string,
-  tasks: Array<{
-    title: string
-    description?: string
-    priority?: number
-    parentId?: string
-    parentTitle?: string
-    attachments?: string[] // fileIds to attach to this task
-  }>
-) {
-  console.log(`[decomposeTask] Creating ${tasks.length} tasks with creatorId: ${leadAgentId}`)
-
-  const filteredTasks = tasks.filter(task => !isLeadMetaTask(task))
-  if (filteredTasks.length !== tasks.length) {
-    console.warn(`[decomposeTask] Filtered out ${tasks.length - filteredTasks.length} lead meta task(s) that should remain lead responsibilities`)
-  }
-
-  if (filteredTasks.length === 0) {
-    return []
-  }
-
-  // 验证 creatorId 对应的 Agent 存在
-  const creatorAgent = await prisma.agent.findUnique({ where: { id: leadAgentId } })
-  if (!creatorAgent) {
-    throw new Error(`Creator agent not found: ${leadAgentId}. Cannot create tasks.`)
-  }
-  console.log(`[decomposeTask] Verified creator agent exists: ${creatorAgent.name}`)
-
-  const existingActiveTasks = await prisma.teamLeadTask.findMany({
-    where: {
-      swarmSessionId,
-      status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] },
-    },
-    include: { assignee: true, parent: true, subtasks: true },
-    orderBy: { createdAt: 'asc' },
-  })
-
-  const existingByNormalizedTitle = new Map(
-    existingActiveTasks.map(task => [normalizeTaskTitle(task.title), task])
-  )
-
-  // 第一阶段：先创建所有任务，不绑定 parent，避免 LLM 提供的临时 parentId 直接触发外键错误。
-  const createdTasks: Awaited<ReturnType<typeof prisma.teamLeadTask.create>>[] = []
-  const batchResolvedByTitle = new Map<string, Awaited<ReturnType<typeof prisma.teamLeadTask.create>>>()
-  for (const task of filteredTasks) {
-    const normalizedTitle = normalizeTaskTitle(task.title)
-    const reusedTask = batchResolvedByTitle.get(normalizedTitle) || existingByNormalizedTitle.get(normalizedTitle)
-
-    if (reusedTask) {
-      console.log(`[decomposeTask] Reusing existing task for title: ${task.title} (${reusedTask.id})`)
-      createdTasks.push(reusedTask)
-      batchResolvedByTitle.set(normalizedTitle, reusedTask)
-      continue
-    }
-
-    try {
-      const created = await prisma.teamLeadTask.create({
-        data: buildSessionTaskData({
-          swarmSessionId,
-          creatorId: leadAgentId,
-          title: task.title,
-          description: task.description || null,
-          priority: task.priority || 2,
-          parentId: null,
-        }),
-        include: { assignee: true, parent: true, subtasks: true },
-      })
-      createdTasks.push(created)
-      batchResolvedByTitle.set(normalizedTitle, created)
-    } catch (error) {
-      console.error(`[decomposeTask] Failed to create task "${task.title}":`, error)
-      throw error
-    }
-  }
-
-  const createdByTitle = new Map(createdTasks.map(task => [task.title, task.id]))
-
-  // 第二阶段：安全绑定 parent。只接受已存在数据库 task id，或同批已创建任务的标题引用。
-  for (let i = 0; i < createdTasks.length; i++) {
-    const taskInput = filteredTasks[i]
-    const createdTask = createdTasks[i]
-
-    const requestedParentId = taskInput.parentId?.trim()
-    const requestedParentTitle = taskInput.parentTitle?.trim() || requestedParentId
-
-    let resolvedParentId: string | null = null
-
-    if (requestedParentId) {
-      const existingParent = await prisma.teamLeadTask.findFirst({
-        where: {
-          id: requestedParentId,
-          swarmSessionId,
-        },
-        select: { id: true },
-      })
-
-      if (existingParent) {
-        resolvedParentId = existingParent.id
-      }
-    }
-
-    if (!resolvedParentId && requestedParentTitle) {
-      resolvedParentId = createdByTitle.get(requestedParentTitle) || null
-    }
-
-    if (resolvedParentId && resolvedParentId !== createdTask.id) {
-      createdTasks[i] = await prisma.teamLeadTask.update({
-        where: { id: createdTask.id },
-        data: { parentId: resolvedParentId },
-        include: { assignee: true, parent: true, subtasks: true },
-      })
-    } else if (requestedParentId || taskInput.parentTitle) {
-      console.warn(
-        `[decomposeTask] Ignoring unresolved parent reference for "${createdTask.title}": parentId=${requestedParentId || 'n/a'}, parentTitle=${taskInput.parentTitle || 'n/a'}`
-      )
-    }
-  }
-
-  // 第三阶段：根据显式依赖和 parent 关系补建任务依赖，这样 scheduler 会真正等待上游完成。
-  for (let i = 0; i < createdTasks.length; i++) {
-    const taskInput = filteredTasks[i] as typeof filteredTasks[number] & { dependsOnTaskIds?: string[]; dependsOnTaskTitles?: string[] }
-    const createdTask = createdTasks[i]
-    const inferredParentTitle = inferParentTaskTitle(taskInput)
-    const parentTitle = taskInput.parentTitle?.trim() || inferredParentTitle
-    const parentId = createdTask.parentId || (parentTitle ? createdByTitle.get(parentTitle) || null : null)
-
-    const resolvedExplicitDependencyIds = await resolveDependencyTaskIds(
-      swarmSessionId,
-      taskInput.dependsOnTaskIds || []
-    )
-
-    const explicitDependencyIds = [
-      ...resolvedExplicitDependencyIds,
-      ...((taskInput.dependsOnTaskTitles || []).map(title => createdByTitle.get(title) || null).filter(Boolean) as string[]),
-      ...(parentId ? [parentId] : []),
-    ].filter((value, index, array) => !!value && array.indexOf(value) === index)
-
-    for (const dependencyId of explicitDependencyIds) {
-      if (!dependencyId || dependencyId === createdTask.id) continue
-
-      await prisma.taskDependency.upsert({
-        where: {
-          taskId_dependsOnTaskId: {
-            taskId: createdTask.id,
-            dependsOnTaskId: dependencyId,
-          },
-        },
-        update: {},
-        create: {
-          swarmSessionId,
-          taskId: createdTask.id,
-          dependsOnTaskId: dependencyId,
-          dependencyType: 'blocks',
-        },
-      })
-    }
-  }
-
-  const sessionAttachments = await getSessionAttachments(swarmSessionId)
-
-  // 处理附件关联
-  for (let i = 0; i < createdTasks.length; i++) {
-    const task = createdTasks[i]
-    const taskInput = filteredTasks[i]
-
-    const effectiveAttachments = taskInput.attachments && taskInput.attachments.length > 0
-      ? taskInput.attachments
-      : i === 0
-        ? sessionAttachments.map(file => file.fileId)
-        : []
-
-    if (effectiveAttachments.length > 0) {
-      await attachFilesToTask(swarmSessionId, task.id, effectiveAttachments)
-    }
-
-    // 广播任务创建
-    publishRealtimeMessage(
-      {
-        type: 'task_update',
-        payload: {
-          task_id: task.id,
-          title: task.title,
-          status: 'pending',
-          swarm_session_id: swarmSessionId,
-          message: `任务创建: ${task.title}`,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      { sessionId: swarmSessionId }
-    )
-  }
-
-  return Array.from(new Map(createdTasks.map(task => [task.id, task])).values())
-}
-
-/**
- * Lead 分配任务的工具函数
- */
-export async function assignTaskToTeammate(
-  swarmSessionId: string,
-  leadAgentId: string,
-  taskId: string,
-  teammateId: string
-) {
-  const [task, teammate] = await Promise.all([
-    resolveTaskInSession(swarmSessionId, taskId),
-    resolveAgentInSession(swarmSessionId, teammateId, { excludeAgentIds: [leadAgentId] }),
-  ])
-
-  if (!task || !teammate) {
-    throw new Error(`TASK_OR_AGENT_NOT_FOUND:${taskId}:${teammateId}`)
-  }
-
-  if (task.assigneeId === teammate.id && (task.status === 'ASSIGNED' || task.status === 'IN_PROGRESS')) {
-    return task
-  }
-
-  const teammateActiveTask = await prisma.teamLeadTask.findFirst({
-    where: {
-      swarmSessionId,
-      assigneeId: teammate.id,
-      status: 'IN_PROGRESS',
-      id: { not: task.id },
-    },
-    select: { id: true, title: true },
-  })
-
-  const isQueuedBehindActiveTask = !!teammateActiveTask
-
-  const updatedTask = await prisma.teamLeadTask.update({
-    where: { id: task.id },
-    data: {
-      assigneeId: teammate.id,
-      status: 'ASSIGNED',
-    },
-    include: { assignee: true },
-  })
-
-  // 向 teammate 添加上下文
-  await appendAgentContextEntry({
-    swarmSessionId,
-    agentId: teammate.id,
-    sourceType: 'task',
-    sourceId: task.id,
-    entryType: 'task_assignment',
-    content: `你被分配任务: ${task.title}\n\n${task.description || ''}`,
-    metadata: { assignedBy: leadAgentId },
-  })
-
-  // Lead 向 teammate 发送任务简报
-  const thread = await prisma.internalThread.findFirst({
-    where: { swarmSessionId, relatedTaskId: task.id },
-  }) || await createInternalThread({
-    swarmSessionId,
-    threadType: 'task_coordination',
-    subject: `任务: ${task.title}`,
-    relatedTaskId: task.id,
-  })
-
-  // 检查任务依赖
-  const taskWithDeps = await prisma.teamLeadTask.findUnique({
-    where: { id: task.id },
-    include: {
-      dependencies: {
-        include: { dependsOnTask: true },
-      },
-    },
-  })
-
-  const pendingDeps = taskWithDeps?.dependencies.filter(
-    d => d.dependsOnTask.status !== 'COMPLETED'
-  ) || []
-
-  const assignmentMessage = pendingDeps.length > 0
-    ? `任务 "${task.title}" 已分配给你。注意：此任务有 ${pendingDeps.length} 个前置依赖尚未完成，将在依赖完成后自动启动。`
-    : isQueuedBehindActiveTask
-      ? `任务 "${task.title}" 已分配给你。你当前正在处理 "${teammateActiveTask!.title}"，该新任务已进入等待队列，会在你空闲后自动启动。`
-      : `任务 "${task.title}" 已分配给你，即将开始执行。`
-
-  await sendInternalMessage({
-    swarmSessionId,
-    threadId: thread.id,
-    senderAgentId: leadAgentId,
-    recipientAgentId: teammate.id,
-    messageType: 'task_assignment',
-    content: assignmentMessage,
-    metadata: {
-      taskId: task.id,
-      hasPendingDependencies: pendingDeps.length > 0,
-      pendingDependencyCount: pendingDeps.length,
-      queuedBehindTaskId: teammateActiveTask?.id,
-      queuedBehindTaskTitle: teammateActiveTask?.title,
-    },
-  })
-
-  // 广播任务分配
-  publishRealtimeMessage(
-    {
-      type: 'task_update',
-      payload: {
-        task_id: task.id,
-        title: task.title,
-        status: 'assigned',
-        assignee_id: teammate.id,
-        assignee_name: teammate.name,
-        swarm_session_id: swarmSessionId,
-        has_dependencies: pendingDeps.length > 0,
-        queued_behind_task_id: teammateActiveTask?.id,
-        message: `任务 "${task.title}" 分配给 ${teammate.name}${pendingDeps.length > 0 ? ' (等待依赖)' : isQueuedBehindActiveTask ? ' (排队中)' : ''}`,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-
-  // 如果没有待处理的依赖且 assignee 当前空闲，则立即触发执行；否则保留 ASSIGNED 等待调度器自动启动。
-  if (pendingDeps.length === 0 && !isQueuedBehindActiveTask) {
-    try {
-      await triggerTaskExecution(swarmSessionId, task.id)
-    } catch (error) {
-      console.error(`[LeadOrchestrator] Failed to trigger task execution:`, error)
-    }
-  }
-
-  return updatedTask
 }
 
 /**
@@ -584,6 +284,47 @@ export async function replyToUser(
   content: string,
   metadata?: Record<string, unknown>
 ) {
+  const normalizedContent = content.trim().replace(/\s+/g, ' ')
+  const conversation = await prisma.externalConversation.findFirst({
+    where: { swarmSessionId, userId },
+    select: { id: true },
+  })
+
+  if (conversation && normalizedContent) {
+    const recentLeadReplies = await prisma.externalMessage.findMany({
+      where: {
+        conversationId: conversation.id,
+        senderType: 'lead',
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    })
+
+    const requestedReplyKey = typeof metadata?.replyKey === 'string' && metadata.replyKey.trim()
+      ? metadata.replyKey.trim()
+      : null
+
+    for (const existingReply of recentLeadReplies) {
+      if (requestedReplyKey && existingReply.metadata) {
+        try {
+          const parsedMetadata = JSON.parse(existingReply.metadata) as Record<string, unknown>
+          if (parsedMetadata.replyKey === requestedReplyKey) {
+            return existingReply
+          }
+        } catch {
+          // Ignore malformed historical metadata and continue dedupe checks.
+        }
+      }
+
+      const normalizedLatest = existingReply.content.trim().replace(/\s+/g, ' ')
+      const isDuplicateContent = normalizedLatest === normalizedContent
+      const isRecent = Date.now() - existingReply.createdAt.getTime() < 120_000
+      if (isDuplicateContent && isRecent) {
+        return existingReply
+      }
+    }
+  }
+
   const reply = await appendLeadReply({
     swarmSessionId,
     userId,
@@ -625,13 +366,9 @@ export async function sendToTeammate(
   messageType: string = 'coordination'
 ): Promise<SendToTeammateResult> {
   // 验证发送者和接收者都存在
-  const [leadAgent, teammate, tasks] = await Promise.all([
+  const [leadAgent, teammate] = await Promise.all([
     prisma.agent.findUnique({ where: { id: leadAgentId } }),
     resolveAgentInSession(swarmSessionId, teammateId, { excludeAgentIds: [leadAgentId] }),
-    prisma.teamLeadTask.findMany({
-      where: { swarmSessionId },
-      select: { status: true },
-    }),
   ])
 
   if (!leadAgent) {
@@ -641,13 +378,18 @@ export async function sendToTeammate(
     throw new Error(`Teammate not found: ${teammateId}`)
   }
 
-  const hasActiveTasks = tasks.some(task => ['PENDING', 'ASSIGNED', 'IN_PROGRESS'].includes(task.status))
-  if (!hasActiveTasks && messageType === 'coordination' && isCeremonialCompletionMessage(content)) {
-    console.log('[LeadOrchestrator] Skipping ceremonial teammate message after session completion')
+  const skipDecision = await shouldSkipLeadTeammateMessage({
+    swarmSessionId,
+    teammateId: teammate.id,
+    content,
+    messageType,
+  })
+  if (skipDecision.skipped) {
+    console.log(`[LeadOrchestrator] Skipping teammate message: ${skipDecision.reason}`)
     return {
       id: 'noop',
       skipped: true,
-      reason: 'all_tasks_completed',
+      reason: skipDecision.reason,
     }
   }
 
@@ -667,6 +409,9 @@ export async function sendToTeammate(
     recipientAgentId: teammate.id,
     messageType,
     content,
+    metadata: {
+      runtimeControl: buildLeadToTeammateRuntimeControl(messageType, {}),
+    },
   })
 
   return {
@@ -680,7 +425,7 @@ export async function sendToTeammate(
  */
 export async function orchestrate(input: OrchestrateInput) {
   // 1. 获取完整上下文
-  const context = await getLeadContext(input.swarmSessionId, input.leadAgentId)
+  const context = await getLeadContext(input.swarmSessionId, input.leadAgentId, input.userId)
 
   // 2. 记录用户消息到 Lead 上下文
   await appendAgentContextEntry({
@@ -717,88 +462,4 @@ export async function orchestrate(input: OrchestrateInput) {
   }
 }
 
-/**
- * Teammate 完成任务后汇报的处理入口
- */
-export async function handleTeammateReport(
-  swarmSessionId: string,
-  leadAgentId: string,
-  teammateId: string,
-  taskId: string,
-  report: string,
-  resultSummary?: string
-) {
-  // 更新任务状态
-  const task = await prisma.teamLeadTask.update({
-    where: { id: taskId },
-    data: {
-      status: 'COMPLETED',
-      completedAt: new Date(),
-      resultSummary: resultSummary || report.slice(0, 500),
-    },
-    include: { assignee: true },
-  })
 
-  // 记录到 Lead 上下文
-  await appendAgentContextEntry({
-    swarmSessionId,
-    agentId: leadAgentId,
-    sourceType: 'task',
-    sourceId: taskId,
-    entryType: 'task_completion',
-    content: `任务完成汇报: ${task.title}\n\n${report}`,
-    metadata: {
-      completedBy: teammateId,
-      taskId,
-    },
-  })
-
-  // 更新 teammate 状态
-  await prisma.agent.update({
-    where: { id: teammateId },
-    data: { status: 'IDLE' },
-  })
-
-  // 广播
-  publishRealtimeMessage(
-    {
-      type: 'task_update',
-      payload: {
-        task_id: taskId,
-        title: task.title,
-        status: 'completed',
-        swarm_session_id: swarmSessionId,
-        message: `任务 "${task.title}" 已完成`,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-
-  // 检查是否有解锁的子任务（parent-child关系）
-  const unlockedSubtasks = await prisma.teamLeadTask.findMany({
-    where: { parentId: taskId, status: 'PENDING' },
-  })
-
-  for (const subtask of unlockedSubtasks) {
-    publishRealtimeMessage(
-      {
-        type: 'task_update',
-        payload: {
-          task_id: subtask.id,
-          title: subtask.title,
-          status: 'pending',
-          swarm_session_id: swarmSessionId,
-          message: `任务 "${subtask.title}" 已解锁（父任务完成）`,
-          timestamp: new Date().toISOString(),
-        },
-      },
-      { sessionId: swarmSessionId }
-    )
-  }
-
-  // 检查依赖图解锁（TaskDependency关系）
-  const unlockedDeps = await unlockDependentTasks(taskId)
-
-  return { task, unlockedTasks: [...unlockedSubtasks, ...unlockedDeps] }
-}

@@ -151,7 +151,8 @@ function convertFromOpenAIResponse(
       content: [{ type: 'text', text: '' }],
       stopReason: 'end_turn',
       model: modelName,
-      usage: { inputTokens: 0, outputTokens: 0 },
+      provider: 'openai',
+      usage: { inputTokens: 0, outputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 },
     }
   }
 
@@ -191,9 +192,12 @@ function convertFromOpenAIResponse(
     content: content.length > 0 ? content : [{ type: 'text', text: '' }],
     stopReason,
     model: response.model || modelName,
+    provider: 'openai',
     usage: {
       inputTokens: response.usage?.prompt_tokens || 0,
       outputTokens: response.usage?.completion_tokens || 0,
+      cacheCreationTokens: 0,
+      cacheReadTokens: 0,
     },
   }
 }

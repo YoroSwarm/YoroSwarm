@@ -74,8 +74,10 @@ model SwarmSession {
   internalMessages      InternalMessage[]
   externalConversations ExternalConversation[]
   externalMessages      ExternalMessage[]
-  artifacts             Artifact[]
   files                 File[]
+  leadSelfTodos         LeadSelfTodo[]
+  llmUsageEvents        LlmUsageEvent[]
+  sharedKnowledgeEntries SharedKnowledgeEntry[]
 
   @@map("swarm_sessions")
 }
@@ -102,7 +104,6 @@ model File {
   swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
   user      User?          @relation(fields: [userId], references: [id])
   thumbnails FileThumbnail[]
-  artifacts  Artifact[]
 
   @@map("files")
 }
@@ -184,7 +185,8 @@ model Agent {
   sentInternalMessages InternalMessage[] @relation("InternalMessageSender")
   receivedInternalMessages InternalMessage[] @relation("InternalMessageRecipient")
   externalConversationsAsLead ExternalConversation[] @relation("ExternalConversationLead")
-  artifacts Artifact[]
+  leadSelfTodos        LeadSelfTodo[]
+  llmUsageEvents       LlmUsageEvent[]
 
   @@index([swarmSessionId])
   @@map("agents")
@@ -238,10 +240,52 @@ model TeamLeadTask {
   dependencies TaskDependency[] @relation("TaskDependencies")
   dependents   TaskDependency[] @relation("TaskDependents")
   internalThreads InternalThread[]
-  artifacts    Artifact[]
 
   @@index([swarmSessionId, status])
   @@map("team_lead_tasks")
+}
+
+model LeadSelfTodo {
+  id             String   @id @default(uuid())
+  swarmSessionId String   @map("swarm_session_id")
+  leadAgentId    String   @map("lead_agent_id")
+  title          String
+  details        String?
+  status         String   @default("pending")
+  category       String   @default("other")
+  sourceRef      String?  @map("source_ref")
+  sortOrder      Int      @default(0) @map("sort_order")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  completedAt    DateTime? @map("completed_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  leadAgent    Agent        @relation(fields: [leadAgentId], references: [id], onDelete: Cascade)
+
+  @@index([swarmSessionId, leadAgentId, status])
+  @@index([swarmSessionId, sortOrder])
+  @@map("lead_self_todos")
+}
+
+model LlmUsageEvent {
+  id                  String   @id @default(uuid())
+  swarmSessionId      String   @map("swarm_session_id")
+  agentId             String?  @map("agent_id")
+  provider            String
+  model               String
+  requestKind         String   @default("general") @map("request_kind")
+  inputTokens         Int      @default(0) @map("input_tokens")
+  outputTokens        Int      @default(0) @map("output_tokens")
+  cacheCreationTokens Int      @default(0) @map("cache_creation_tokens")
+  cacheReadTokens     Int      @default(0) @map("cache_read_tokens")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([swarmSessionId, createdAt])
+  @@index([swarmSessionId, agentId, createdAt])
+  @@map("llm_usage_events")
 }
 
 model TaskDependency {
@@ -335,26 +379,30 @@ model ExternalMessage {
   @@map("external_messages")
 }
 
-model Artifact {
+// ============================================
+// 共享知识层 (Shared Knowledge Layer)
+// ============================================
+
+model SharedKnowledgeEntry {
   id             String   @id @default(uuid())
   swarmSessionId String   @map("swarm_session_id")
-  ownerAgentId   String?  @map("owner_agent_id")
-  sourceTaskId   String?  @map("source_task_id")
-  kind           String
-  fileId         String?  @map("file_id")
+  taskId         String?  @map("task_id")
+  agentId        String   @map("agent_id")
+  entryType      String   @map("entry_type") // task_result, discovery, resource, fact
   title          String
+  content        String
   summary        String?
-  metadata       String?
+  tags           String?  // JSON array of tags
+  confidence     Float    @default(1.0)
   createdAt      DateTime @default(now()) @map("created_at")
 
   swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
-  ownerAgent   Agent?       @relation(fields: [ownerAgentId], references: [id], onDelete: SetNull)
-  sourceTask   TeamLeadTask? @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
-  file         File?         @relation(fields: [fileId], references: [id], onDelete: SetNull)
 
-  @@index([swarmSessionId, kind, createdAt])
-  @@map("artifacts")
+  @@index([swarmSessionId, entryType])
+  @@index([swarmSessionId, taskId])
+  @@map("shared_knowledge_entries")
 }
+
 
 // ============================================
 // 共享任务列表模块 (Shared Task List)

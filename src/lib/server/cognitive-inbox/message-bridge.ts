@@ -10,6 +10,123 @@ import { deliverMessage, getCognitiveRuntime } from './cognitive-engine'
 import type { InboxMessage } from './cognitive-state'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 
+type RuntimeControl = {
+  plane?: 'control' | 'work'
+  interruption?: 'none' | 'soft' | 'hard'
+  workUnitKey?: string
+  supersedesPending?: boolean
+  controlType?: 'pause_execution' | 'resume_execution' | 'cancel_execution' | 'supersede_execution' | string
+}
+
+function mergeRuntimeControl(
+  metadata: Record<string, unknown>,
+  runtimeControl: RuntimeControl
+): Record<string, unknown> {
+  const existing = metadata.runtimeControl
+  return {
+    ...metadata,
+    runtimeControl: {
+      ...(existing && typeof existing === 'object' ? existing as Record<string, unknown> : {}),
+      ...runtimeControl,
+    },
+  }
+}
+
+function buildInternalRuntimeControl(message: {
+  messageType: string
+  thread?: { relatedTaskId: string | null } | null
+}, metadata: Record<string, unknown>): RuntimeControl {
+  const taskId = typeof metadata.taskId === 'string' ? metadata.taskId : message.thread?.relatedTaskId || undefined
+  const workUnitKey = taskId ? `task:${taskId}` : undefined
+
+  switch (message.messageType) {
+    case 'pause_execution':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+        supersedesPending: true,
+        controlType: 'pause_execution',
+      }
+    case 'resume_execution':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+        supersedesPending: true,
+        controlType: 'resume_execution',
+      }
+    case 'cancel_execution':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+        supersedesPending: true,
+        controlType: 'cancel_execution',
+      }
+    case 'supersede_execution':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+        supersedesPending: true,
+        controlType: 'supersede_execution',
+      }
+    case 'task_assignment':
+      return {
+        plane: 'work',
+        interruption: 'soft',
+        workUnitKey,
+        supersedesPending: true,
+      }
+    case 'task_complete':
+      return {
+        plane: 'control',
+        interruption: 'soft',
+        workUnitKey,
+        supersedesPending: true,
+      }
+    case 'blocking_issue':
+    case 'critical_update':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+        supersedesPending: true,
+      }
+    case 'clarification_request':
+    case 'resource_request':
+    case 'question':
+    case 'coordination':
+    case 'response':
+      return {
+        plane: 'control',
+        interruption: 'soft',
+        workUnitKey,
+        supersedesPending: true,
+      }
+    case 'team_update':
+    case 'welcome':
+      return {
+        plane: 'work',
+        interruption: 'none',
+        supersedesPending: true,
+      }
+    case 'urgent':
+      return {
+        plane: 'control',
+        interruption: 'hard',
+        workUnitKey,
+      }
+    default:
+      return {
+        plane: message.messageType === 'info' ? 'control' : 'work',
+        interruption: message.messageType === 'info' ? 'none' : 'soft',
+        workUnitKey,
+      }
+  }
+}
+
 /**
  * 初始化消息桥接器
  * 
@@ -63,6 +180,7 @@ export async function bridgeInternalMessage(
   }
 
   // 转换为收件箱消息格式
+  const parsedMetadata = parseMetadata(message.metadata)
   const inboxMessage: Omit<InboxMessage, 'id' | 'status' | 'receivedAt'> = {
     agentId: message.recipientAgentId,
     swarmSessionId,
@@ -71,11 +189,11 @@ export async function bridgeInternalMessage(
     senderName: message.sender?.name || 'Unknown',
     type: mapMessageType(message.messageType),
     content: message.content,
-    metadata: {
+    metadata: mergeRuntimeControl({
       threadId: message.threadId,
       internalMessageId: message.id,
-      ...parseMetadata(message.metadata),
-    },
+      ...parsedMetadata,
+    }, buildInternalRuntimeControl(message, parsedMetadata)),
     priority: inferPriority(message),
   }
 
@@ -117,11 +235,16 @@ export async function bridgeTaskCompletion(
     senderName: teammate?.name || 'Teammate',
     type: 'task_complete',
     content: `[任务完成] ${task.title}\n\n汇报:\n${report}`,
-    metadata: {
+    metadata: mergeRuntimeControl({
       taskId,
       teammateId,
       report,
-    },
+    }, {
+      plane: 'control',
+      interruption: 'soft',
+      workUnitKey: `task:${taskId}`,
+      supersedesPending: true,
+    }),
     priority: 'high',
   })
 
@@ -162,7 +285,12 @@ export async function bridgeUserMessage(
     senderName: 'User',
     type: 'direct_message',
     content,
-    metadata: { attachments },
+    metadata: mergeRuntimeControl({ attachments }, {
+      plane: 'control',
+      interruption: 'hard',
+      workUnitKey: `lead:user:${userId}`,
+      supersedesPending: true,
+    }),
     priority: 'high', // 用户消息默认高优先级
   })
 }
@@ -187,7 +315,12 @@ export async function bridgePeerMessage(
     senderName: sender?.name || 'Teammate',
     type: 'coordination',
     content,
-    metadata,
+    metadata: mergeRuntimeControl(metadata || {}, {
+      plane: 'control',
+      interruption: 'soft',
+      workUnitKey: typeof metadata?.taskId === 'string' ? `task:${metadata.taskId}` : undefined,
+      supersedesPending: true,
+    }),
     priority: 'normal',
   })
 }

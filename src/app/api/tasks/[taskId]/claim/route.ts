@@ -13,14 +13,19 @@ export async function PUT(_request: Request, context: RouteContext) {
 
     const task = await prisma.teamLeadTask.findUnique({
       where: { id: taskId },
-      include: { parent: true },
+      include: {
+        parent: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
+      },
     })
 
     if (!task) {
       return notFoundResponse('Task not found')
     }
 
-    if (task.parentId && task.parent?.status !== 'COMPLETED') {
+    if (task.dependencies.some((dependency) => dependency.dependsOnTask.status !== 'COMPLETED')) {
       return errorResponse('Task is still blocked by dependency', 409)
     }
 
@@ -43,6 +48,9 @@ export async function PUT(_request: Request, context: RouteContext) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
 

@@ -2,6 +2,68 @@ import prisma from '@/lib/db'
 import { appendAgentContextEntry } from '@/lib/server/agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 
+type RuntimeControlMetadata = {
+  plane?: 'control' | 'work'
+  interruption?: 'none' | 'soft' | 'hard'
+  workUnitKey?: string
+  supersedesPending?: boolean
+  controlType?: 'pause_execution' | 'resume_execution' | 'cancel_execution' | 'supersede_execution' | string
+}
+
+function mergeRuntimeControl(
+  metadata: Record<string, unknown> | null | undefined,
+  runtimeControl: RuntimeControlMetadata
+): Record<string, unknown> {
+  const existing = metadata && typeof metadata === 'object'
+    ? (metadata.runtimeControl as Record<string, unknown> | undefined)
+    : undefined
+
+  return {
+    ...(metadata || {}),
+    runtimeControl: {
+      ...(existing || {}),
+      ...runtimeControl,
+    },
+  }
+}
+
+function buildPeerRuntimeControl(messageType: string): RuntimeControlMetadata {
+  switch (messageType) {
+    case 'pause_execution':
+      return { plane: 'control', interruption: 'hard', supersedesPending: true, controlType: 'pause_execution' }
+    case 'resume_execution':
+      return { plane: 'control', interruption: 'hard', supersedesPending: true, controlType: 'resume_execution' }
+    case 'cancel_execution':
+      return { plane: 'control', interruption: 'hard', supersedesPending: true, controlType: 'cancel_execution' }
+    case 'supersede_execution':
+      return { plane: 'control', interruption: 'hard', supersedesPending: true, controlType: 'supersede_execution' }
+    case 'question':
+      return { plane: 'control', interruption: 'soft', supersedesPending: true }
+    case 'response':
+      return { plane: 'control', interruption: 'soft', supersedesPending: true }
+    case 'coordination':
+      return { plane: 'control', interruption: 'soft', supersedesPending: true }
+    case 'warning':
+      return { plane: 'control', interruption: 'soft' }
+    case 'urgent':
+      return { plane: 'control', interruption: 'hard' }
+    default:
+      return { plane: 'work', interruption: 'none' }
+  }
+}
+
+function buildBroadcastRuntimeControl(messageType: string): RuntimeControlMetadata {
+  switch (messageType) {
+    case 'warning':
+      return { plane: 'control', interruption: 'soft' }
+    case 'team_update':
+    case 'welcome':
+      return { plane: 'control', interruption: 'none', supersedesPending: true }
+    default:
+      return { plane: 'work', interruption: 'none' }
+  }
+}
+
 function normalizeAgentRef(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, '')
 }
@@ -188,11 +250,11 @@ export async function broadcastToTeam(input: {
         recipientAgentId: recipient.id,
         messageType: input.messageType,
         content: input.content,
-        metadata: {
+        metadata: mergeRuntimeControl({
           ...input.metadata,
           isBroadcast: true,
           totalRecipients: recipients.length,
-        },
+        }, buildBroadcastRuntimeControl(input.messageType)),
       })
     )
   )
@@ -261,10 +323,10 @@ export async function sendPeerToPeerMessage(input: {
     recipientAgentId: recipient.id,
     messageType: input.messageType,
     content: input.content,
-    metadata: {
+    metadata: mergeRuntimeControl({
       ...input.metadata,
       isPeerToPeer: true,
-    },
+    }, buildPeerRuntimeControl(input.messageType)),
   })
 
   // 获取发送者信息用于实时通知
@@ -391,17 +453,8 @@ export async function initializeTeamAwareness(input: {
     visibility: 'private',
   })
 
-  // 通知现有队友有新成员加入
-  await broadcastToTeam({
-    swarmSessionId: input.swarmSessionId,
-    senderAgentId: input.leadAgentId,
-    messageType: 'team_update',
-    content: `新团队成员已加入！请欢迎新队友。`,
-    metadata: {
-      event: 'teammate_joined',
-      newAgentId: input.newAgentId,
-    },
-  })
+  // 不再向现有队友广播 welcome/team_update。
+  // 团队拓扑是静态上下文，不应占用认知收件箱和工具预算。
 
   return {
     hasExistingTeammates: true,

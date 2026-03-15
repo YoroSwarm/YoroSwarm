@@ -180,8 +180,19 @@ export function serializeTask(
     assignee?: Agent | null
     parent?: TeamLeadTask | null
     subtasks?: TeamLeadTask[]
+    dependencies?: Array<{
+      dependsOnTaskId: string
+      dependsOnTask?: Pick<TeamLeadTask, 'status'> | null
+    }>
   }
 ) {
+  const dependencyIds = task.dependencies?.map((dependency) => dependency.dependsOnTaskId)
+    ?? (task.parentId ? [task.parentId] : [])
+
+  const isLocked = task.dependencies
+    ? task.dependencies.some((dependency) => dependency.dependsOnTask?.status !== 'COMPLETED')
+    : Boolean(task.parentId && task.parent?.status !== 'COMPLETED')
+
   return {
     id: task.id,
     title: task.title,
@@ -205,8 +216,8 @@ export function serializeTask(
     deadline: task.dueDate?.toISOString(),
     result_summary: task.resultSummary || undefined,
     error_summary: task.errorSummary || undefined,
-    dependency_ids: task.parentId ? [task.parentId] : [],
-    is_locked: Boolean(task.parentId && task.parent?.status !== 'COMPLETED'),
+    dependency_ids: dependencyIds,
+    is_locked: isLocked,
   }
 }
 

@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import type { Agent, AgentActivity, AgentMessage } from '@/types/agent';
+import { stripAnsiControlCodes } from '@/lib/text/sanitize';
 import {
   Sheet,
   SheetContent,
@@ -29,6 +30,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
   activities,
 }) => {
   const expertise = useMemo(() => agent?.expertise || [], [agent?.expertise]);
+  const cleanText = (value: string) => stripAnsiControlCodes(value);
 
   if (!agent) return null;
 
@@ -144,7 +146,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
                   ) : (
                     messages.map((message) => (
                       <div key={message.id} className="rounded-2xl border border-border bg-muted/30 p-4">
-                        <div className="text-sm leading-6 text-foreground">{message.content}</div>
+                        <div className="text-sm leading-6 text-foreground">{cleanText(message.content)}</div>
                         <div className="mt-2 text-xs text-muted-foreground">{new Date(message.timestamp).toLocaleString()}</div>
                       </div>
                     ))
@@ -166,7 +168,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
                       <div key={activity.id} className="flex items-start gap-3 rounded-2xl border border-border bg-muted/30 p-4">
                         <div className="mt-2 h-2 w-2 rounded-full bg-primary" />
                         <div>
-                          <div className="text-sm leading-6 text-foreground">{activity.details || activity.action}</div>
+                          <div className="text-sm leading-6 text-foreground">{cleanText(activity.details || activity.action)}</div>
                           <div className="mt-2 text-xs text-muted-foreground">{new Date(activity.timestamp).toLocaleString()}</div>
                         </div>
                       </div>

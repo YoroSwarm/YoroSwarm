@@ -1,4 +1,7 @@
 import prisma from '@/lib/db'
+import { Prisma } from '@prisma/client'
+
+const agentContextWriteQueues = new Map<string, Promise<unknown>>()
 
 type AppendAgentContextEntryInput = {
   swarmSessionId: string
@@ -12,25 +15,62 @@ type AppendAgentContextEntryInput = {
 }
 
 export async function appendAgentContextEntry(input: AppendAgentContextEntryInput) {
-  const latest = await prisma.agentContextEntry.findFirst({
-    where: { agentId: input.agentId },
-    orderBy: { sequence: 'desc' },
-    select: { sequence: true },
-  })
+  const queueKey = input.agentId
+  const previous = agentContextWriteQueues.get(queueKey) || Promise.resolve()
 
-  return prisma.agentContextEntry.create({
-    data: {
-      swarmSessionId: input.swarmSessionId,
-      agentId: input.agentId,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId || null,
-      entryType: input.entryType,
-      content: input.content,
-      metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-      visibility: input.visibility || 'private',
-      sequence: (latest?.sequence || 0) + 1,
-    },
-  })
+  const operation = previous
+    .catch(() => undefined)
+    .then(() => appendAgentContextEntryInternal(input))
+
+  agentContextWriteQueues.set(queueKey, operation)
+
+  try {
+    return await operation
+  } finally {
+    if (agentContextWriteQueues.get(queueKey) === operation) {
+      agentContextWriteQueues.delete(queueKey)
+    }
+  }
+}
+
+async function appendAgentContextEntryInternal(input: AppendAgentContextEntryInput) {
+  const maxAttempts = 20
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const latest = await prisma.agentContextEntry.findFirst({
+      where: { agentId: input.agentId },
+      orderBy: { sequence: 'desc' },
+      select: { sequence: true },
+    })
+
+    try {
+      return await prisma.agentContextEntry.create({
+        data: {
+          swarmSessionId: input.swarmSessionId,
+          agentId: input.agentId,
+          sourceType: input.sourceType,
+          sourceId: input.sourceId || null,
+          entryType: input.entryType,
+          content: input.content,
+          metadata: input.metadata ? JSON.stringify(input.metadata) : null,
+          visibility: input.visibility || 'private',
+          sequence: (latest?.sequence || 0) + 1,
+        },
+      })
+    } catch (error) {
+      const isSequenceConflict = error instanceof Prisma.PrismaClientKnownRequestError
+        && error.code === 'P2002'
+        && Array.isArray(error.meta?.target)
+        && error.meta.target.includes('agent_id')
+        && error.meta.target.includes('sequence')
+
+      if (!isSequenceConflict || attempt === maxAttempts - 1) {
+        throw error
+      }
+    }
+  }
+
+  throw new Error(`Failed to append agent context entry for agent ${input.agentId}`)
 }
 
 export async function listAgentContextEntries(agentId: string, limit = 100) {

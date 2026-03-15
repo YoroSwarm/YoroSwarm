@@ -14,6 +14,17 @@ function normalizeParticipantName(name: string | null | undefined, fallbackRole:
   return 'Unknown';
 }
 
+function dedupeParticipants(participants: Agent[]): Agent[] {
+  const deduped = new Map<string, Agent>();
+
+  for (const participant of participants) {
+    if (!participant?.id) continue;
+    deduped.set(participant.id, participant);
+  }
+
+  return Array.from(deduped.values());
+}
+
 function convertSession(session: SwarmSessionResponse): Session {
   const lead = session.agents.find((agent) => agent.id === session.lead_agent_id);
 
@@ -21,12 +32,12 @@ function convertSession(session: SwarmSessionResponse): Session {
     id: session.id,
     title: session.title,
     description: session.goal,
-    participants: session.agents.map((agent) => ({
+    participants: dedupeParticipants(session.agents.map((agent) => ({
       id: agent.id,
       name: normalizeParticipantName(agent.name, agent.role),
       role: agent.id === session.lead_agent_id ? 'lead' : 'teammate',
       status: agent.status === 'offline' ? 'offline' : agent.status === 'busy' ? 'busy' : 'online',
-    })),
+    }))),
     lastMessage: session.last_message
       ? {
           id: session.last_message.id,
@@ -144,12 +155,12 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
             role: agent.role || updatedParticipants[existingIndex].role,
             status: normalizedStatus as Agent['status'],
           };
-          return { ...session, participants: updatedParticipants };
+          return { ...session, participants: dedupeParticipants(updatedParticipants) };
         } else {
           // Add new participant
           return {
             ...session,
-            participants: [
+            participants: dedupeParticipants([
               ...session.participants.filter((participant) => participant.id !== normalizedId),
               {
                 id: normalizedId,
@@ -157,7 +168,7 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
                 role: (agent.role as Agent['role']) || 'teammate',
                 status: normalizedStatus as Agent['status'],
               },
-            ],
+            ]),
           };
         }
       }),

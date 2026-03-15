@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { swarmSessionsApi, type ExternalMessageResponse, type SendExternalMessageRequest } from '@/lib/api/swarm-sessions';
 import { filesApi } from '@/lib/api/files';
 import type { Agent, Message, ToolCall } from '@/types/chat';
-import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload } from '@/types/websocket';
+import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload, ExecutionStatusUpdate } from '@/types/websocket';
 
 export interface ToolCallState {
   toolName: string;
@@ -47,6 +47,42 @@ type IncomingRealtimeMessage = ChatMessagePayload & {
   sender_type?: 'user' | 'lead';
   message_type?: string;
 };
+
+function sortMessages(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => {
+    const timeA = new Date(a.createdAt).getTime();
+    const timeB = new Date(b.createdAt).getTime();
+    if (timeA !== timeB) return timeA - timeB;
+    const seqA = a.metadata?.seq ?? 0;
+    const seqB = b.metadata?.seq ?? 0;
+    if (seqA !== seqB) return seqA - seqB;
+    return a.id.localeCompare(b.id);
+  });
+}
+
+function dedupeMessages(messages: Message[]): Message[] {
+  const latestById = new Map<string, Message>();
+  for (const message of messages) {
+    latestById.set(message.id, message);
+  }
+  return sortMessages(Array.from(latestById.values()));
+}
+
+function mergeUniqueMessages(existing: Message[], incoming: Message[]): Message[] {
+  return dedupeMessages([...existing, ...incoming]);
+}
+
+function isHighSignalTool(toolName: string | undefined): boolean {
+  if (!toolName) return false;
+  return [
+    'decompose_task',
+    'provision_teammate',
+    'assign_task',
+    'create_workspace_file',
+    'replace_workspace_file',
+    'report_task_completion',
+  ].includes(toolName);
+}
 
 const EMPTY_PARTICIPANTS: Agent[] = [];
 
@@ -170,24 +206,11 @@ export function useMessages(options: UseMessagesOptions) {
         const isToolResult = activity.activityType === 'tool_result';
 
         if (activity.activityType === 'thinking') {
-          activityMessages.push({
-            id: activity.id,
-            sessionId,
-            type: 'text' as const,
-            content: activity.content,
-            sender: {
-              id: activity.agentId,
-              type: 'agent' as const,
-              name: activity.agentName,
-            },
-            status: 'received' as const,
-            createdAt: activity.createdAt,
-            metadata: {
-              activityType: 'thinking',
-            },
-            thinkingContent: [activity.content],
-          });
+          continue;
         } else if (isToolCall) {
+          if (!isHighSignalTool(activity.metadata?.toolName)) {
+            continue;
+          }
           activityMessages.push({
             id: activity.id,
             sessionId,
@@ -213,6 +236,9 @@ export function useMessages(options: UseMessagesOptions) {
             }],
           });
         } else if (isToolResult) {
+          if (!isHighSignalTool(activity.metadata?.toolName)) {
+            continue;
+          }
           // Find the matching tool_call message by toolCallId, or fallback to agent+name
           const toolCallId = activity.metadata?.toolCallId;
           let matchingToolCallIndex: number;
@@ -251,10 +277,7 @@ export function useMessages(options: UseMessagesOptions) {
       }
 
       // Merge external messages and activity messages, sort by createdAt
-      const allMessages = [...externalMessages, ...activityMessages];
-      allMessages.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-      setMessages(allMessages);
+      setMessages(dedupeMessages([...externalMessages, ...activityMessages]));
 
       // Clear streaming state since historical activities are now displayed as messages
       setStreamingStateMap(new Map());
@@ -312,7 +335,7 @@ export function useMessages(options: UseMessagesOptions) {
         return prev;
       }
 
-      return [...prev, converted];
+      return mergeUniqueMessages(prev, [converted]);
     });
 
     // Clear streaming state for this agent after message is added
@@ -490,48 +513,43 @@ export function useMessages(options: UseMessagesOptions) {
         return newMap;
       });
 
-      // Also create individual message for chronological display
-      if (data.status === 'thinking' && data.content) {
-        const thinkingMessage: Message = {
-          id: `thinking-${agentId}-${Date.now()}`,
-          sessionId: sessionId || '',
-          type: 'text',
-          content: data.content,
-          sender: {
-            id: agentId,
-            type: 'agent',
-            name: data.agent_name,
-          },
-          status: 'received',
-          createdAt: data.timestamp || new Date().toISOString(),
-          metadata: {
-            activityType: 'thinking',
-            seq: data.seq,
-          },
-          thinkingContent: [data.content],
-        };
+    } else if (type === 'execution_update') {
+      const data = payload as ExecutionStatusUpdate;
+      const agentId = data.agent_id;
 
-        setMessages((prev) => {
-          // Check for duplicate content
-          const lastMessage = prev[prev.length - 1];
-          if (lastMessage?.metadata?.activityType === 'thinking' &&
-              lastMessage.sender.id === agentId &&
-              lastMessage.content === data.content) {
-            return prev;
+      setStreamingStateMap((prev) => {
+        const newMap = new Map(prev);
+        const existing = newMap.get(agentId);
+
+        if (data.status === 'completed' || data.status === 'cancelled') {
+          if (!existing) {
+            return newMap;
           }
-          // Add message and sort by timestamp, then by seq
-          const newMessages = [...prev, thinkingMessage];
-          return newMessages.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime();
-            const timeB = new Date(b.createdAt).getTime();
-            if (timeA !== timeB) return timeA - timeB;
-            // If same timestamp, sort by seq
-            const seqA = a.metadata?.seq ?? 0;
-            const seqB = b.metadata?.seq ?? 0;
-            return seqA - seqB;
-          });
+
+          const hasPendingTools = existing.toolCalls.some((tool) => tool.status === 'calling');
+          if (!hasPendingTools) {
+            newMap.delete(agentId);
+          } else {
+            newMap.set(agentId, {
+              ...existing,
+              isThinking: false,
+              lastUpdatedAt: Date.now(),
+            });
+          }
+          return newMap;
+        }
+
+        newMap.set(agentId, {
+          agentId,
+          agentName: data.agent_name,
+          role: existing?.role || 'teammate',
+          isThinking: true,
+          thinkingContent: existing?.thinkingContent || [],
+          toolCalls: existing?.toolCalls || [],
+          lastUpdatedAt: Date.now(),
         });
-      }
+        return newMap;
+      });
     } else if (type === 'tool_activity') {
       const data = payload as ToolActivityPayload;
       const agentId = data.agent_id;
@@ -621,15 +639,7 @@ export function useMessages(options: UseMessagesOptions) {
           if (prev.some((message) => message.id === toolMessageId)) {
             return prev;
           }
-          const newMessages = [...prev, toolCallMessage];
-          return newMessages.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime();
-            const timeB = new Date(b.createdAt).getTime();
-            if (timeA !== timeB) return timeA - timeB;
-            const seqA = a.metadata?.seq ?? 0;
-            const seqB = b.metadata?.seq ?? 0;
-            return seqA - seqB;
-          });
+          return mergeUniqueMessages(prev, [toolCallMessage]);
         });
       } else {
         // Update existing tool_call message with result instead of creating new message
@@ -696,15 +706,7 @@ export function useMessages(options: UseMessagesOptions) {
           if (prev.some((message) => message.id === fallbackResultId)) {
             return prev;
           }
-          const newMessages = [...prev, toolResultMessage];
-          return newMessages.sort((a, b) => {
-            const timeA = new Date(a.createdAt).getTime();
-            const timeB = new Date(b.createdAt).getTime();
-            if (timeA !== timeB) return timeA - timeB;
-            const seqA = a.metadata?.seq ?? 0;
-            const seqB = b.metadata?.seq ?? 0;
-            return seqA - seqB;
-          });
+          return mergeUniqueMessages(prev, [toolResultMessage]);
         });
       }
     }
@@ -738,7 +740,7 @@ export function useMessages(options: UseMessagesOptions) {
       });
       // 只有当去重后的列表与当前列表不同时才更新
       if (deduped.length !== messages.length) {
-        setMessages(deduped);
+        setMessages(sortMessages(deduped));
       }
     }
     prevMessagesRef.current = messages;

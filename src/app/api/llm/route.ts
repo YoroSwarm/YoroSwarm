@@ -111,6 +111,8 @@ export async function POST(request: NextRequest) {
       usage: {
         prompt_tokens: response.usage.inputTokens,
         completion_tokens: response.usage.outputTokens,
+        cache_creation_tokens: response.usage.cacheCreationTokens,
+        cache_read_tokens: response.usage.cacheReadTokens,
         total_tokens: response.usage.inputTokens + response.usage.outputTokens,
       },
     })

@@ -38,6 +38,8 @@ export interface SwarmSessionTaskResponse {
   status: string;
   priority: string;
   assigned_agent_id?: string;
+   dependency_ids?: string[];
+   is_locked?: boolean;
   created_at: string;
   updated_at: string;
   started_at?: string;
@@ -90,6 +92,48 @@ export interface SwarmSessionMonitorResponse {
     context_entries: number;
     internal_threads: number;
     internal_messages: number;
+    llm_usage: {
+      session: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_creation_tokens: number;
+        cache_read_tokens: number;
+        total_tokens: number;
+        total_processed_input_tokens: number;
+        cache_hit_rate: number;
+      };
+      lead: {
+        input_tokens: number;
+        output_tokens: number;
+        cache_creation_tokens: number;
+        cache_read_tokens: number;
+        total_tokens: number;
+        total_processed_input_tokens: number;
+        cache_hit_rate: number;
+      };
+      teammates: Array<{
+        agent_id: string;
+        agent_name: string;
+        role: string;
+        usage: {
+          input_tokens: number;
+          output_tokens: number;
+          cache_creation_tokens: number;
+          cache_read_tokens: number;
+          total_tokens: number;
+          total_processed_input_tokens: number;
+          cache_hit_rate: number;
+        };
+      }>;
+    };
+    lead_self_todos: Array<{
+      id: string;
+      title: string;
+      details?: string;
+      status: string;
+      category: string;
+      updated_at: string;
+    }>;
   };
 }
 

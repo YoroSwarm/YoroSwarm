@@ -27,13 +27,44 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return notFoundResponse('Task or dependency not found')
     }
 
+    if (task.swarmSessionId !== dependency.swarmSessionId) {
+      return errorResponse('Task and dependency must belong to the same swarm session', 400)
+    }
+
+    if (task.id === dependency.id) {
+      return errorResponse('Task cannot depend on itself', 400)
+    }
+
+    await prisma.taskDependency.upsert({
+      where: {
+        taskId_dependsOnTaskId: {
+          taskId,
+          dependsOnTaskId: dependencyId,
+        },
+      },
+      update: {
+        dependencyType: 'blocks',
+      },
+      create: {
+        swarmSessionId: task.swarmSessionId,
+        taskId,
+        dependsOnTaskId: dependencyId,
+        dependencyType: 'blocks',
+      },
+    })
+
     const updated = await prisma.teamLeadTask.update({
       where: { id: taskId },
-      data: { parentId: dependencyId },
+      data: {
+        parentId: task.parentId || dependencyId,
+      },
       include: {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
 

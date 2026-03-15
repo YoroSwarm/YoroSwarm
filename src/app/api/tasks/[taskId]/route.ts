@@ -14,6 +14,9 @@ async function getTask(taskId: string) {
       assignee: true,
       parent: true,
       subtasks: true,
+      dependencies: {
+        include: { dependsOnTask: true },
+      },
     },
   })
 }
@@ -67,6 +70,9 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
 

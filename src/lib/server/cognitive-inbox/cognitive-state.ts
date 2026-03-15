@@ -29,6 +29,122 @@ export interface StateTransition {
 }
 
 // ============================================
+// Runtime 消息控制语义
+// ============================================
+export type InboxMessagePlane = 'control' | 'work'
+
+export type InboxMessageInterruption = 'none' | 'soft' | 'hard'
+
+export interface InboxMessageRuntimeControl {
+  plane?: InboxMessagePlane
+  interruption?: InboxMessageInterruption
+  expiresAt?: string
+  workUnitKey?: string
+  supersedesPending?: boolean
+  supersedesMessageIds?: string[]
+  controlType?: 'pause_execution' | 'resume_execution' | 'cancel_execution' | 'supersede_execution' | string
+}
+
+export type InboxMessageMetadata = Record<string, unknown> & {
+  runtimeControl?: InboxMessageRuntimeControl
+}
+
+export function getRuntimeControlMetadata(
+  metadata?: Record<string, unknown> | null
+): InboxMessageRuntimeControl {
+  const runtimeControl = metadata?.runtimeControl
+  if (!runtimeControl || typeof runtimeControl !== 'object' || Array.isArray(runtimeControl)) {
+    return {}
+  }
+
+  return runtimeControl as InboxMessageRuntimeControl
+}
+
+export function mergeRuntimeControlMetadata(
+  metadata: Record<string, unknown> | null | undefined,
+  runtimeControl: InboxMessageRuntimeControl
+): InboxMessageMetadata {
+  const base = (metadata && typeof metadata === 'object' && !Array.isArray(metadata))
+    ? { ...metadata }
+    : {}
+
+  return {
+    ...base,
+    runtimeControl: {
+      ...getRuntimeControlMetadata(base),
+      ...runtimeControl,
+    },
+  }
+}
+
+export function getMessagePlane(message: Pick<InboxMessage, 'metadata' | 'type' | 'source'>): InboxMessagePlane {
+  const runtimeControl = getRuntimeControlMetadata(message.metadata)
+  if (runtimeControl.plane) {
+    return runtimeControl.plane
+  }
+
+  if (message.source === 'user' || message.type === 'task_complete' || message.type === 'urgent') {
+    return 'control'
+  }
+
+  return 'work'
+}
+
+export function getInterruptionMode(
+  message: Pick<InboxMessage, 'metadata' | 'type' | 'source'>
+): InboxMessageInterruption {
+  const runtimeControl = getRuntimeControlMetadata(message.metadata)
+  if (runtimeControl.interruption) {
+    return runtimeControl.interruption
+  }
+
+  if (message.source === 'user' || message.type === 'urgent' || message.type === 'task_complete') {
+    return 'hard'
+  }
+
+  if (message.type === 'question' || message.type === 'coordination' || message.type === 'task_assignment') {
+    return 'soft'
+  }
+
+  return 'none'
+}
+
+export function getWorkUnitKey(message: Pick<InboxMessage, 'metadata'>): string | null {
+  const workUnitKey = getRuntimeControlMetadata(message.metadata).workUnitKey
+  return typeof workUnitKey === 'string' && workUnitKey.trim().length > 0
+    ? workUnitKey
+    : null
+}
+
+export function shouldSupersedePending(message: Pick<InboxMessage, 'metadata'>): boolean {
+  return getRuntimeControlMetadata(message.metadata).supersedesPending === true
+}
+
+export function getMessageExpiry(message: Pick<InboxMessage, 'metadata'>): Date | null {
+  const expiresAt = getRuntimeControlMetadata(message.metadata).expiresAt
+  if (typeof expiresAt !== 'string' || !expiresAt.trim()) {
+    return null
+  }
+
+  const parsed = new Date(expiresAt)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
+export function isMessageExpired(
+  message: Pick<InboxMessage, 'metadata'>,
+  now: Date = new Date()
+): boolean {
+  const expiry = getMessageExpiry(message)
+  return !!expiry && expiry.getTime() <= now.getTime()
+}
+
+export function isHardInterruptMessage(
+  message: Pick<InboxMessage, 'metadata' | 'type' | 'source'>
+): boolean {
+  return getInterruptionMode(message) === 'hard'
+}
+
+// ============================================
 // 收件箱消息模型
 // ============================================
 export interface InboxMessage {
@@ -45,7 +161,7 @@ export interface InboxMessage {
   type: 'direct_message' | 'task_assignment' | 'task_complete' | 
         'question' | 'urgent' | 'broadcast' | 'coordination'
   content: string
-  metadata?: Record<string, unknown>
+  metadata?: InboxMessageMetadata
   
   // 时间属性
   receivedAt: Date
@@ -115,6 +231,23 @@ export interface ContextSnapshot {
   resumedAt?: Date
   resumeAttempts: number
   isDiscarded: boolean
+  executionId?: string
+}
+
+export interface AgentExecution {
+  id: string
+  kind: 'message_batch' | 'deep_work' | 'tool_driven' | 'recovery' | 'idle'
+  status: 'active' | 'interrupted' | 'completed' | 'cancelled'
+  startedAt: Date
+  updatedAt: Date
+  completedAt?: Date
+  interruptedAt?: Date
+  resumedAt?: Date
+  workUnitKey?: string
+  description: string
+  sourceMessageIds: string[]
+  interruptionCount: number
+  lastInterruptReason?: string
 }
 
 // ============================================
@@ -171,7 +304,12 @@ export interface CognitiveRuntime {
     estimatedTimeToComplete: 'seconds' | 'minutes' | 'long'
     partialResult?: string
     thinking?: string
+    executionId?: string
+    workUnitKey?: string
+    sourceMessageIds?: string[]
   }
+  currentExecution?: AgentExecution
+  executionHistory: AgentExecution[]
   
   // 统计数据
   stats: {
@@ -194,6 +332,9 @@ export type CognitiveEvent =
   | { type: 'state_changed'; from: CognitiveState; to: CognitiveState; reason: string }
   | { type: 'snapshot_created'; snapshot: ContextSnapshot }
   | { type: 'snapshot_resumed'; snapshot: ContextSnapshot }
+  | { type: 'execution_started'; execution: AgentExecution }
+  | { type: 'execution_interrupted'; execution: AgentExecution; reason: string }
+  | { type: 'execution_completed'; execution: AgentExecution }
   | { type: 'batch_ready'; messages: InboxMessage[]; batchId: string }
   | { type: 'attention_decision'; messages: InboxMessage[]; decision: 'process_now' | 'defer' | 'batch' | 'ignore' }
   | { type: 'processing_complete'; message: InboxMessage; result: unknown }

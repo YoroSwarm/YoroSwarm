@@ -10,6 +10,7 @@ import { SessionOverview } from './TeamOverview';
 import { useSwarmTeam } from '@/hooks/use-swarm-team';
 import { useTasks } from '@/hooks/use-tasks';
 import { useAgentWebSocket } from '@/hooks/use-agent-websocket';
+import { useTeamStats } from '@/hooks/use-team-stats';
 import type { Agent, AgentActivity, AgentMessage, Task } from '@/types/agent';
 
 const defaultActivities: AgentActivity[] = [
@@ -63,14 +64,24 @@ export const MonitorDashboard: React.FC = () => {
     tasks: liveTasks,
     agents: liveAgents,
     internalMessages: liveInternalMessages,
+    executions: liveExecutions,
   } = useAgentWebSocket({
     swarmSessionId: currentTeamId || undefined,
     autoConnect: Boolean(currentTeamId),
   });
 
+  const {
+    stats,
+    isLoading: isStatsLoading,
+    error: statsError,
+  } = useTeamStats({
+    swarmSessionId: currentTeamId || undefined,
+    autoLoad: Boolean(currentTeamId),
+  });
+
   // 合并所有实时消息：任务更新、agent 状态、内部消息
   const messages = useMemo(() => {
-    const hasLiveData = liveTasks.size > 0 || liveAgents.size > 0 || liveInternalMessages.length > 0;
+    const hasLiveData = liveTasks.size > 0 || liveAgents.size > 0 || liveInternalMessages.length > 0 || liveExecutions.size > 0;
 
     if (!hasLiveData && !currentTeamId) {
       return defaultMessages;
@@ -103,10 +114,19 @@ export const MonitorDashboard: React.FC = () => {
       timestamp: msg.timestamp,
     }));
 
-    return [...taskMessages, ...agentMessages, ...internalMsgs]
+    const executionMessages = Array.from(liveExecutions.values()).map((update) => ({
+      id: `execution-message-${update.execution_id}-${update.timestamp}`,
+      agentId: update.agent_id,
+      agentName: update.agent_name,
+      content: `${update.agent_name} 执行状态: ${update.status} (${update.description})`,
+      type: 'system' as const,
+      timestamp: update.timestamp,
+    }));
+
+    return [...taskMessages, ...agentMessages, ...internalMsgs, ...executionMessages]
       .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
       .slice(0, 15);
-  }, [liveAgents, liveTasks, liveInternalMessages, currentTeamId]);
+  }, [liveAgents, liveTasks, liveInternalMessages, liveExecutions, currentTeamId]);
 
   const leadAgent = useMemo(
     () => agents.find((agent) => agent.type === 'leader') || null,
@@ -146,6 +166,14 @@ export const MonitorDashboard: React.FC = () => {
         details: `内部消息${msg.recipient_name ? ` → ${msg.recipient_name}` : ''}: ${msg.content.slice(0, 60)}${msg.content.length > 60 ? '...' : ''}`,
         timestamp: msg.timestamp,
       })),
+      ...Array.from(liveExecutions.values()).map((update) => ({
+        id: `execution-activity-${update.execution_id}-${update.timestamp}`,
+        agentId: update.agent_id,
+        agentName: update.agent_name,
+        action: 'execution_update',
+        details: `${update.status} · ${update.description}`,
+        timestamp: update.timestamp,
+      })),
     ].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     if (liveActivities.length > 0) {
@@ -162,10 +190,10 @@ export const MonitorDashboard: React.FC = () => {
         timestamp: new Date().toISOString(),
       },
     ];
-  }, [currentTeam, leadAgent, liveAgents, liveTasks, liveInternalMessages]);
+  }, [currentTeam, leadAgent, liveAgents, liveTasks, liveInternalMessages, liveExecutions]);
 
-  const isLoading = isTeamLoading || isTasksLoading;
-  const error = teamError || tasksError;
+  const isLoading = isTeamLoading || isTasksLoading || isStatsLoading;
+  const error = teamError || tasksError || statsError;
 
   const handleAgentClick = (agent: Agent) => {
     setSelectedAgent(agent);
@@ -255,7 +283,7 @@ export const MonitorDashboard: React.FC = () => {
 
         {currentSessionCard ? (
           <>
-            <SessionOverview session={currentSessionCard} onSessionUpdate={() => {}} />
+            <SessionOverview session={currentSessionCard} metrics={stats} onSessionUpdate={() => {}} />
 
             <div className="grid grid-cols-1 gap-6 xl:grid-cols-[360px_minmax(0,1fr)]">
               <div className="space-y-6">

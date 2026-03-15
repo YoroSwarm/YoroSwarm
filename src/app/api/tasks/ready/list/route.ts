@@ -1,6 +1,7 @@
 import prisma from '@/lib/db'
 import { errorResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
 import { requireTokenPayload, resolveSessionScope, serializeTask } from '@/lib/server/swarm'
+import { getReadyTasks } from '@/lib/server/task-orchestrator'
 
 export async function GET(request: Request) {
   try {
@@ -17,15 +18,20 @@ export async function GET(request: Request) {
       return errorResponse('Swarm session not found', 404)
     }
 
-    const tasks = await prisma.teamLeadTask.findMany({
+    const readyTasks = await getReadyTasks(session.id)
+    const hydratedTasks = await prisma.teamLeadTask.findMany({
       where: {
-        swarmSessionId: session.id,
-        status: 'PENDING',
+        id: {
+          in: readyTasks.map((task) => task.id),
+        },
       },
       include: {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
       orderBy: [
         { priority: 'desc' },
@@ -33,8 +39,7 @@ export async function GET(request: Request) {
       ],
     })
 
-    const readyTasks = tasks.filter((task) => !task.parentId || task.parent?.status === 'COMPLETED')
-    const serialized = readyTasks.map(serializeTask)
+    const serialized = hydratedTasks.map(serializeTask)
 
     return successResponse({
       tasks: serialized,

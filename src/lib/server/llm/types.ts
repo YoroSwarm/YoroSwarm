@@ -58,6 +58,11 @@ export interface LLMCallOptions {
   model?: string
   maxTokens?: number
   temperature?: number
+  usageContext?: {
+    swarmSessionId?: string
+    agentId?: string
+    requestKind?: string
+  }
 }
 
 export type StopReason = 'end_turn' | 'tool_use' | 'max_tokens' | 'tool_exit'
@@ -66,9 +71,12 @@ export interface LLMResponse {
   content: ContentBlock[]
   stopReason: StopReason
   model: string
+  provider: LLMProvider
   usage: {
     inputTokens: number
     outputTokens: number
+    cacheCreationTokens: number
+    cacheReadTokens: number
   }
 }
 
@@ -108,4 +116,3 @@ export interface LLMProviderConfig {
   maxOutputTokens: number
   temperature: number
 }
-

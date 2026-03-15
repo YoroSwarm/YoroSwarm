@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWebSocket, type WebSocketMessage } from './use-websocket';
 import type { AgentMessage } from '@/types/agent';
+import type { ExecutionStatusUpdate } from '@/types/websocket';
 
 export type AgentStatus = 'idle' | 'busy' | 'offline' | 'error';
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
@@ -72,6 +73,7 @@ export interface UseAgentWebSocketOptions {
   onChatMessage?: (message: AgentMessage) => void;
   onSystemNotification?: (notification: SystemNotification) => void;
   onInternalMessage?: (message: InternalMessageUpdate) => void;
+  onExecutionUpdate?: (update: ExecutionStatusUpdate) => void;
   onConnect?: () => void;
   onDisconnect?: (code?: number, reason?: string) => void;
   autoConnect?: boolean;
@@ -86,6 +88,7 @@ export interface UseAgentWebSocketReturn {
   messages: AgentMessage[];
   notifications: SystemNotification[];
   internalMessages: InternalMessageUpdate[];
+  executions: Map<string, ExecutionStatusUpdate>;
   subscribeToAgent: (agentId: string) => void;
   subscribeToTask: (taskId: string) => void;
   subscribeToAllAgents: () => void;
@@ -111,6 +114,7 @@ export function useAgentWebSocket({
   onChatMessage,
   onSystemNotification,
   onInternalMessage,
+  onExecutionUpdate,
   onConnect,
   onDisconnect,
   autoConnect = true,
@@ -120,6 +124,7 @@ export function useAgentWebSocket({
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [notifications, setNotifications] = useState<SystemNotification[]>([]);
   const [internalMessages, setInternalMessages] = useState<InternalMessageUpdate[]>([]);
+  const [executions, setExecutions] = useState<Map<string, ExecutionStatusUpdate>>(new Map());
 
   const agentsRef = useRef(agents);
   const tasksRef = useRef(tasks);
@@ -169,6 +174,13 @@ export function useAgentWebSocket({
         break;
       }
 
+      case 'execution_update': {
+        const update = message.payload as ExecutionStatusUpdate;
+        setExecutions(prev => new Map(prev).set(update.agent_id, update));
+        onExecutionUpdate?.(update);
+        break;
+      }
+
       case 'broadcast': {
         const payload = message.payload as { type: string; data: unknown };
         if (payload.type === 'agent_status') {
@@ -183,7 +195,7 @@ export function useAgentWebSocket({
         break;
       }
     }
-  }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification, onInternalMessage]);
+  }, [onAgentStatus, onTaskUpdate, onChatMessage, onSystemNotification, onInternalMessage, onExecutionUpdate]);
 
   const query = new URLSearchParams();
   if (token) query.set('token', token);
@@ -303,6 +315,7 @@ export function useAgentWebSocket({
     messages,
     notifications,
     internalMessages,
+    executions,
     subscribeToAgent,
     subscribeToTask,
     subscribeToAllAgents,

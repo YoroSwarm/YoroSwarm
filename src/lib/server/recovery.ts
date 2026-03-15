@@ -1,6 +1,49 @@
 import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 
+async function getInterruptedRuntimeExecutions(swarmSessionId: string): Promise<number> {
+  const entries = await prisma.agentContextEntry.findMany({
+    where: {
+      swarmSessionId,
+      entryType: 'runtime_execution',
+    },
+    orderBy: { sequence: 'desc' },
+    take: 500,
+    select: {
+      sourceId: true,
+      metadata: true,
+    },
+  })
+
+  const latestByExecution = new Map<string, string>()
+  for (const entry of entries) {
+    if (!entry.sourceId || latestByExecution.has(entry.sourceId)) continue
+    const lifecycle = parseRuntimeLifecycle(entry.metadata)
+    if (lifecycle) {
+      latestByExecution.set(entry.sourceId, lifecycle)
+    }
+  }
+
+  let interrupted = 0
+  for (const lifecycle of latestByExecution.values()) {
+    if (lifecycle === 'started' || lifecycle === 'interrupted' || lifecycle === 'resumed') {
+      interrupted++
+    }
+  }
+
+  return interrupted
+}
+
+function parseRuntimeLifecycle(metadata: string | null): string | null {
+  if (!metadata) return null
+  try {
+    const parsed = JSON.parse(metadata) as { lifecycle?: unknown }
+    return typeof parsed.lifecycle === 'string' ? parsed.lifecycle : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Recovery function to clean up stuck agents and tasks after server restart.
  * Should be called on application startup.
@@ -96,12 +139,16 @@ export async function getSessionRecoveryStatus(swarmSessionId: string): Promise<
   hasStuckWork: boolean
   pendingTasks: number
   failedTasks: number
+  interruptedExecutions: number
   summary: string
 }> {
-  const tasks = await prisma.teamLeadTask.findMany({
-    where: { swarmSessionId },
-    select: { status: true, title: true, errorSummary: true },
-  })
+  const [tasks, interruptedExecutions] = await Promise.all([
+    prisma.teamLeadTask.findMany({
+      where: { swarmSessionId },
+      select: { status: true, title: true, errorSummary: true },
+    }),
+    getInterruptedRuntimeExecutions(swarmSessionId),
+  ])
 
   const pendingTasks = tasks.filter(t => t.status === 'PENDING').length
   const failedTasks = tasks.filter(t => t.status === 'FAILED').length
@@ -109,9 +156,12 @@ export async function getSessionRecoveryStatus(swarmSessionId: string): Promise<
     t.errorSummary?.includes('服务器重启')
   ).length
 
-  const hasStuckWork = interruptedTasks > 0 || pendingTasks > 0
+  const hasStuckWork = interruptedTasks > 0 || pendingTasks > 0 || interruptedExecutions > 0
 
   let summary = ''
+  if (interruptedExecutions > 0) {
+    summary += `${interruptedExecutions} 个 agent execution 可恢复。`
+  }
   if (interruptedTasks > 0) {
     summary += `${interruptedTasks} 个任务因服务器重启被中断并重置。`
   }
@@ -122,5 +172,5 @@ export async function getSessionRecoveryStatus(swarmSessionId: string): Promise<
     summary += `${failedTasks} 个任务执行失败。`
   }
 
-  return { hasStuckWork, pendingTasks, failedTasks, summary }
+  return { hasStuckWork, pendingTasks, failedTasks, interruptedExecutions, summary }
 }

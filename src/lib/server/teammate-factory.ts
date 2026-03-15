@@ -5,6 +5,8 @@ import { appendAgentContextEntry } from '@/lib/server/agent-context'
 import { createInternalThread, sendInternalMessage } from '@/lib/server/internal-bus'
 import { initCognitiveTeammate } from '@/lib/server/cognitive-teammate-runner'
 
+const MAX_TEAMMATES_PER_SESSION = 30
+
 /**
  * Teammate 创建输入 - 完全由 Lead 控制
  * 系统不做任何预设或限制
@@ -70,6 +72,18 @@ async function generateUniqueName(swarmSessionId: string, baseName: string): Pro
  * 创建 teammate - 完全由 Lead 定义所有属性
  */
 export async function createTeammate(input: CreateTeammateInput) {
+  // 检查 teammate 数量上限
+  const existingCount = await prisma.agent.count({
+    where: {
+      swarmSessionId: input.swarmSessionId,
+      role: { not: 'team_lead' },
+      status: { not: 'OFFLINE' },
+    },
+  })
+  if (existingCount >= MAX_TEAMMATES_PER_SESSION) {
+    throw new Error(`TEAMMATE_LIMIT_REACHED: 当前会话已有 ${existingCount} 个活跃队友，已达上限 ${MAX_TEAMMATES_PER_SESSION}。请回收不需要的队友后再创建新的。`)
+  }
+
   const uniqueName = await generateUniqueName(input.swarmSessionId, input.name)
   const kind = input.kind || inferAgentKind(input.role)
 

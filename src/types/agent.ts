@@ -24,6 +24,8 @@ export interface Task {
   description: string;
   status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'cancelled';
   assignedTo?: string;
+  dependencyIds?: string[];
+  isLocked?: boolean;
   priority: 'low' | 'medium' | 'high';
   createdAt: string;
   updatedAt: string;

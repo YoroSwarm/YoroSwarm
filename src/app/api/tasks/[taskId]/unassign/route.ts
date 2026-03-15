@@ -26,6 +26,9 @@ export async function PUT(_request: Request, context: RouteContext) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
 

@@ -1,5 +1,6 @@
 import { AgentKind, type Prisma } from '@prisma/client'
 import prisma from '@/lib/db'
+import { ensureSessionWorkspaceRoot } from './session-workspace'
 
 type RosterMember = {
   name: string
@@ -53,7 +54,7 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
   const roster = input.roster && input.roster.length > 0 ? input.roster : buildDefaultRoster(input.goal)
   const title = input.title?.trim() || buildDefaultSessionTitle()
 
-  return prisma.$transaction(async (tx) => {
+  const createdSession = await prisma.$transaction(async (tx) => {
     const session = await tx.swarmSession.create({
       data: {
         userId: input.userId,
@@ -96,6 +97,9 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
       },
     })
   })
+
+  await ensureSessionWorkspaceRoot(createdSession.id)
+  return createdSession
 }
 
 export async function resolveSwarmSession(input: {
@@ -124,24 +128,20 @@ export async function getLeadAgentForSession(swarmSessionId: string) {
   const session = await prisma.swarmSession.findUnique({ where: { id: swarmSessionId } })
   if (!session) return null
 
-  // 1. 首先尝试使用 session.leadAgentId
   if (session.leadAgentId) {
     const lead = await prisma.agent.findUnique({ where: { id: session.leadAgentId } })
     if (lead) {
       return lead
     }
-    // leadAgentId 存在但 agent 不存在（可能已被删除），继续查找
     console.warn(`[getLeadAgentForSession] session.leadAgentId ${session.leadAgentId} not found in agents table, searching for alternative`)
   }
 
-  // 2. 查找 role = 'team_lead' 的 agent
   const lead = await prisma.agent.findFirst({
     where: { swarmSessionId, role: 'team_lead' },
     orderBy: { createdAt: 'asc' },
   })
 
   if (lead) {
-    // 更新 session.leadAgentId 以保持一致性
     await prisma.swarmSession.update({
       where: { id: swarmSessionId },
       data: { leadAgentId: lead.id },
@@ -149,7 +149,6 @@ export async function getLeadAgentForSession(swarmSessionId: string) {
     return lead
   }
 
-  // 3. 最后尝试查找该 session 中的任何 agent
   const anyAgent = await prisma.agent.findFirst({
     where: { swarmSessionId },
     orderBy: { createdAt: 'asc' },

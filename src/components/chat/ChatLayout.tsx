@@ -9,17 +9,29 @@ import { SessionTasks } from '@/components/session/SessionTasks';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useTeamStats } from '@/hooks/use-team-stats';
 import { useSidebar } from '@/stores';
-import type { ChatMessagePayload, AgentStatusUpdate } from '@/types/websocket';
+import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
 import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ChatLayoutProps {
   className?: string;
   initialSessionId?: string | null;
 }
 
-type TabType = 'chat' | 'files' | 'tasks' | 'artifacts';
+type TabType = 'chat' | 'files' | 'tasks';
+
+function formatTokenCount(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1)}K`;
+  return String(value);
+}
+
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
 
 export function ChatLayout({ className, initialSessionId = null }: ChatLayoutProps) {
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
@@ -145,19 +157,90 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
         }
         return;
       }
+      if (message.type === 'execution_update') {
+        const update = message.payload as ExecutionStatusUpdate;
+        if (update.swarm_session_id === resolvedSessionId && update.agent_id && update.agent_name) {
+          handleStreamEvent(message.type, message.payload);
+          const normalizedStatus = update.status === 'interrupted'
+            ? 'busy'
+            : update.status === 'active'
+              ? 'busy'
+              : update.status === 'completed'
+                ? 'online'
+                : update.status === 'cancelled'
+                  ? 'online'
+                  : 'online';
+
+          updateSessionParticipant(resolvedSessionId, {
+            id: update.agent_id,
+            name: update.agent_name,
+            role: 'teammate',
+            status: normalizedStatus,
+          });
+        }
+        return;
+      }
       if (message.type === 'internal_message') {
         const payload = message.payload as { action?: string; swarm_session_id?: string };
-        if (payload.swarm_session_id === resolvedSessionId && (payload.action === 'artifact_created' || payload.action === 'file_created')) {
+        if (payload.swarm_session_id === resolvedSessionId && payload.action === 'file_created') {
           setFileRefreshTick((value) => value + 1);
         }
       }
     },
   });
 
+  const { stats } = useTeamStats({
+    swarmSessionId: resolvedSessionId || undefined,
+    autoLoad: Boolean(resolvedSessionId),
+  });
+
   const currentSessionTitle = useMemo(() => {
     if (!resolvedSessionId) return null;
     return currentSession?.title || '未命名会话';
   }, [currentSession?.title, resolvedSessionId]);
+
+  const visibleParticipants = useMemo(() => {
+    const participants = currentSession?.participants || [];
+    const deduped = new Map<string, typeof participants[number]>();
+
+    for (const participant of participants) {
+      if (!participant?.id) continue;
+      deduped.set(participant.id, participant);
+    }
+
+    return Array.from(deduped.values());
+  }, [currentSession?.participants]);
+
+  const usageByParticipantId = useMemo(() => {
+    const map = new Map<string, {
+      input_tokens: number;
+      output_tokens: number;
+      cache_creation_tokens: number;
+      cache_read_tokens: number;
+      total_tokens: number;
+      total_processed_input_tokens: number;
+      cache_hit_rate: number;
+    }>();
+
+    const lead = stats?.llm_usage.lead;
+    const leadId = currentSession?.participants.find((participant) => participant.role === 'lead')?.id;
+    if (lead && leadId) {
+      map.set(leadId, lead);
+    }
+
+    for (const teammate of stats?.llm_usage.teammates || []) {
+      map.set(teammate.agent_id, teammate.usage);
+    }
+
+    return map;
+  }, [currentSession?.participants, stats?.llm_usage]);
+
+  const leadTodos = useMemo(() => {
+    const todos = stats?.lead_self_todos || [];
+    const active = todos.filter((item) => item.status === 'pending' || item.status === 'in_progress');
+    const done = todos.filter((item) => item.status !== 'pending' && item.status !== 'in_progress');
+    return { active, done };
+  }, [stats?.lead_self_todos]);
 
   const handleCreateSession = async () => {
     try {
@@ -284,7 +367,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         }}
                         streamingState={streamingState}
                         activeStreamingStates={activeStreamingStates}
-                        participants={currentSession?.participants}
+                        participants={visibleParticipants}
                         />
                     </div>
                     <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
@@ -365,13 +448,30 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       <span className="text-muted-foreground">状态</span>
                       <span>{currentSession?.status === 'archived' ? '已归档' : '活跃'}</span>
                     </div>
+                    {stats?.llm_usage.session ? (
+                      <>
+                        <div className="pt-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Token 用量</div>
+                        <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">总量</span>
+                            <span className="font-semibold">{formatTokenCount(stats.llm_usage.session.total_tokens)}</span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                            <div>输入 {formatTokenCount(stats.llm_usage.session.input_tokens)}</div>
+                            <div>输出 {formatTokenCount(stats.llm_usage.session.output_tokens)}</div>
+                            <div>缓存读取 {formatTokenCount(stats.llm_usage.session.cache_read_tokens)}</div>
+                            <div>缓存率 {formatPercent(stats.llm_usage.session.cache_hit_rate)}</div>
+                          </div>
+                        </div>
+                      </>
+                    ) : null}
                   </div>
                 </section>
 
                 <section>
                   <h3 className="mb-3 text-sm font-medium text-muted-foreground">会话团队</h3>
                   <div className="space-y-2">
-                    {(currentSession?.participants || []).map((participant) => {
+                    {visibleParticipants.map((participant) => {
                       const participantName = typeof participant.name === 'string' && participant.name.trim().length > 0
                         ? participant.name.trim()
                         : typeof participant.role === 'string' && participant.role.trim().length > 0
@@ -383,26 +483,89 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         : 'unknown';
                       const participantStatus = participant.status || 'offline';
 
+                      const usage = usageByParticipantId.get(participant.id);
+
                       return (
-                        <div key={participant.id} className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
-                          <div className="flex h-8 w-8 items-center justify-center bg-primary/10 text-sm font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
-                            {participantInitial}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm font-bold">{participantName}</p>
-                            <p className="text-xs text-muted-foreground">{participantRole}</p>
-                          </div>
-                          <div className={cn(
-                            'h-2.5 w-2.5 border border-border',
-                            participantStatus === 'offline'
-                              ? 'bg-neutral-300'
-                              : participantStatus === 'busy'
-                                ? 'bg-amber-500'
-                                : 'bg-green-500'
-                          )} style={{ borderRadius: "50% 50% 50% 50% / 60% 40% 60% 40%" }} />
-                        </div>
+                        <Popover key={participant.id}>
+                          <PopoverTrigger asChild>
+                            <div className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20 cursor-default" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                              <div className="flex h-8 w-8 items-center justify-center bg-primary/10 text-sm font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
+                                {participantInitial}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-bold">{participantName}</p>
+                                <p className="text-xs text-muted-foreground">{participantRole}</p>
+                              </div>
+                              <div className={cn(
+                                'h-2.5 w-2.5 border border-border',
+                                participantStatus === 'offline'
+                                  ? 'bg-neutral-300'
+                                  : participantStatus === 'busy'
+                                    ? 'bg-amber-500'
+                                    : 'bg-green-500'
+                              )} style={{ borderRadius: "50% 50% 50% 50% / 60% 40% 60% 40%" }} />
+                            </div>
+                          </PopoverTrigger>
+                          <PopoverContent align="start" side="left" className="w-72">
+                            <div className="space-y-3">
+                              <div>
+                                <div className="text-sm font-semibold">{participantName}</div>
+                                <div className="text-xs text-muted-foreground">{participantRole}</div>
+                              </div>
+                              {usage ? (
+                                <div className="space-y-2 text-sm">
+                                  <div className="flex items-center justify-between">
+                                    <span className="text-muted-foreground">总 Token</span>
+                                    <span className="font-semibold">{formatTokenCount(usage.total_tokens)}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                                    <div>输入 {formatTokenCount(usage.input_tokens)}</div>
+                                    <div>输出 {formatTokenCount(usage.output_tokens)}</div>
+                                    <div>缓存创建 {formatTokenCount(usage.cache_creation_tokens)}</div>
+                                    <div>缓存读取 {formatTokenCount(usage.cache_read_tokens)}</div>
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">缓存命中率 {formatPercent(usage.cache_hit_rate)}</div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-muted-foreground">暂无该成员的 token 统计</div>
+                              )}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       );
                     })}
+                  </div>
+                </section>
+
+                <section>
+                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">Lead Todo</h3>
+                  <div className="space-y-1.5">
+                    {leadTodos.active.length === 0 && leadTodos.done.length === 0 ? (
+                      <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        当前没有记录到 Lead 私有待办。
+                      </div>
+                    ) : (
+                      <>
+                        {leadTodos.active.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+                            <span
+                              className={cn(
+                                'inline-block h-2.5 w-2.5 shrink-0 rounded-full',
+                                item.status === 'in_progress' ? 'bg-blue-500' : 'bg-amber-500'
+                              )}
+                            />
+                            <span className="truncate font-medium">{item.title}</span>
+                          </div>
+                        ))}
+
+                        {leadTodos.done.map((item) => (
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 text-sm text-muted-foreground">
+                            <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-green-500" />
+                            <span className="truncate">{item.title}</span>
+                          </div>
+                        ))}
+                      </>
+                    )}
                   </div>
                 </section>
               </div>

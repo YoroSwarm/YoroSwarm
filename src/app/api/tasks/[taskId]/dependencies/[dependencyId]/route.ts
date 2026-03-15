@@ -17,16 +17,42 @@ export async function DELETE(_request: Request, context: RouteContext) {
     }
 
     if (task.parentId !== dependencyId) {
-      return errorResponse('Specified dependency is not attached to this task', 409)
+      const existing = await prisma.taskDependency.findUnique({
+        where: {
+          taskId_dependsOnTaskId: {
+            taskId,
+            dependsOnTaskId: dependencyId,
+          },
+        },
+      })
+
+      if (!existing) {
+        return errorResponse('Specified dependency is not attached to this task', 409)
+      }
     }
+
+    await prisma.taskDependency.deleteMany({
+      where: {
+        taskId,
+        dependsOnTaskId: dependencyId,
+      },
+    })
+
+    const remainingDependencies = await prisma.taskDependency.findMany({
+      where: { taskId },
+      select: { dependsOnTaskId: true },
+    })
 
     const updated = await prisma.teamLeadTask.update({
       where: { id: taskId },
-      data: { parentId: null },
+      data: { parentId: remainingDependencies[0]?.dependsOnTaskId || null },
       include: {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
 

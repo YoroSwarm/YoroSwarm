@@ -15,19 +15,21 @@ import { transitionTaskStatus, unlockDependentTasks } from './task-orchestrator'
 import { runCognitiveTeammateLoop } from './cognitive-teammate-runner'
 
 export interface SchedulerConfig {
-  maxConcurrentTasks: number  // 最大并发任务数
+  maxConcurrentTasks: number  // 最大并发任务数，<= 0 表示不限制
   autoAssign: boolean         // 是否自动分配任务
   retryFailedTasks: boolean   // 是否自动重试失败任务
   maxRetries: number          // 最大重试次数
   retryDelayMs: number        // 重试间隔（毫秒）
+  circuitBreakerThreshold: number // 连续失败次数阈值，触发熔断
 }
 
 const DEFAULT_CONFIG: SchedulerConfig = {
-  maxConcurrentTasks: 3,
+  maxConcurrentTasks: 15,
   autoAssign: true,
   retryFailedTasks: true,
   maxRetries: 2,
   retryDelayMs: 5000,
+  circuitBreakerThreshold: 5,
 }
 
 /**
@@ -40,6 +42,18 @@ interface SchedulerState {
   queuedTasks: string[]  // 等待执行的任务ID队列
   config: SchedulerConfig
   completionAnnounced: boolean
+  // 熔断器状态
+  consecutiveFailures: number
+  isCircuitOpen: boolean  // 熔断器是否已打开（true=已熔断，暂停调度）
+  circuitOpenedAt?: Date
+  // 并行度统计
+  stats: {
+    totalTasksStarted: number
+    totalTasksCompleted: number
+    totalTasksFailed: number
+    peakConcurrency: number
+    totalToolCalls: number
+  }
 }
 
 interface RunningTaskInfo {
@@ -66,6 +80,15 @@ export async function initScheduler(
     queuedTasks: [],
     config: { ...DEFAULT_CONFIG, ...config },
     completionAnnounced: false,
+    consecutiveFailures: 0,
+    isCircuitOpen: false,
+    stats: {
+      totalTasksStarted: 0,
+      totalTasksCompleted: 0,
+      totalTasksFailed: 0,
+      peakConcurrency: 0,
+      totalToolCalls: 0,
+    },
   }
 
   schedulerStates.set(swarmSessionId, state)
@@ -202,7 +225,7 @@ export async function startScheduler(swarmSessionId: string): Promise<void> {
       payload: {
         action: 'scheduler_started',
         swarm_session_id: swarmSessionId,
-        max_concurrent: currentState.config.maxConcurrentTasks,
+        max_concurrent: currentState.config.maxConcurrentTasks <= 0 ? null : currentState.config.maxConcurrentTasks,
         timestamp: new Date().toISOString(),
       },
     },
@@ -244,11 +267,35 @@ async function scheduleNextBatch(swarmSessionId: string): Promise<void> {
   if (!state || !state.isRunning) return
 
   try {
+    // 检查熔断器状态
+    if (state.isCircuitOpen) {
+      console.warn(`[Scheduler] Circuit breaker is OPEN for session ${swarmSessionId} (${state.consecutiveFailures} consecutive failures). Scheduling paused.`)
+
+      publishRealtimeMessage(
+        {
+          type: 'system',
+          payload: {
+            level: 'warning',
+            title: '调度器熔断',
+            message: `连续 ${state.consecutiveFailures} 个任务失败，调度已暂停。请检查任务配置后手动恢复。`,
+            metadata: { consecutiveFailures: state.consecutiveFailures },
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
+
+      await stopScheduler(swarmSessionId)
+      return
+    }
+
     // 获取当前可执行的任务
     const executable = await getExecutableTasks(swarmSessionId)
 
     // 计算可用槽位
-    const availableSlots = state.config.maxConcurrentTasks - state.runningTasks.size
+    const availableSlots = state.config.maxConcurrentTasks <= 0
+      ? executable.length
+      : state.config.maxConcurrentTasks - state.runningTasks.size
 
     if (availableSlots <= 0 || executable.length === 0) {
       // 检查是否所有任务都已完成
@@ -322,6 +369,10 @@ async function executeTask(swarmSessionId: string, taskId: string): Promise<void
     retryCount: state.runningTasks.get(taskId)?.retryCount || 0,
   }
   state.runningTasks.set(taskId, runningInfo)
+  state.stats.totalTasksStarted++
+  if (state.runningTasks.size > state.stats.peakConcurrency) {
+    state.stats.peakConcurrency = state.runningTasks.size
+  }
 
   // 转换任务状态
   await transitionTaskStatus(taskId, 'IN_PROGRESS', task.assigneeId)
@@ -363,8 +414,40 @@ async function handleTaskCompletion(
     // 解锁下游任务
     await unlockDependentTasks(taskId)
     console.log(`[Scheduler] Task ${taskId} completed successfully`)
+
+    // 重置熔断计数器
+    state.consecutiveFailures = 0
+    state.stats.totalTasksCompleted++
   } else {
     console.error(`[Scheduler] Task ${taskId} failed:`, error)
+    state.stats.totalTasksFailed++
+    state.consecutiveFailures++
+
+    // 检查是否触发熔断
+    if (state.consecutiveFailures >= state.config.circuitBreakerThreshold) {
+      state.isCircuitOpen = true
+      state.circuitOpenedAt = new Date()
+      console.error(`[Scheduler] Circuit breaker OPENED: ${state.consecutiveFailures} consecutive failures`)
+
+      // 通知Lead（通过realtime + 查找Lead代理并投递认知消息）
+      publishRealtimeMessage(
+        {
+          type: 'system',
+          payload: {
+            level: 'error',
+            title: '熔断器已触发',
+            message: `连续 ${state.consecutiveFailures} 次任务失败，调度已暂停。`,
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
+
+      // 尝试通知Lead Agent
+      notifyLeadOfCircuitBreaker(swarmSessionId, state.consecutiveFailures).catch(err =>
+        console.error('[Scheduler] Failed to notify Lead of circuit break:', err)
+      )
+    }
 
     // 检查是否需要重试
     const retryCount = runningInfo?.retryCount || 0
@@ -522,6 +605,42 @@ export async function triggerTaskExecution(
 }
 
 /**
+ * 计算任务DAG中的关键路径长度（最长依赖链）
+ * 关键路径越短，并行度越高
+ */
+async function computeCriticalPathLength(swarmSessionId: string): Promise<number> {
+  const tasks = await prisma.teamLeadTask.findMany({
+    where: { swarmSessionId },
+    include: { dependencies: true },
+  })
+
+  if (tasks.length === 0) return 0
+
+  const depMap = new Map<string, string[]>()
+  for (const task of tasks) {
+    depMap.set(task.id, task.dependencies.map(d => d.dependsOnTaskId))
+  }
+
+  const memo = new Map<string, number>()
+  function longestPath(taskId: string): number {
+    if (memo.has(taskId)) return memo.get(taskId)!
+    const deps = depMap.get(taskId) || []
+    const maxDepPath = deps.length > 0
+      ? Math.max(...deps.map(d => longestPath(d)))
+      : 0
+    const result = 1 + maxDepPath
+    memo.set(taskId, result)
+    return result
+  }
+
+  let maxPath = 0
+  for (const task of tasks) {
+    maxPath = Math.max(maxPath, longestPath(task.id))
+  }
+  return maxPath
+}
+
+/**
  * 获取调度器统计信息
  */
 export async function getSchedulerStats(swarmSessionId: string) {
@@ -531,16 +650,115 @@ export async function getSchedulerStats(swarmSessionId: string) {
     where: { swarmSessionId },
   })
 
+  const completedCount = tasks.filter(t => t.status === 'COMPLETED').length
+  const totalCount = tasks.length
+
+  // 计算关键路径长度（Critical Path Length）
+  const criticalPathLength = await computeCriticalPathLength(swarmSessionId)
+  const parallelEfficiency = totalCount > 0 && criticalPathLength > 0
+    ? Math.round((1 - criticalPathLength / totalCount) * 100)
+    : 0
+
   return {
     isRunning: state?.isRunning || false,
     config: state?.config || DEFAULT_CONFIG,
     runningCount: state?.runningTasks.size || 0,
     runningTasks: Array.from(state?.runningTasks.values() || []),
     queuedCount: state?.queuedTasks.length || 0,
-    totalTasks: tasks.length,
-    completedTasks: tasks.filter(t => t.status === 'COMPLETED').length,
+    totalTasks: totalCount,
+    completedTasks: completedCount,
     failedTasks: tasks.filter(t => t.status === 'FAILED').length,
     pendingTasks: tasks.filter(t => t.status === 'PENDING').length,
     inProgressTasks: tasks.filter(t => t.status === 'IN_PROGRESS').length,
+    // 熔断器与并行度统计
+    circuitBreaker: {
+      isOpen: state?.isCircuitOpen || false,
+      consecutiveFailures: state?.consecutiveFailures || 0,
+      threshold: state?.config.circuitBreakerThreshold || DEFAULT_CONFIG.circuitBreakerThreshold,
+      openedAt: state?.circuitOpenedAt?.toISOString(),
+    },
+    parallelism: {
+      peakConcurrency: state?.stats.peakConcurrency || 0,
+      totalStarted: state?.stats.totalTasksStarted || 0,
+      totalCompleted: state?.stats.totalTasksCompleted || 0,
+      totalFailed: state?.stats.totalTasksFailed || 0,
+      criticalPathLength,
+      parallelEfficiency,
+    },
   }
+}
+
+/**
+ * 重置熔断器，恢复调度
+ */
+export async function resetCircuitBreaker(swarmSessionId: string): Promise<boolean> {
+  const state = getSchedulerState(swarmSessionId)
+  if (!state) return false
+
+  state.isCircuitOpen = false
+  state.consecutiveFailures = 0
+  state.circuitOpenedAt = undefined
+
+  console.log(`[Scheduler] Circuit breaker RESET for session ${swarmSessionId}`)
+
+  publishRealtimeMessage(
+    {
+      type: 'system',
+      payload: {
+        level: 'info',
+        title: '熔断器已重置',
+        message: '调度器熔断器已重置，可以恢复任务调度。',
+        timestamp: new Date().toISOString(),
+      },
+    },
+    { sessionId: swarmSessionId }
+  )
+
+  return true
+}
+
+/**
+ * 注册 Agent Loop 的全局工具调用计数
+ */
+export function recordToolCall(swarmSessionId: string): void {
+  const state = getSchedulerState(swarmSessionId)
+  if (state) {
+    state.stats.totalToolCalls++
+  }
+}
+
+/**
+ * 获取 session 级别的全局工具调用计数
+ */
+export function getSessionToolCallCount(swarmSessionId: string): number {
+  return getSchedulerState(swarmSessionId)?.stats.totalToolCalls || 0
+}
+
+/**
+ * 通知Lead Agent熔断器已触发
+ */
+async function notifyLeadOfCircuitBreaker(swarmSessionId: string, failureCount: number): Promise<void> {
+  const leadAgent = await prisma.agent.findFirst({
+    where: { swarmSessionId, role: 'TEAM_LEAD', status: { not: 'OFFLINE' } },
+  })
+  if (!leadAgent) return
+
+  const { deliverMessage } = await import('./cognitive-inbox/cognitive-engine')
+  await deliverMessage(swarmSessionId, leadAgent.id, {
+    agentId: leadAgent.id,
+    swarmSessionId,
+    source: 'system',
+    senderId: 'scheduler',
+    senderName: 'Scheduler',
+    type: 'urgent',
+    content: `[熔断器触发] 调度器检测到连续 ${failureCount} 次任务执行失败，已暂停所有新任务调度。请评估失败原因后决定：1) 调整任务策略并重置熔断器 2) 终止当前批次任务 3) 向用户报告问题。`,
+    priority: 'critical',
+    metadata: {
+      runtimeControl: {
+        plane: 'control' as const,
+        interruption: 'hard' as const,
+        supersedesPending: false,
+      },
+    },
+  })
 }

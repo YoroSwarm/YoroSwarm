@@ -29,6 +29,9 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
       orderBy: [
         { priority: 'desc' },
@@ -87,8 +90,47 @@ export async function POST(request: NextRequest, context: RouteContext) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     });
+
+    const dependencyIds = Array.isArray(body.dependency_ids)
+      ? body.dependency_ids.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+      : body.parentId || body.dependency_parent_id
+        ? [body.parentId || body.dependency_parent_id]
+        : [];
+
+    if (dependencyIds.length > 0) {
+      await prisma.taskDependency.createMany({
+        data: dependencyIds
+          .filter((dependencyId: string, index: number, list: string[]) => list.indexOf(dependencyId) === index)
+          .filter((dependencyId: string) => dependencyId !== task.id)
+          .map((dependencyId: string) => ({
+            swarmSessionId: id,
+            taskId: task.id,
+            dependsOnTaskId: dependencyId,
+            dependencyType: 'blocks',
+          })),
+      });
+    }
+
+    const hydratedTask = await prisma.teamLeadTask.findUnique({
+      where: { id: task.id },
+      include: {
+        assignee: true,
+        parent: true,
+        subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
+      },
+    });
+
+    if (!hydratedTask) {
+      return errorResponse('Task created but could not be reloaded', 500);
+    }
 
     if (assigneeId) {
       await appendAgentContextEntry({
@@ -101,7 +143,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       });
     }
 
-    return successResponse(serializeTask(task), 'Task created successfully');
+    return successResponse(serializeTask(hydratedTask), 'Task created successfully');
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {
       return unauthorizedResponse('Authentication required');

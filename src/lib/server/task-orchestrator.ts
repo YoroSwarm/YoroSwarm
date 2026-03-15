@@ -4,6 +4,7 @@ import { appendAgentContextEntry } from '@/lib/server/agent-context'
 import { sendInternalMessage, createInternalThread } from '@/lib/server/internal-bus'
 import { mapDbStatusToApi, serializeRealtimeTaskUpdate, serializeRealtimeAgentStatus } from '@/lib/server/swarm'
 import { TeamLeadTaskStatus } from '@prisma/client'
+import { activateAssignedTask } from './task-activation'
 
 /**
  * 任务编排器 - 处理任务依赖、状态流转和自动解锁
@@ -32,7 +33,7 @@ export async function checkTaskUnlockStatus(taskId: string): Promise<boolean> {
   })
 
   if (!task) return false
-  if (task.status !== 'PENDING') return false
+  if (!['PENDING', 'ASSIGNED'].includes(task.status)) return false
   if (task.dependencies.length === 0) return true
 
   // 检查所有依赖任务是否都已完成
@@ -47,10 +48,22 @@ export async function checkTaskUnlockStatus(taskId: string): Promise<boolean> {
 export async function unlockDependentTasks(completedTaskId: string) {
   const dependents = await prisma.taskDependency.findMany({
     where: { dependsOnTaskId: completedTaskId },
-    include: { task: true },
+    include: {
+      task: {
+        include: {
+          assignee: true,
+          dependencies: { include: { dependsOnTask: true } },
+        },
+      },
+    },
   })
 
   const unlockedTasks = []
+
+  const completedTask = await prisma.teamLeadTask.findUnique({
+    where: { id: completedTaskId },
+    select: { creatorId: true },
+  })
 
   for (const dep of dependents) {
     const canUnlock = await checkTaskUnlockStatus(dep.task.id)
@@ -76,6 +89,28 @@ export async function unlockDependentTasks(completedTaskId: string) {
         },
         { sessionId: dep.task.swarmSessionId }
       )
+
+      if (dep.task.assigneeId && completedTask?.creatorId) {
+        const teammateActiveTask = await prisma.teamLeadTask.findFirst({
+          where: {
+            swarmSessionId: dep.task.swarmSessionId,
+            assigneeId: dep.task.assigneeId,
+            status: 'IN_PROGRESS',
+            id: { not: dep.task.id },
+          },
+          select: { id: true, title: true },
+        })
+
+        await activateAssignedTask({
+          swarmSessionId: dep.task.swarmSessionId,
+          leadAgentId: completedTask.creatorId,
+          taskId: dep.task.id,
+          teammateId: dep.task.assigneeId,
+          reason: 'dependencies_unlocked',
+          queuedBehindTaskId: teammateActiveTask?.id,
+          queuedBehindTaskTitle: teammateActiveTask?.title,
+        })
+      }
     }
   }
 

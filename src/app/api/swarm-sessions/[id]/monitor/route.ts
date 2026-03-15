@@ -3,6 +3,7 @@ import prisma from '@/lib/db';
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response';
 import { requireTokenPayload } from '@/lib/server/swarm';
 import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
+import { summarizeUsageTotals } from '@/lib/server/llm/usage';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -13,7 +14,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     const payload = await requireTokenPayload();
     const { id } = await context.params;
 
-    const [session, contextCount, internalThreads, internalMessages] = await Promise.all([
+    const [session, contextCount, internalThreads, internalMessages, usageEvents, leadSelfTodos] = await Promise.all([
       prisma.swarmSession.findFirst({
         where: { id, userId: payload.userId },
         include: {
@@ -34,10 +35,38 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       prisma.agentContextEntry.count({ where: { swarmSessionId: id } }),
       prisma.internalThread.count({ where: { swarmSessionId: id } }),
       prisma.internalMessage.count({ where: { swarmSessionId: id } }),
+      prisma.llmUsageEvent.findMany({
+        where: { swarmSessionId: id },
+        select: {
+          agentId: true,
+          inputTokens: true,
+          outputTokens: true,
+          cacheCreationTokens: true,
+          cacheReadTokens: true,
+        },
+      }),
+      prisma.leadSelfTodo.findMany({
+        where: { swarmSessionId: id },
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }],
+        select: {
+          id: true,
+          title: true,
+          details: true,
+          status: true,
+          category: true,
+          updatedAt: true,
+        },
+      }),
     ]);
 
     if (!session) {
       return notFoundResponse('Swarm session not found');
+    }
+
+    const usageByAgentId = new Map<string, ReturnType<typeof summarizeUsageTotals>>();
+    for (const agent of session.agents) {
+      const rows = usageEvents.filter((event) => event.agentId === agent.id);
+      usageByAgentId.set(agent.id, summarizeUsageTotals(rows));
     }
 
     const metrics = {
@@ -52,6 +81,26 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       context_entries: contextCount,
       internal_threads: internalThreads,
       internal_messages: internalMessages,
+      llm_usage: {
+        session: summarizeUsageTotals(usageEvents),
+        lead: session.leadAgentId ? usageByAgentId.get(session.leadAgentId) || summarizeUsageTotals([]) : summarizeUsageTotals([]),
+        teammates: session.agents
+          .filter((agent) => agent.id !== session.leadAgentId)
+          .map((agent) => ({
+            agent_id: agent.id,
+            agent_name: agent.name,
+            role: agent.role,
+            usage: usageByAgentId.get(agent.id) || summarizeUsageTotals([]),
+          })),
+      },
+      lead_self_todos: leadSelfTodos.map((item) => ({
+        id: item.id,
+        title: item.title,
+        details: item.details || undefined,
+        status: item.status,
+        category: item.category,
+        updated_at: item.updatedAt.toISOString(),
+      })),
     };
 
     return successResponse({

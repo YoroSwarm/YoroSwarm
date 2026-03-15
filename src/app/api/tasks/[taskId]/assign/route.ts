@@ -4,6 +4,7 @@ import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse 
 import { parseJson, requireTokenPayload, serializeRealtimeAgentStatus, serializeRealtimeTaskUpdate } from '@/lib/server/swarm'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { appendAgentContextEntry } from '@/lib/server/agent-context'
+import { activateAssignedTask } from '@/lib/server/task-activation'
 
 type RouteContext = {
   params: Promise<{ taskId: string }>
@@ -123,13 +124,55 @@ export async function POST(request: NextRequest, context: RouteContext) {
       },
     })
 
+    const taskWithDeps = await prisma.teamLeadTask.findUnique({
+      where: { id: task.id },
+      include: {
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
+      },
+    })
+
+    const hasPendingDependencies = Boolean(
+      taskWithDeps?.dependencies.some((dependency) => dependency.dependsOnTask.status !== 'COMPLETED')
+    )
+
+    if (!hasPendingDependencies) {
+      const leadAgent = await prisma.agent.findFirst({
+        where: { swarmSessionId: task.swarmSessionId, kind: 'LEAD' },
+        select: { id: true },
+      })
+
+      if (leadAgent?.id) {
+        const teammateActiveTask = await prisma.teamLeadTask.findFirst({
+          where: {
+            swarmSessionId: task.swarmSessionId,
+            assigneeId: agent.id,
+            status: 'IN_PROGRESS',
+            id: { not: task.id },
+          },
+          select: { id: true, title: true },
+        })
+
+        await activateAssignedTask({
+          swarmSessionId: task.swarmSessionId,
+          leadAgentId: leadAgent.id,
+          taskId: task.id,
+          teammateId: agent.id,
+          reason: 'assignment',
+          queuedBehindTaskId: teammateActiveTask?.id,
+          queuedBehindTaskTitle: teammateActiveTask?.title,
+        })
+      }
+    }
+
     return successResponse({
       task_id: task.id,
       assigned_agent_id: agent.id,
       agent_name: agent.name,
       assignment_strategy: strategy,
       success: true,
-      message: 'Task assigned successfully',
+      message: hasPendingDependencies ? 'Task assigned and waiting for prerequisites' : 'Task assigned successfully',
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

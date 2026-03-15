@@ -46,6 +46,9 @@ export async function GET(request: NextRequest) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
       orderBy: [
         { priority: 'desc' },
@@ -118,8 +121,47 @@ export async function POST(request: NextRequest) {
         assignee: true,
         parent: true,
         subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
       },
     })
+
+    const dependencyIds = Array.isArray(body.dependency_ids)
+      ? body.dependency_ids.filter((value: unknown): value is string => typeof value === 'string' && value.trim().length > 0)
+      : parentId
+        ? [parentId]
+        : []
+
+    if (dependencyIds.length > 0) {
+      await prisma.taskDependency.createMany({
+        data: dependencyIds
+          .filter((dependencyId: string, index: number, list: string[]) => list.indexOf(dependencyId) === index)
+          .filter((dependencyId: string) => dependencyId !== task.id)
+          .map((dependencyId: string) => ({
+            swarmSessionId: session.id,
+            taskId: task.id,
+            dependsOnTaskId: dependencyId,
+            dependencyType: 'blocks',
+          })),
+      })
+    }
+
+    const hydratedTask = await prisma.teamLeadTask.findUnique({
+      where: { id: task.id },
+      include: {
+        assignee: true,
+        parent: true,
+        subtasks: true,
+        dependencies: {
+          include: { dependsOnTask: true },
+        },
+      },
+    })
+
+    if (!hydratedTask) {
+      return errorResponse('Task created but could not be reloaded', 500)
+    }
 
     if (assigneeId) {
       await appendAgentContextEntry({
@@ -136,7 +178,7 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    return successResponse(serializeTask(task), 'Task created successfully')
+    return successResponse(serializeTask(hydratedTask), 'Task created successfully')
   } catch (error) {
     console.error('Create task error:', error)
     return errorResponse('Internal server error', 500)

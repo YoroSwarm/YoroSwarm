@@ -13,10 +13,22 @@ export type {
   CognitiveState,
   CognitiveRuntime,
   InboxMessage,
+  InboxMessagePlane,
+  InboxMessageInterruption,
+  InboxMessageRuntimeControl,
+  InboxMessageMetadata,
+  AgentExecution,
   ContextSnapshot,
   CognitiveEvent,
   AttentionConfig,
   MessagePriority,
+} from './cognitive-state'
+
+export {
+  getMessagePlane,
+  getInterruptionMode,
+  getWorkUnitKey,
+  shouldSupersedePending,
 } from './cognitive-state'
 
 // 从 attention-manager 导出的类型
@@ -37,6 +49,17 @@ export {
   markMessageProcessing,
   markMessageCompleted,
   deferMessage,
+  startExecution,
+  interruptExecution,
+  resumeExecution,
+  completeExecution,
+  getRuntimeControl,
+  isControlPlaneMessage,
+  isHardInterruptMessage,
+  isSoftInterruptMessage,
+  isMessageExpired,
+  shouldSupersedePendingMessages,
+  pruneInvalidMessages,
   transitionState,
   getCurrentState,
   onCognitiveEvent,

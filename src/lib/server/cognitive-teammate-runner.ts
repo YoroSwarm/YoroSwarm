@@ -9,85 +9,85 @@
  */
 
 import type { LLMMessage, ToolDefinition } from './llm/types'
-import { runAgentLoop, type ToolExecutor } from './agent-loop'
+import { runAgentLoop } from './agent-loop'
 import { teammateTools } from './tools/teammate-tools'
 import { listAgentContextEntries } from './agent-context'
 import prisma from '@/lib/db'
-import { publishRealtimeMessage } from '@/app/api/ws/route'
-import { extractFileText } from './file-text-extractor'
+import { listWorkspaceFiles } from './session-workspace'
+import { buildTeammateContextMessages as buildSharedTeammateContextMessages } from './llm-context'
 
 // 认知收件箱
 import {
   initCognitiveEngine,
   deliverMessage,
+  getInterruptionMode,
+  getMessagePlane,
   startAttentionLoop,
   updateWorkContext,
   type InboxMessage,
   type CurrentWorkContext,
 } from './cognitive-inbox'
 
-// 内部通信
+// 工具执行器（已提取到独立模块）
 import {
-  sendInternalMessage,
-  sendPeerToPeerMessage,
-  broadcastToTeam,
-  createInternalThread,
-} from './internal-bus'
+  buildTeammateToolExecutor,
+  publishStatusUpdate,
+} from './teammate-tool-executor'
 
-// 文件处理
-import * as path from 'path'
-import { randomUUID } from 'crypto'
-import { mkdir, writeFile as writeFileFs } from 'fs/promises'
+// 共享知识层
+import { getUpstreamKnowledge, formatUpstreamKnowledge } from './shared-knowledge'
 
 const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}**。
 
 ## 你的角色
-- 角色: {{role}}
-- 描述: {{description}}
+- 角色：{{role}}
+- 描述：{{description}}
 {{capabilities}}
 
 ## 当前任务
 {{currentTask}}
 
-## 工作原则（重要）
-1. **专注执行任务**：直接开始工作，产出实际成果
-2. **避免空泛状态报告**：不要报告"正在分析"等无意义的状态更新
-3. **只在必要时沟通**：
-   - 遇到阻碍或需要澄清 → 联系 Lead
-   - 需要与其他队友协作 → 直接联系队友
-   - 任务完成后 → 必须汇报
-4. **可以被打断**：你可能会在任务中收到新消息（如Lead的新指示、队友的求助），评估优先级后决定如何处理
+## 工作原则
+1. **专注执行**：接到任务后直接开始工作，产出实际成果
+2. **避免状态汇报**：不发送"正在分析""正在思考"等无实质内容的状态更新
+3. **适时沟通**：
+   - 遇到阻碍或需要澄清时，联系 Lead
+   - 需要与其他队友协作时，直接联系相关人员
+   - 任务完成后，**必须调用 report_task_completion**，未调用视为未完成
+4. **可中断性**：执行任务时可能收到新消息（Lead 指示、队友求助等），根据优先级决定处理方式
 
 ## 中断与恢复
-- 如果收到更高优先级的消息，你可以：
+- 收到更高优先级消息时，可：
   - 使用 save_progress 保存当前进度
   - 处理新消息
   - 使用 resume_work 恢复之前的工作
-- 任务通常应该连续完成，但如果Lead明确要求你处理其他事情，请遵从
+- 任务应尽量连续完成，但如 Lead 明确要求处理其他事项，应优先执行
 
-## 工具使用指南
-- **write_artifact**：创建文档、代码等工件
-- **write_file**：创建用户可下载的文件
-- **read_file**：读取上传的文件内容
-- **report_task_completion**：任务完成后的汇报（必须调用）
-- **send_message_to_lead**：向 Lead 发送消息或求助
-- **send_message_to_teammate**：与其他队友直接沟通协作
-- **broadcast_to_team**：向所有队友广播重要信息
+## 工具使用说明
+- **list_workspace_files**：列出工作区中的文件和目录
+- **create_workspace_directory**：创建目录
+- **read_workspace_file**：读取文件内容
+- **create_workspace_file / replace_workspace_file**：创建或替换文件
+- **report_task_completion**：任务完成后必须调用。仅当确认任务目标达成、交付完成时调用，否则继续工作或报告阻塞
+- **send_message_to_lead**：向 Lead 求助或汇报问题
+- **send_message_to_teammate**：与其他队友直接沟通
+- **broadcast_to_team**：向全队广播重要信息
 - **get_team_roster**：查看团队成员列表
 - **save_progress / resume_work**：保存和恢复工作进度
 
 ## 禁止行为
-- ❌ 不要调用工具报告"正在分析"等状态
-- ❌ 不要每完成一个小步骤就发送消息
-- ❌ 不要生成无意义的占位内容
-- ❌ 不要为了礼貌回应 welcome/team_update 之类的低优先级广播
-- ❌ 不要在同一轮里反复调用 get_team_roster 或重复读取同一个文件
-- ❌ 在没有活跃任务时，不要因为旧的 task_assignment、coordination 或完成后的补充消息再次开始产出文档、读文件或重复汇报
+- ❌ 调用工具汇报"正在分析"等状态
+- ❌ 每完成一小步就发送消息
+- ❌ 生成无意义的占位内容
+- ❌ 为礼貌而回应 welcome/team_update 等低优先级广播
+- ❌ 同一轮中反复调用 get_team_roster 或重复读取同一文件
+- ❌ 无活跃任务时，因旧的 task_assignment、coordination 或完成后的补充消息而重新开始产出文档、读取文件或重复汇报
+- ❌ 将中间草稿、思考过程、部分结果视为任务完成；未调用 report_task_completion 则视为未完成
 
 ## 正确做法
 - ✅ 直接分析并产出结果
-- ✅ 遇到实际问题才寻求帮助
-- ✅ 完成任务后立即汇报`
+- ✅ 遇到实际问题时寻求帮助
+- ✅ 任务完成后立即调用 report_task_completion`
 
 interface TeammateProcessor {
   cleanup: () => void
@@ -95,6 +95,7 @@ interface TeammateProcessor {
   getCurrentTaskId: () => string | null
   assignTask: (taskId: string) => Promise<void>
   markTaskCompleted: () => void
+  nudgeTaskExecution: () => Promise<void>
   sendMessageToTeammate: (senderId: string, content: string) => Promise<void>
   sendMessageFromLead: (content: string) => Promise<void>
 }
@@ -106,6 +107,12 @@ interface TeammateTaskRuntime {
   currentTaskId: string | null
   isTaskCompleted: boolean
   isTaskActive: boolean
+  isLoopRunning: boolean
+  activeTurnPromise: Promise<void> | null
+}
+
+function isNonBlockingWorkMessage(message: InboxMessage): boolean {
+  return getMessagePlane(message) === 'work' && getInterruptionMode(message) === 'none'
 }
 
 async function ensureCognitiveTeammateProcessor(
@@ -128,6 +135,8 @@ async function ensureCognitiveTeammateProcessor(
     currentTaskId: null,
     isTaskCompleted: false,
     isTaskActive: false,
+    isLoopRunning: false,
+    activeTurnPromise: null,
   }
 
   await initCognitiveEngine({
@@ -140,6 +149,40 @@ async function ensureCognitiveTeammateProcessor(
     },
   })
 
+  const runSerializedTaskTurn = async (messages: InboxMessage[], context: CurrentWorkContext) => {
+    while (taskRuntime.activeTurnPromise) {
+      await taskRuntime.activeTurnPromise
+      if (taskRuntime.isTaskCompleted || !taskRuntime.isTaskActive) {
+        return
+      }
+      if (messages.length === 0) {
+        return
+      }
+    }
+
+    taskRuntime.isLoopRunning = true
+
+    let turnPromise: Promise<void> | null = null
+    turnPromise = processTeammateMessages(
+      swarmSessionId,
+      teammateId,
+      teammate,
+      leadAgentId,
+      messages,
+      context,
+      taskRuntime,
+      (completed) => { taskRuntime.isTaskCompleted = completed }
+    ).finally(() => {
+      if (taskRuntime.activeTurnPromise === turnPromise) {
+        taskRuntime.activeTurnPromise = null
+      }
+      taskRuntime.isLoopRunning = false
+    })
+
+    taskRuntime.activeTurnPromise = turnPromise
+    await turnPromise
+  }
+
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, teammateId, {
     llmConfig: {
       systemPrompt: buildTeammateSystemPrompt(teammate, null),
@@ -151,20 +194,12 @@ async function ensureCognitiveTeammateProcessor(
         () => taskRuntime.currentTaskId,
         leadAgentId,
         teammate,
-        { userId: '' }
+        { userId: '' },
+        { getTeammateProcessor }
       ),
     },
     onProcessMessages: async (messages, context) => {
-      await processTeammateMessages(
-        swarmSessionId,
-        teammateId,
-        teammate,
-        leadAgentId,
-        messages,
-        context,
-        taskRuntime,
-        (completed) => { taskRuntime.isTaskCompleted = completed }
-      )
+      await runSerializedTaskTurn(messages, context)
     },
     checkIntervalMs: 300,
   })
@@ -184,7 +219,22 @@ async function ensureCognitiveTeammateProcessor(
     markTaskCompleted: () => {
       taskRuntime.isTaskCompleted = true
       taskRuntime.isTaskActive = false
+      taskRuntime.isLoopRunning = false
+      taskRuntime.activeTurnPromise = null
       taskRuntime.currentTaskId = null
+    },
+    nudgeTaskExecution: async () => {
+      if (taskRuntime.activeTurnPromise || !taskRuntime.isTaskActive || !taskRuntime.currentTaskId) {
+        return
+      }
+
+      await runSerializedTaskTurn([], {
+        type: 'executing_task',
+        description: '继续执行当前任务',
+        progress: 50,
+        canBeInterrupted: true,
+        estimatedTimeToComplete: 'minutes',
+      })
     },
     sendMessageToTeammate: async (senderId: string, content: string) => {
       const sender = await prisma.agent.findUnique({ where: { id: senderId } })
@@ -286,8 +336,20 @@ export async function runCognitiveTeammateLoop(
     agentId: teammateId,
   })
 
+  const heartbeat = setInterval(() => {
+    if (!processor.isTaskActive()) {
+      clearInterval(heartbeat)
+      return
+    }
+
+    processor.nudgeTaskExecution().catch(error => {
+      console.error(`[CognitiveTeammateRunner] Failed to continue task ${taskId}:`, error)
+    })
+  }, 1500)
+
   // 等待任务完成（轮询检查）
   await waitForTaskCompletion(() => !processor.isTaskActive(), 100)
+  clearInterval(heartbeat)
 
   console.log(`[CognitiveTeammateRunner] Task completed for ${teammate.name}`)
 }
@@ -305,17 +367,30 @@ async function processTeammateMessages(
   taskRuntime: TeammateTaskRuntime,
   onTaskCompleted: (completed: boolean) => void
 ): Promise<void> {
+  if (taskRuntime.isTaskCompleted || !taskRuntime.isTaskActive) {
+    return
+  }
+
   const taskId = taskRuntime.currentTaskId
   const task = taskId
     ? await prisma.teamLeadTask.findUnique({ where: { id: taskId } })
     : null
 
   const activeTaskId = task && task.status === 'IN_PROGRESS' ? task.id : null
+  const nonBlockingMessages = messages.filter(isNonBlockingWorkMessage)
   const actionableMessages = messages.filter((message) => {
+    if (isNonBlockingWorkMessage(message)) {
+      return false
+    }
+
     const messageTaskId = typeof message.metadata?.taskId === 'string' ? message.metadata.taskId : null
 
     if (!activeTaskId) {
-      return message.type !== 'task_assignment'
+      return false
+    }
+
+    if (getMessagePlane(message) !== 'control' && message.type !== 'task_assignment') {
+      return false
     }
 
     if (!messageTaskId) {
@@ -325,15 +400,19 @@ async function processTeammateMessages(
     return messageTaskId === activeTaskId
   })
 
-  if (actionableMessages.length === 0) {
+  const shouldContinueActiveTask = (messages.length === 0 || nonBlockingMessages.length === messages.length) && !!activeTaskId
+
+  if (actionableMessages.length === 0 && !shouldContinueActiveTask) {
     return
   }
 
   // 构建消息摘要
-  const messageSummary = actionableMessages.map(m => {
+  const messageSummary = actionableMessages.length > 0
+    ? actionableMessages.map(m => {
     const time = Math.round((Date.now() - m.receivedAt.getTime()) / 1000)
     return `[${m.type}] 来自 ${m.senderName} (${time}秒前): ${m.content.slice(0, 200)}`
-  }).join('\n---\n')
+    }).join('\n---\n')
+    : '[system] 没有新消息。请继续推进当前活跃任务，直到产出交付物或明确报告阻塞。'
 
   // 获取上下文消息
   const contextMessages = await buildTeammateContextMessages(
@@ -344,10 +423,18 @@ async function processTeammateMessages(
   )
 
   // 标记所有消息为处理中
-  for (const msg of actionableMessages) {
+  if (actionableMessages.length > 0) {
+    for (const msg of actionableMessages) {
+      updateWorkContext(swarmSessionId, teammateId, {
+        type: msg.type === 'task_assignment' ? 'executing_task' : 'processing_messages',
+        description: `处理来自 ${msg.senderName} 的消息`,
+        progress: 50,
+      })
+    }
+  } else {
     updateWorkContext(swarmSessionId, teammateId, {
-      type: msg.type === 'task_assignment' ? 'executing_task' : 'processing_messages',
-      description: `处理来自 ${msg.senderName} 的消息`,
+      type: 'executing_task',
+      description: `继续执行任务: ${task?.title || '当前任务'}`,
       progress: 50,
     })
   }
@@ -365,7 +452,8 @@ async function processTeammateMessages(
       () => taskRuntime.currentTaskId,
       leadAgentId,
       teammate,
-      { userId: '' } // session 在 processTeammateMessages 中不需要 userId
+      { userId: '' },
+      { getTeammateProcessor }
     ),
     contextMessages,
     maxIterations: 20,
@@ -381,6 +469,13 @@ async function processTeammateMessages(
   // 检查是否任务完成
   if (result.toolCalls?.some(tc => tc.toolName === 'report_task_completion' && tc.status === 'completed')) {
     onTaskCompleted(true)
+    return
+  }
+
+  if (task && result.finalText && result.finalText.trim()) {
+    console.log(
+      `[CognitiveTeammateRunner][${teammate.name}] Intermediate output detected for task ${task.id}; continuing task without enqueueing protocol reminder`
+    )
   }
 }
 
@@ -405,447 +500,13 @@ function buildTeammateSystemPrompt(
       : '- 当前没有活跃任务，请优先处理收件箱中的协调或澄清消息。')
 }
 
-/**
- * 构建Teammate工具执行器
- */
-function buildTeammateToolExecutor(
-  swarmSessionId: string,
-  teammateId: string,
-  getCurrentTaskId: () => string | null,
-  leadAgentId: string,
-  teammate: { name: string },
-  session: { userId: string }
-): ToolExecutor {
-  const toolCache = new Map<string, string>()
-
-  return async (name: string, input: Record<string, unknown>) => {
-    const taskId = getCurrentTaskId()
-    const task = taskId
-      ? await prisma.teamLeadTask.findUnique({ where: { id: taskId } })
-      : null
-
-    const requiresActiveTask = new Set(['write_artifact', 'write_file', 'report_task_completion'])
-    if (requiresActiveTask.has(name) && (!taskId || !task || task.status !== 'IN_PROGRESS')) {
-      return JSON.stringify({ success: false, error: '当前没有可执行的活跃任务' })
-    }
-
-    switch (name) {
-      case 'write_artifact':
-        return handleWriteArtifact(swarmSessionId, teammateId, taskId, teammate, input)
-
-      case 'write_file':
-        return handleWriteFile(swarmSessionId, teammateId, taskId, session.userId, teammate, input)
-
-      case 'read_file': {
-        const fileId = input.file_id as string
-        const cacheKey = `read_file:${fileId}`
-        const cached = toolCache.get(cacheKey)
-        if (cached) return cached
-
-        const result = await handleReadFile(input)
-        toolCache.set(cacheKey, result)
-        return result
-      }
-
-      case 'report_task_completion': {
-        if (!taskId || !task || task.status !== 'IN_PROGRESS') {
-          return JSON.stringify({ success: false, error: '当前没有可完成的活跃任务' })
-        }
-
-        const report = input.report as string
-        const resultSummary = input.result_summary as string | undefined
-
-        // 更新任务状态
-        await prisma.teamLeadTask.update({
-          where: { id: taskId },
-          data: {
-            status: 'COMPLETED',
-            completedAt: new Date(),
-            resultSummary: resultSummary || report.slice(0, 500),
-          },
-        })
-
-        // 更新Agent状态
-        await prisma.agent.update({
-          where: { id: teammateId },
-          data: { status: 'IDLE' },
-        })
-
-        const processor = getTeammateProcessor(swarmSessionId, teammateId)
-        processor?.markTaskCompleted()
-
-        publishStatusUpdate(swarmSessionId, { id: teammateId, name: teammate.name }, { id: taskId, title: task.title }, 'idle')
-
-        // 通过内部消息通知Lead（而不是直接调用）
-        const { sendInternalMessage, createInternalThread } = await import('./internal-bus')
-        const thread = await createInternalThread({
-          swarmSessionId,
-          threadType: 'task_completion',
-          subject: `任务完成: ${task.title}`,
-          relatedTaskId: taskId,
-        })
-
-        await sendInternalMessage({
-          swarmSessionId,
-          threadId: thread.id,
-          senderAgentId: teammateId,
-          recipientAgentId: leadAgentId,
-          messageType: 'task_complete',
-          content: report,
-          metadata: { taskId, resultSummary },
-        })
-
-        // 发布实时消息
-        publishRealtimeMessage(
-          {
-            type: 'task_update',
-            payload: {
-              task_id: taskId,
-              title: task.title,
-              status: 'completed',
-              assignee_id: teammateId,
-              assignee_name: teammate.name,
-              swarm_session_id: swarmSessionId,
-              message: `${teammate.name} 完成了任务: ${task.title}`,
-              timestamp: new Date().toISOString(),
-            },
-          },
-          { sessionId: swarmSessionId }
-        )
-
-        return JSON.stringify({ success: true, message: '任务完成汇报已提交' })
-      }
-
-      case 'send_message_to_lead': {
-        const content = input.content as string
-        const msgType = (input.message_type as string) || 'progress_update'
-
-        const thread = await prisma.internalThread.findFirst({
-          where: { swarmSessionId, threadType: 'lead_teammate' },
-        }) || await createInternalThread({
-          swarmSessionId,
-          threadType: 'lead_teammate',
-          subject: `${teammate.name} 与 Lead 的沟通`,
-        })
-
-        await sendInternalMessage({
-          swarmSessionId,
-          threadId: thread.id,
-          senderAgentId: teammateId,
-          recipientAgentId: leadAgentId,
-          messageType: msgType,
-          content,
-        })
-
-        publishRealtimeMessage(
-          {
-            type: 'internal_message',
-            payload: {
-              agent_id: teammateId,
-              agent_name: teammate.name,
-              action: 'message_sent',
-              recipient: 'Lead',
-              content: content.slice(0, 200),
-              swarm_session_id: swarmSessionId,
-              timestamp: new Date().toISOString(),
-            },
-          },
-          { sessionId: swarmSessionId }
-        )
-
-        return JSON.stringify({ success: true })
-      }
-
-      case 'send_message_to_teammate': {
-        const content = input.content as string
-        const recipientId = input.teammate_id as string
-        const msgType = (input.message_type as string) || 'coordination'
-
-        await sendPeerToPeerMessage({
-          swarmSessionId,
-          senderAgentId: teammateId,
-          recipientAgentId: recipientId,
-          messageType: msgType,
-          content,
-        })
-
-        return JSON.stringify({ success: true, recipient_id: recipientId })
-      }
-
-      case 'broadcast_to_team': {
-        const content = input.content as string
-        const msgType = (input.message_type as string) || 'info'
-
-        const result = await broadcastToTeam({
-          swarmSessionId,
-          senderAgentId: teammateId,
-          messageType: msgType,
-          content,
-        })
-
-        return JSON.stringify({
-          success: true,
-          recipients_count: result.messageCount,
-        })
-      }
-
-      case 'get_team_roster': {
-        const cacheKey = 'get_team_roster'
-        const cached = toolCache.get(cacheKey)
-        if (cached) return cached
-
-        const { getTeamRoster } = await import('./internal-bus')
-        const roster = await getTeamRoster(swarmSessionId, teammateId)
-        const result = JSON.stringify({
-          success: true,
-          teammates: roster,
-          count: roster.length,
-        })
-        toolCache.set(cacheKey, result)
-        return result
-      }
-
-      case 'save_progress':
-        // 保存进度
-        return JSON.stringify({
-          success: true,
-          saved_at: new Date().toISOString(),
-          progress: input.progress,
-        })
-
-      case 'resume_work':
-        // 恢复工作
-        return JSON.stringify({
-          success: true,
-          resumed: true,
-        })
-
-      default:
-        return JSON.stringify({ error: `Unknown tool: ${name}` })
-    }
-  }
-}
-
-// 工具处理函数...
-async function resolveFileOwnerContext(swarmSessionId: string): Promise<{ userId: string | null; sessionId: string }> {
-  const swarmSession = await prisma.swarmSession.findUnique({
-    where: { id: swarmSessionId },
-    select: { userId: true },
-  })
-
-  const userId = swarmSession?.userId || null
-  if (!userId) {
-    return { userId: null, sessionId: `swarm:${swarmSessionId}` }
-  }
-
-  const activeSession = await prisma.session.findFirst({
-    where: { userId, isActive: true },
-    select: { id: true },
-  })
-
-  return {
-    userId,
-    sessionId: activeSession?.id || `swarm:${swarmSessionId}`,
-  }
-}
-async function handleWriteArtifact(
-  swarmSessionId: string,
-  teammateId: string,
-  taskId: string | null,
-  teammate: { name: string },
-  input: Record<string, unknown>
-): Promise<string> {
-  const title = input.title as string
-  const kind = (input.kind as string) || 'document'
-  const content = input.content as string
-  const summary = (input.summary as string) || null
-  const { userId, sessionId } = await resolveFileOwnerContext(swarmSessionId)
-
-  const artifact = await prisma.artifact.create({
-    data: {
-      swarmSessionId,
-      ownerAgentId: teammateId,
-      sourceTaskId: taskId,
-      kind,
-      title,
-      summary,
-      metadata: JSON.stringify({ content }),
-    },
-  })
-
-  const filename = `${title.replace(/[^a-zA-Z0-9\u4e00-\u9fff._-]/g, '_')}.${getArtifactExtension(kind)}`
-  const mimeType = getArtifactMimeType(kind)
-  const uniqueName = `${randomUUID()}${path.extname(filename)}`
-  const filePath = path.join(process.env.UPLOAD_DIR || './uploads', uniqueName)
-
-  await mkdir(process.env.UPLOAD_DIR || './uploads', { recursive: true })
-  await writeFileFs(filePath, content, 'utf-8')
-
-  const fileRecord = await prisma.file.create({
-    data: {
-      filename: uniqueName,
-      originalName: filename,
-      mimeType,
-      size: Buffer.byteLength(content, 'utf-8'),
-      path: filePath,
-      sessionId,
-      swarmSessionId,
-      userId,
-    },
-  })
-
-  await prisma.artifact.update({
-    where: { id: artifact.id },
-    data: { fileId: fileRecord.id },
-  })
-
-  publishRealtimeMessage(
-    {
-      type: 'internal_message',
-      payload: {
-        agent_id: teammateId,
-        agent_name: teammate.name,
-        action: 'artifact_created',
-        artifact_id: artifact.id,
-        artifact_title: title,
-        file_id: fileRecord.id,
-        file_name: filename,
-        swarm_session_id: swarmSessionId,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-
-  return JSON.stringify({ success: true, artifact_id: artifact.id, file_id: fileRecord.id, title, kind })
-}
-
-async function handleWriteFile(
-  swarmSessionId: string,
-  teammateId: string,
-  taskId: string | null,
-  userId: string,
-  teammate: { name: string },
-  input: Record<string, unknown>
-): Promise<string> {
-  const filename = input.filename as string
-  const content = input.content as string
-  const { userId: resolvedUserId, sessionId } = await resolveFileOwnerContext(swarmSessionId)
-
-  const UPLOAD_DIR = process.env.UPLOAD_DIR || './uploads'
-  const ext = path.extname(filename) || ''
-  const uniqueName = `${randomUUID()}${ext}`
-  const filePath = path.join(UPLOAD_DIR, uniqueName)
-
-  await mkdir(UPLOAD_DIR, { recursive: true })
-  await writeFileFs(filePath, content, 'utf-8')
-
-  const fileRecord = await prisma.file.create({
-    data: {
-      filename: uniqueName,
-      originalName: filename,
-      mimeType: (input.mime_type as string) || 'text/plain',
-      size: Buffer.byteLength(content, 'utf-8'),
-      path: filePath,
-      sessionId,
-      swarmSessionId,
-      userId: resolvedUserId || userId || null,
-    },
-  })
-
-  await prisma.artifact.create({
-    data: {
-      swarmSessionId,
-      ownerAgentId: teammateId,
-      sourceTaskId: taskId,
-      kind: 'generated_file',
-      fileId: fileRecord.id,
-      title: filename,
-    },
-  })
-
-  publishRealtimeMessage(
-    {
-      type: 'internal_message',
-      payload: {
-        agent_id: teammateId,
-        agent_name: teammate.name,
-        action: 'file_created',
-        file_id: fileRecord.id,
-        file_name: filename,
-        swarm_session_id: swarmSessionId,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-
-  return JSON.stringify({
-    success: true,
-    file_id: fileRecord.id,
-    filename,
-    url: `/api/files/${fileRecord.id}`,
-  })
-}
-
-async function handleReadFile(input: Record<string, unknown>): Promise<string> {
-  const fileId = input.file_id as string
-  const file = await prisma.file.findUnique({ where: { id: fileId } })
-  if (!file) {
-    return JSON.stringify({ error: '文件不存在', file_id: fileId })
-  }
-
-  const extracted = await extractFileText({
-    filePath: file.path,
-    filename: file.originalName,
-    mimeType: file.mimeType,
-  })
-
-  if (!extracted.success) {
-    return JSON.stringify({
-      success: false,
-      filename: file.originalName,
-      mime_type: file.mimeType,
-      error: extracted.error || '无法读取文件内容',
-      note: '请联系 Lead 提供可直接读取的纯文本、Markdown，或确认附件格式是否受支持；不要假装自己已经读过原文。',
-    })
-  }
-
-  return JSON.stringify({
-    success: true,
-    filename: file.originalName,
-    mime_type: file.mimeType,
-    extraction_method: extracted.extractionMethod,
-    content: (extracted.text || '').slice(0, 10000),
-  })
-}
-
 async function buildTeammateContextMessages(
   swarmSessionId: string,
   teammateId: string,
   taskId: string | null,
   newMessagesSummary: string
 ): Promise<LLMMessage[]> {
-  const messages: LLMMessage[] = []
-
-  // 获取上下文条目
   const entries = await listAgentContextEntries(teammateId, 20)
-
-  for (const entry of entries) {
-    if (entry.entryType === 'task_assignment') {
-      messages.push({ role: 'user', content: `[系统] ${entry.content}` })
-    } else if (entry.entryType === 'assistant_response') {
-      messages.push({ role: 'assistant', content: entry.content })
-    }
-  }
-
-  // 获取可用文件与上游工件
-  const artifacts = taskId
-    ? await prisma.artifact.findMany({
-        where: { sourceTaskId: taskId },
-        include: { file: true },
-      })
-    : []
 
   const taskWithDeps = taskId
     ? await prisma.teamLeadTask.findUnique({
@@ -857,84 +518,44 @@ async function buildTeammateContextMessages(
     : null
 
   const upstreamTaskIds = taskWithDeps?.dependencies.map(dep => dep.dependsOnTaskId) || []
-  const upstreamArtifacts = upstreamTaskIds.length > 0
-    ? await prisma.artifact.findMany({
-        where: { sourceTaskId: { in: upstreamTaskIds } },
-        include: { file: true, sourceTask: true },
-        orderBy: { createdAt: 'asc' },
-      })
-    : []
+  const workspaceFiles = await listWorkspaceFiles(swarmSessionId)
 
-  const sessionFiles = await prisma.file.findMany({
-    where: { swarmSessionId },
-    orderBy: { createdAt: 'desc' },
-    take: 20,
-  })
-
-  const fileSeen = new Set<string>()
-  const allFiles: Array<{ id: string; originalName: string; description?: string }> = []
-
-  for (const artifact of artifacts) {
-    if (artifact.file && !fileSeen.has(artifact.file.id)) {
-      fileSeen.add(artifact.file.id)
-      allFiles.push({
-        id: artifact.file.id,
-        originalName: artifact.file.originalName,
-        description: 'Task attachment',
-      })
-    }
-  }
-
-  for (const file of sessionFiles) {
-    if (!fileSeen.has(file.id)) {
-      fileSeen.add(file.id)
-      allFiles.push({
-        id: file.id,
-        originalName: file.originalName,
-      })
-    }
-  }
-
-  if (allFiles.length > 0) {
-    const fileInfo = allFiles
-      .map(file => `- ${file.originalName} (文件ID: ${file.id})${file.description ? ` - ${file.description}` : ''}`)
+  let workspaceFileSummary: string | null = null
+  if (workspaceFiles.length > 0) {
+    const fileInfo = workspaceFiles
+      .map(file => `- ${file.relativePath}${file.sourceTaskId === taskId ? ' - 当前任务输出' : ''}`)
       .join('\n')
-    messages.push({
-      role: 'user',
-      content: `[可用文件列表]\n${fileInfo}\n\n如需读取文件内容，请使用 read_file 工具，传入上述文件ID。若 read_file 返回二进制文档错误，不得假装已阅读正文，必须向 Lead 请求可读文本。`,
-    })
+    workspaceFileSummary = `[工作区文件]\n${fileInfo}\n\n如需查看目录，请使用 list_workspace_files；如需读取文件内容，请使用 read_workspace_file，并传入相对路径。若返回二进制文档错误，不得假装已阅读正文，必须向 Lead 请求可读文本。`
   }
 
-  if (upstreamArtifacts.length > 0) {
-    const upstreamSummaries = upstreamArtifacts
-      .map(artifact => {
-        let content = ''
-        if (artifact.metadata) {
-          try {
-            const parsed = JSON.parse(artifact.metadata) as { content?: string }
-            if (typeof parsed.content === 'string') {
-              content = parsed.content
-            }
-          } catch {}
-        }
-        const snippet = content.trim().length > 0 ? content.slice(0, 2000) : (artifact.summary || '')
-        return `- 来源任务: ${artifact.sourceTask?.title || '未知任务'} | 工件: ${artifact.title}\n${snippet}`
-      })
-      .join('\n\n')
+  const upstreamFileSummaries = workspaceFiles
+    .filter(file => file.sourceTaskId && upstreamTaskIds.includes(file.sourceTaskId))
+    .map(file => `- 来源任务ID: ${file.sourceTaskId} | 文件: ${file.relativePath}`)
 
-    messages.push({
-      role: 'user',
-      content: `[上游任务产出]\n${upstreamSummaries}`,
+  // 从共享知识库拉取上游任务产出（Context Slicing）
+  let upstreamKnowledgeText: string | null = null
+  if (taskId) {
+    const upstreamEntries = await getUpstreamKnowledge(swarmSessionId, taskId, {
+      maxEntries: 10,
+      summaryOnly: false,
     })
+    upstreamKnowledgeText = formatUpstreamKnowledge(upstreamEntries)
   }
 
-  // 新消息
-  messages.push({
-    role: 'user',
-    content: `## 新消息到达\n\n${newMessagesSummary}\n\n请处理这些消息。若附件正文不可读或缺失，请明确报告阻塞，不要基于常识伪造已阅读结果。`,
+  const upstreamParts: string[] = []
+  if (upstreamFileSummaries.length > 0) {
+    upstreamParts.push(`[上游任务文件]\n${upstreamFileSummaries.join('\n')}`)
+  }
+  if (upstreamKnowledgeText) {
+    upstreamParts.push(upstreamKnowledgeText)
+  }
+
+  return buildSharedTeammateContextMessages({
+    contextEntries: entries,
+    workspaceFileSummary,
+    upstreamFileSummary: upstreamParts.length > 0 ? upstreamParts.join('\n\n') : null,
+    newMessagesSummary,
   })
-
-  return messages
 }
 
 /**
@@ -962,67 +583,6 @@ const progressTools: ToolDefinition[] = [
     },
   },
 ]
-
-/**
- * 发布状态更新
- */
-function getArtifactExtension(kind: string): string {
-  switch (kind) {
-    case 'code': return 'txt'
-    case 'document': return 'md'
-    case 'analysis': return 'md'
-    case 'report': return 'md'
-    case 'spreadsheet': return 'csv'
-    case 'outline': return 'md'
-    default: return 'txt'
-  }
-}
-
-function getArtifactMimeType(kind: string): string {
-  switch (kind) {
-    case 'code': return 'text/plain'
-    case 'spreadsheet': return 'text/csv'
-    default: return 'text/markdown'
-  }
-}
-function publishStatusUpdate(
-  swarmSessionId: string,
-  teammate: { id: string; name: string },
-  task: { id: string; title: string },
-  status: 'busy' | 'idle'
-): void {
-  publishRealtimeMessage(
-    {
-      type: 'agent_status',
-      payload: {
-        agent_id: teammate.id,
-        name: teammate.name,
-        status,
-        current_task_id: task.id,
-        swarm_session_id: swarmSessionId,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-
-  publishRealtimeMessage(
-    {
-      type: 'task_update',
-      payload: {
-        task_id: task.id,
-        title: task.title,
-        status: status === 'busy' ? 'in_progress' : 'completed',
-        assignee_id: teammate.id,
-        assignee_name: teammate.name,
-        swarm_session_id: swarmSessionId,
-        message: `${teammate.name} ${status === 'busy' ? '开始' : '完成'}任务: ${task.title}`,
-        timestamp: new Date().toISOString(),
-      },
-    },
-    { sessionId: swarmSessionId }
-  )
-}
 
 /**
  * 等待任务完成
