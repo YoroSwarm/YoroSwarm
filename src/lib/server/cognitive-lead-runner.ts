@@ -16,6 +16,7 @@ import { buildLeadContextMessages } from './llm-context'
 import { listExternalMessages } from './external-chat'
 import { buildLeadToolExecutor } from './lead-tool-executor'
 import prisma from '@/lib/db'
+import { publishRealtimeMessage } from '@/app/api/ws/route'
 
 // 认知收件箱
 import {
@@ -453,6 +454,20 @@ export async function runCognitiveLeadLoop(input: {
   // 投递用户消息到收件箱
   await processor.processUserMessage(userMessage, attachments)
 
+  // 立即通知前端 Lead 进入 busy 状态（AttentionManager 决策期间也算忙碌）
+  publishRealtimeMessage(
+    {
+      type: 'agent_status',
+      payload: {
+        agent_id: leadAgentId,
+        name: leadAgentCheck?.name || 'Team Lead',
+        status: 'busy',
+        swarm_session_id: swarmSessionId,
+      },
+    },
+    { sessionId: swarmSessionId }
+  )
+
   console.log(`[CognitiveLeadRunner] User message delivered to inbox`)
 }
 
@@ -477,6 +492,21 @@ export async function runCognitiveLeadReEvaluation(
 
   // 投递任务完成消息到收件箱
   await processor.processTaskCompletion(teammateId, taskId, completedReport)
+
+  // 立即通知前端 Lead 进入 busy 状态
+  const leadAgent = await prisma.agent.findUnique({ where: { id: leadAgentId }, select: { name: true } })
+  publishRealtimeMessage(
+    {
+      type: 'agent_status',
+      payload: {
+        agent_id: leadAgentId,
+        name: leadAgent?.name || 'Team Lead',
+        status: 'busy',
+        swarm_session_id: swarmSessionId,
+      },
+    },
+    { sessionId: swarmSessionId }
+  )
 
   console.log(`[CognitiveLeadRunner] Task completion delivered to inbox: ${completedTaskTitle}`)
 }
