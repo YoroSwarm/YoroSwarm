@@ -30,6 +30,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import type { Message } from '@/types/chat';
+import { FilePreviewDialog } from './FilePreviewDialog';
 
 export interface ToolCallRecord {
   toolName: string;
@@ -458,6 +459,12 @@ export function MessageItem({
   const [showActions, setShowActions] = useState(false);
   const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
   const [isContentExpanded, setIsContentExpanded] = useState(isLead);
+  const [previewFile, setPreviewFile] = useState<{
+    url: string;
+    name: string;
+    mimeType?: string;
+    size?: number;
+  } | null>(null);
   const primaryAttachment = message.attachments?.[0];
   const attachmentUrl = primaryAttachment?.url || message.content;
 
@@ -543,7 +550,12 @@ export function MessageItem({
               width={800}
               height={600}
               className="max-w-full max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
-              onClick={() => window.open(attachmentUrl, '_blank')}
+              onClick={() => setPreviewFile({
+                url: attachmentUrl,
+                name: primaryAttachment?.name || '图片',
+                mimeType: primaryAttachment?.mimeType || 'image/png',
+                size: primaryAttachment?.size,
+              })}
             />
           </div>
         );
@@ -552,10 +564,10 @@ export function MessageItem({
         const fileUrl = primaryAttachment?.url || message.metadata?.url;
         const fileName = primaryAttachment?.name || message.metadata?.fileName || '文件';
         const fileSize = primaryAttachment?.size || message.metadata?.size;
-        const fileMimeType = (message.metadata?.mimeType as string) || '';
-        const isImage = fileMimeType.startsWith('image/');
+        const fileMimeType = (primaryAttachment?.mimeType as string) || (message.metadata?.mimeType as string) || '';
+        const isImageFile = fileMimeType.startsWith('image/');
 
-        if (isImage && fileUrl) {
+        if (isImageFile && fileUrl) {
           return (
             <div className="relative group/image">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -563,7 +575,12 @@ export function MessageItem({
                 src={fileUrl as string}
                 alt={fileName as string}
                 className="max-w-full max-h-80 rounded-lg object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                onClick={() => window.open(fileUrl as string, '_blank')}
+                onClick={() => setPreviewFile({
+                  url: fileUrl as string,
+                  name: fileName as string,
+                  mimeType: fileMimeType,
+                  size: fileSize as number | undefined,
+                })}
               />
               <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                 <span className="truncate">{fileName as string}</span>
@@ -574,14 +591,25 @@ export function MessageItem({
         }
 
         return (
-          <div className={cn("flex items-center gap-3 p-3 rounded-lg max-w-sm", isUser ? "bg-primary/20" : "bg-muted")}>
+          <div
+            className={cn(
+              "flex items-center gap-3 p-3 rounded-lg max-w-sm cursor-pointer transition-colors",
+              isUser ? "bg-primary/20 hover:bg-primary/30" : "bg-muted hover:bg-accent"
+            )}
+            onClick={() => fileUrl && setPreviewFile({
+              url: fileUrl as string,
+              name: fileName as string,
+              mimeType: fileMimeType,
+              size: fileSize as number | undefined,
+            })}
+          >
             <div className={cn("flex h-10 w-10 items-center justify-center rounded", isUser ? "bg-primary/20" : "bg-primary/10")}>
               <FileText className={cn("h-5 w-5", isUser ? "text-primary-foreground" : "text-primary")} />
             </div>
             <div className="flex-1 min-w-0">
               <p className={cn("text-sm font-medium truncate", isUser ? "text-primary-foreground" : "text-foreground")}>{fileName as string}</p>
               <p className={cn("text-xs", isUser ? "text-primary-foreground/70" : "text-muted-foreground")}>
-                {fileSize ? formatFileSize(fileSize as number) : '未知大小'}
+                {fileSize ? formatFileSize(fileSize as number) : '点击预览'}
               </p>
             </div>
             {fileUrl && (
@@ -590,6 +618,7 @@ export function MessageItem({
                 download={fileName as string}
                 className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 text-primary-foreground" : "hover:bg-accent")}
                 title="下载文件"
+                onClick={(e) => e.stopPropagation()}
               >
                 <Download className="h-4 w-4" />
               </a>
@@ -656,21 +685,26 @@ export function MessageItem({
             {message.attachments && message.attachments.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-2">
                 {message.attachments.map((att) => (
-                  <a
+                  <button
                     key={att.id}
-                    href={`${att.url}?download=1`}
-                    download={att.name}
+                    type="button"
+                    onClick={() => setPreviewFile({
+                      url: att.url,
+                      name: att.name,
+                      mimeType: att.mimeType,
+                      size: att.size,
+                    })}
                     className={cn(
-                      "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors",
+                      "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors cursor-pointer",
                       isUser
                         ? "bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground"
                         : "bg-muted hover:bg-accent text-foreground"
                     )}
-                    title={att.name}
+                    title={`预览 ${att.name}`}
                   >
                     <Paperclip className="h-3 w-3 shrink-0" />
                     <span className="truncate max-w-[150px]">{att.name}</span>
-                  </a>
+                  </button>
                 ))}
               </div>
             )}
@@ -885,6 +919,7 @@ export function MessageItem({
   }
 
   return (
+    <>
     <div
       className={cn(
         'group flex gap-3 animate-slide-up',
@@ -1015,5 +1050,16 @@ export function MessageItem({
         </button>
       </div>
     </div>
+    {previewFile && (
+      <FilePreviewDialog
+        open={!!previewFile}
+        onOpenChange={(open) => { if (!open) setPreviewFile(null); }}
+        fileUrl={previewFile.url}
+        fileName={previewFile.name}
+        mimeType={previewFile.mimeType}
+        fileSize={previewFile.size}
+      />
+    )}
+    </>
   );
 }
