@@ -153,6 +153,15 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Record thinking content for persistence
       thinkingContent.push(textContent)
 
+      // Persist thinking to DB so it appears in historical view
+      await appendAgentContextEntry({
+        swarmSessionId,
+        agentId,
+        sourceType: 'llm',
+        entryType: 'thinking',
+        content: textContent,
+      })
+
       publishRealtimeMessage(
         {
           type: 'agent_thinking',

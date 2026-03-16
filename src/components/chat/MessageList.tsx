@@ -162,6 +162,7 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                 agentId={state.agentId}
                 role={state.role}
                 isThinking={state.isThinking}
+                thinkingContent={state.thinkingContent}
               />
             ))}
         </div>
