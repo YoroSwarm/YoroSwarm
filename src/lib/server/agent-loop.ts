@@ -456,6 +456,22 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   // Max iterations reached
   console.warn(`[AgentLoop][${agentName}] Max iterations (${maxIterations}) reached`)
+
+  // Broadcast agent idle (maxIterations path also needs this)
+  publishRealtimeMessage(
+    {
+      type: 'agent_status',
+      payload: {
+        agent_id: agentId,
+        name: agentName,
+        status: 'idle',
+        swarm_session_id: swarmSessionId,
+        timestamp: new Date().toISOString(),
+      },
+    },
+    { sessionId: swarmSessionId }
+  )
+
   return {
     finalText: '达到最大迭代次数，已停止处理。',
     toolCallsMade: totalToolCalls,

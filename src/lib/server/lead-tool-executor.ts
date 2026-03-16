@@ -60,6 +60,49 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           })
         }
 
+        // Safety net: 检查是否还有 PENDING 未分配的任务
+        const pendingUnassigned = await prisma.teamLeadTask.findMany({
+          where: {
+            swarmSessionId,
+            status: 'PENDING',
+            assigneeId: null,
+          },
+          select: { id: true, title: true },
+        })
+
+        if (pendingUnassigned.length > 0) {
+          const taskList = pendingUnassigned
+            .map(t => `- ${t.title} (ID: ${t.id})`)
+            .join('\n')
+          return JSON.stringify({
+            success: false,
+            blocked: true,
+            reason: `还有 ${pendingUnassigned.length} 个任务处于 PENDING 状态且未分配。你必须先为这些任务分配队友，然后等待所有任务完成后再回复用户。`,
+            pending_tasks: taskList,
+          })
+        }
+
+        // 检查是否还有进行中的任务
+        const inProgressTasks = await prisma.teamLeadTask.findMany({
+          where: {
+            swarmSessionId,
+            status: { in: ['ASSIGNED', 'IN_PROGRESS'] },
+          },
+          select: { id: true, title: true, status: true, assignee: { select: { name: true } } },
+        })
+
+        if (inProgressTasks.length > 0) {
+          const taskList = inProgressTasks
+            .map(t => `- [${t.status}] ${t.title} → ${t.assignee?.name || '未知'}`)
+            .join('\n')
+          return JSON.stringify({
+            success: false,
+            blocked: true,
+            reason: `还有 ${inProgressTasks.length} 个任务正在执行中。请等待所有任务完成后再回复用户。如需通知用户中间进度，请在 content 中说明这是中间进度报告而非最终汇总。`,
+            in_progress_tasks: taskList,
+          })
+        }
+
         // Resolve file references into attachment metadata
         const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
         let attachments: Array<{ fileId: string; fileName: string; mimeType: string }> | undefined

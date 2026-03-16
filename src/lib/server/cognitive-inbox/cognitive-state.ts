@@ -159,7 +159,7 @@ export interface InboxMessage {
   
   // 消息内容
   type: 'direct_message' | 'task_assignment' | 'task_complete' | 
-        'question' | 'urgent' | 'broadcast' | 'coordination'
+        'question' | 'urgent' | 'broadcast' | 'coordination' | 'system_alert'
   content: string
   metadata?: InboxMessageMetadata
   
