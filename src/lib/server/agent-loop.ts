@@ -377,13 +377,30 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     } else {
       // LLM returned text without tool calls — loop ends
       if (textContent) {
-        await appendAgentContextEntry({
+        const entry = await appendAgentContextEntry({
           swarmSessionId,
           agentId,
           sourceType: 'llm',
           entryType: 'assistant_response',
           content: textContent,
         })
+
+        // Broadcast assistant response so frontend can display it in real-time
+        publishRealtimeMessage(
+          {
+            type: 'agent_thinking',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              status: 'response',
+              content: textContent,
+              entry_id: entry.id,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
       }
 
       // Broadcast thinking end

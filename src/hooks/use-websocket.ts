@@ -167,6 +167,16 @@ export function useWebSocket({
   const connectionAttemptsRef = useRef(0);
   const connectRef = useRef<(() => void) | null>(null);
 
+  // Use refs for callbacks to avoid stale closures in WebSocket handlers
+  const onMessageRef = useRef(onMessage);
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
+  useEffect(() => { onMessageRef.current = onMessage; }, [onMessage]);
+  useEffect(() => { onConnectRef.current = onConnect; }, [onConnect]);
+  useEffect(() => { onDisconnectRef.current = onDisconnect; }, [onDisconnect]);
+  useEffect(() => { onErrorRef.current = onError; }, [onError]);
+
   useEffect(() => {
     isConnectingRef.current = isConnecting;
   }, [isConnecting]);
@@ -267,7 +277,7 @@ export function useWebSocket({
           connectionAttemptsRef.current = 0;
           setConnectionAttempts(0);
           startHeartbeat();
-          onConnect?.();
+          onConnectRef.current?.();
         };
 
         ws.onmessage = (event) => {
@@ -294,7 +304,7 @@ export function useWebSocket({
               }));
             }
 
-            onMessage?.(message);
+            onMessageRef.current?.(message);
           } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
           }
@@ -311,7 +321,7 @@ export function useWebSocket({
           isConnectingRef.current = false;
           setIsConnecting(false);
           clearHeartbeat();
-          onDisconnect?.(event.code, event.reason);
+          onDisconnectRef.current?.(event.code, event.reason);
 
           pendingAcksRef.current.forEach((pending) => {
             clearTimeout(pending.timeout);
@@ -337,7 +347,7 @@ export function useWebSocket({
             readyState: ws.readyState,
             eventType: error.type,
           });
-          onError?.(error);
+          onErrorRef.current?.(error);
         };
       } catch (error) {
         globalConnectingLocks.delete(url);
@@ -349,10 +359,6 @@ export function useWebSocket({
     })();
   }, [
     url,
-    onMessage,
-    onConnect,
-    onDisconnect,
-    onError,
     reconnectInterval,
     maxReconnectAttempts,
     autoReconnect,

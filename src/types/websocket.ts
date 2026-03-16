@@ -119,8 +119,9 @@ export interface AgentThinkingPayload {
   agent_id: string;
   agent_name: string;
   swarm_session_id: string;
-  status: 'start' | 'thinking' | 'end';
+  status: 'start' | 'thinking' | 'end' | 'response';
   content?: string;
+  entry_id?: string;
   timestamp: string;
   seq?: number;
 }
