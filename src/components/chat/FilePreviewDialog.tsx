@@ -221,7 +221,7 @@ export function FilePreviewDialog({
           );
         }
         return (
-          <pre className="max-h-[70vh] overflow-auto rounded border border-border bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap break-words">
+          <pre className="max-h-[70vh] overflow-auto rounded border border-border bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap wrap-break-word">
             {textContent}
           </pre>
         );
