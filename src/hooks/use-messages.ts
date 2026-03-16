@@ -520,6 +520,35 @@ export function useMessages(options: UseMessagesOptions) {
               lastUpdatedAt: Date.now(),
             });
           }
+
+          // Also add thinking as a message so it persists in the chat after indicator disappears
+          if (data.entry_id) {
+            const thinkingId = data.entry_id;
+            const thinkingText = data.content;
+            const thinkingAgentName = data.agent_name;
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === thinkingId)) return prev;
+              return sortMessages([
+                ...prev,
+                {
+                  id: thinkingId,
+                  sessionId: sessionId || '',
+                  type: 'text' as const,
+                  content: thinkingText,
+                  sender: {
+                    id: agentId,
+                    type: 'agent' as const,
+                    name: thinkingAgentName,
+                  },
+                  status: 'received' as const,
+                  createdAt: new Date().toISOString(),
+                  metadata: {
+                    activityType: 'thinking',
+                  },
+                },
+              ]);
+            });
+          }
         } else if (data.status === 'response' && data.content) {
           // Agent produced a final text response — add it as a message
           // Use DB entry_id for deduplication with API-loaded messages

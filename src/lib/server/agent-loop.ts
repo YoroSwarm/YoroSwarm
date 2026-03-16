@@ -154,7 +154,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       thinkingContent.push(textContent)
 
       // Persist thinking to DB so it appears in historical view
-      await appendAgentContextEntry({
+      const thinkingEntry = await appendAgentContextEntry({
         swarmSessionId,
         agentId,
         sourceType: 'llm',
@@ -171,6 +171,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             swarm_session_id: swarmSessionId,
             status: 'thinking',
             content: textContent,
+            entry_id: thinkingEntry.id,
             timestamp: new Date().toISOString(),
             seq: messageSeq++,
           },
