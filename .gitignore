@@ -50,4 +50,5 @@ next-env.d.ts
 *.sqlite
 *.sqlite3
 
-/session-workspaces/log.txt
+/log.txt
+/session-workspaces
