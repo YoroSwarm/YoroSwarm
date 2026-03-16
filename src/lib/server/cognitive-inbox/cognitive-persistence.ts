@@ -10,6 +10,7 @@ import type {
   AgentExecution,
   ContextSnapshot,
   CognitiveState,
+  InboxMessage,
 } from './cognitive-state'
 import { appendAgentContextEntry, listAgentContextEntries } from '../agent-context'
 
@@ -212,6 +213,117 @@ function parseDate(value: unknown): Date | undefined {
   if (typeof value !== 'string') return undefined
   const parsed = new Date(value)
   return Number.isNaN(parsed.getTime()) ? undefined : parsed
+}
+
+// ---------------------------------------------------------------------------
+// Inbox State Persistence (for pause/resume)
+// ---------------------------------------------------------------------------
+
+export async function persistInboxState(runtime: CognitiveRuntime): Promise<void> {
+  const { pending, deferred } = runtime.inbox
+
+  if (pending.length === 0 && deferred.length === 0) {
+    return
+  }
+
+  const inboxData = {
+    pending: pending.map(serializeInboxMessage),
+    deferred: deferred.map(serializeInboxMessage),
+    persistedAt: new Date().toISOString(),
+  }
+
+  await appendAgentContextEntry({
+    swarmSessionId: runtime.swarmSessionId,
+    agentId: runtime.agentId,
+    sourceType: 'runtime',
+    sourceId: `inbox_${Date.now()}`,
+    entryType: 'inbox_snapshot',
+    content: `inbox_snapshot: ${pending.length} pending, ${deferred.length} deferred messages`,
+    metadata: inboxData,
+  })
+}
+
+export async function restoreInboxState(runtime: CognitiveRuntime): Promise<number> {
+  const entries = await listAgentContextEntries(runtime.agentId, 50)
+
+  // Find the most recent inbox_snapshot
+  const snapshotEntry = entries.find(e => e.entryType === 'inbox_snapshot')
+  if (!snapshotEntry) return 0
+
+  const metadata = parseContextMetadata(snapshotEntry.metadata)
+  if (!metadata) return 0
+
+  let restoredCount = 0
+
+  const pendingRaw = Array.isArray(metadata.pending) ? metadata.pending : []
+  const deferredRaw = Array.isArray(metadata.deferred) ? metadata.deferred : []
+
+  for (const raw of pendingRaw) {
+    const msg = parseInboxMessage(raw)
+    if (msg) {
+      // Avoid duplicates
+      const exists = runtime.inbox.pending.some(m => m.id === msg.id)
+      if (!exists) {
+        runtime.inbox.pending.push(msg)
+        restoredCount++
+      }
+    }
+  }
+
+  for (const raw of deferredRaw) {
+    const msg = parseInboxMessage(raw)
+    if (msg) {
+      const exists = runtime.inbox.deferred.some(m => m.id === msg.id)
+      if (!exists) {
+        runtime.inbox.deferred.push(msg)
+        restoredCount++
+      }
+    }
+  }
+
+  if (restoredCount > 0) {
+    // Sort pending by priority
+    const priorityOrder: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3, background: 4 }
+    runtime.inbox.pending.sort((a, b) => {
+      const pa = priorityOrder[a.priority || 'normal'] ?? 2
+      const pb = priorityOrder[b.priority || 'normal'] ?? 2
+      return pa - pb
+    })
+  }
+
+  return restoredCount
+}
+
+function serializeInboxMessage(msg: InboxMessage): Record<string, unknown> {
+  return {
+    ...msg,
+    receivedAt: msg.receivedAt instanceof Date ? msg.receivedAt.toISOString() : msg.receivedAt,
+    processedAt: msg.processedAt instanceof Date ? msg.processedAt.toISOString() : msg.processedAt,
+  }
+}
+
+function parseInboxMessage(raw: unknown): InboxMessage | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+  const r = raw as Record<string, unknown>
+  if (typeof r.id !== 'string' || typeof r.content !== 'string') return null
+
+  return {
+    id: r.id,
+    source: r.source as InboxMessage['source'],
+    senderId: r.senderId as string,
+    senderName: r.senderName as string,
+    type: r.type as InboxMessage['type'],
+    content: r.content,
+    priority: (r.priority as InboxMessage['priority']) || 'normal',
+    status: 'pending', // Always restore as pending
+    receivedAt: parseDate(r.receivedAt) || new Date(),
+    processedAt: parseDate(r.processedAt),
+    metadata: r.metadata as InboxMessage['metadata'],
+    swarmSessionId: r.swarmSessionId as string,
+    agentId: r.agentId as string,
+    batchId: r.batchId as string | undefined,
+    batchOrder: r.batchOrder as number | undefined,
+  }
 }
 
 function buildWorkContextFromExecution(execution: AgentExecution): CognitiveRuntime['currentWorkContext'] {

@@ -621,3 +621,13 @@ export function getTeammateProcessor(
   const key = `${swarmSessionId}:${teammateId}`
   return teammateProcessors.get(key)
 }
+
+export function cleanupCognitiveTeammate(swarmSessionId: string, teammateId: string): void {
+  const key = `${swarmSessionId}:${teammateId}`
+  const processor = teammateProcessors.get(key)
+  if (processor) {
+    processor.cleanup()
+    teammateProcessors.delete(key)
+    console.log(`[CognitiveTeammateRunner] Cleaned up for ${key}`)
+  }
+}

@@ -12,10 +12,12 @@ import {
   File,
   ChevronRight,
   FolderTree,
+  Eye,
 } from "lucide-react";
 import { filesApi, type UploadedFileResponse, type WorkspaceDirectoryEntry } from "@/lib/api/files";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FilePreviewDialog } from "@/components/chat/FilePreviewDialog";
 
 interface SessionFilesProps {
   sessionId: string;
@@ -67,6 +69,34 @@ function getFileIcon(mimeType: string) {
   }
 }
 
+// 检查文件是否支持预览
+function isPreviewable(mimeType?: string, fileName?: string): boolean {
+  if (!mimeType && !fileName) return false;
+  // 图片
+  if (mimeType?.startsWith("image/")) return true;
+  // PDF
+  if (mimeType === "application/pdf") return true;
+  // 音频
+  if (mimeType?.startsWith("audio/")) return true;
+  // 视频
+  if (mimeType?.startsWith("video/")) return true;
+  // 文本文件
+  if (mimeType?.startsWith("text/")) return true;
+  if (mimeType === "application/json" || mimeType === "application/xml") return true;
+  if (mimeType === "application/javascript" || mimeType === "application/typescript") return true;
+  // 根据扩展名判断
+  const ext = fileName?.split(".").pop()?.toLowerCase() || "";
+  const textExts = [
+    "txt", "log", "env", "gitignore", "editorconfig", "prettierrc",
+    "ts", "tsx", "js", "jsx", "py", "rb", "go", "rs", "java", "kt",
+    "swift", "c", "cpp", "h", "hpp", "cs", "css", "scss", "less",
+    "html", "xml", "svg", "json", "yaml", "yml", "toml", "sql",
+    "sh", "bash", "zsh", "dockerfile", "makefile", "md", "mdx",
+    "prisma", "graphql", "gql"
+  ];
+  return textExts.includes(ext);
+}
+
 export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps) {
   const [files, setFiles] = useState<UploadedFileResponse[]>([]);
   const [entries, setEntries] = useState<WorkspaceDirectoryEntry[]>([]);
@@ -75,6 +105,32 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
   const [searchQuery, setSearchQuery] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [currentDir, setCurrentDir] = useState("");
+  
+  // 预览弹窗状态
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{
+    url: string;
+    name: string;
+    mimeType?: string;
+    size?: number;
+  } | null>(null);
+
+  const openPreview = (file: UploadedFileResponse | WorkspaceDirectoryEntry, fileEntry?: UploadedFileResponse) => {
+    const mimeType = fileEntry?.mimeType || (file as WorkspaceDirectoryEntry).mimeType;
+    const size = fileEntry?.size ?? (file as WorkspaceDirectoryEntry).size;
+    const name = fileEntry?.originalName || (file as WorkspaceDirectoryEntry).name;
+    const fileId = fileEntry?.id;
+    
+    if (!fileId) return;
+    
+    setPreviewFile({
+      url: `/api/files/${fileId}`,
+      name: name || "",
+      mimeType,
+      size,
+    });
+    setPreviewOpen(true);
+  };
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -186,7 +242,7 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
             <FolderOpen className="h-12 w-12 mb-3 opacity-50" />
             <p className="font-medium">当前目录为空</p>
-            <p className="text-sm mt-1">这里显示真实工作区目录内容</p>
+            <p className="text-sm mt-1">您可上传或等待 Swarm 创建文件</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -208,6 +264,7 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
               const file = files.find((item) => (item.relativePath || item.originalName) === entry.path);
               const downloadHref = file ? `/api/files/${file.id}?download=1` : filesApi.getPathDownloadUrl(sessionId, entry.path, true);
               const handleDeleteClick = () => file ? handleDelete(file.id) : filesApi.deleteFileByPath(sessionId, entry.path).then(load).catch((err) => console.error('Failed to delete file:', err));
+              const canPreview = isPreviewable(entry.mimeType || file?.mimeType, entry.name);
               return (
                 <div key={entry.path} className="card-hand px-4 py-3 flex items-center justify-between gap-3 group">
                   <div className="flex items-center gap-3 min-w-0">
@@ -218,6 +275,15 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
+                    {canPreview && file && (
+                      <button
+                        onClick={() => openPreview(entry, file)}
+                        className="text-xs flex items-center gap-1 hover:underline text-primary"
+                        title="预览"
+                      >
+                        <Eye className="h-3 w-3" />预览
+                      </button>
+                    )}
                     <a href={downloadHref} download className="text-xs flex items-center gap-1 hover:underline text-primary">
                       <Download className="h-3 w-3" />下载
                     </a>
@@ -231,6 +297,18 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
           </div>
         )}
       </div>
+      
+      {/* 文件预览弹窗 */}
+      {previewFile && (
+        <FilePreviewDialog
+          open={previewOpen}
+          onOpenChange={setPreviewOpen}
+          fileUrl={previewFile.url}
+          fileName={previewFile.name}
+          mimeType={previewFile.mimeType}
+          fileSize={previewFile.size}
+        />
+      )}
     </div>
   );
 }
