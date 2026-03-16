@@ -169,6 +169,23 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
             ...(input.mime_type ? [{ label: '类型', value: input.mime_type }] : []),
           ],
         };
+      case 'replace_in_file': {
+        const repls = Array.isArray(input.replacements) ? input.replacements : [];
+        const previewFields: { label: string; value: string; truncate?: boolean }[] = [
+          { label: '路径', value: input.path },
+          { label: '替换数', value: `${repls.length} 处` },
+        ];
+        for (let i = 0; i < Math.min(repls.length, 3); i++) {
+          const r = repls[i] as Record<string, unknown>;
+          const oldStr = String(r.old_str || '').slice(0, 40);
+          const newStr = String(r.new_str || '').slice(0, 40);
+          previewFields.push({ label: `#${i + 1}`, value: `${oldStr || '(开头插入)'} → ${newStr || '(删除)'}`, truncate: true });
+        }
+        if (repls.length > 3) {
+          previewFields.push({ label: '...', value: `还有 ${repls.length - 3} 处替换` });
+        }
+        return { icon: '✏️', title: '文件内替换', fields: previewFields };
+      }
       case 'read_workspace_file':
         return {
           icon: '📖',
@@ -277,6 +294,7 @@ function getToolDisplayName(toolName: string | undefined): string {
     'create_workspace_directory': '新建目录',
     'create_workspace_file': '新建文件',
     'replace_workspace_file': '替换文件',
+    'replace_in_file': '文件内替换',
     'read_workspace_file': '读取文件',
     'report_task_completion': '报告完成',
     'update_self_todo': '更新待办',

@@ -11,6 +11,7 @@ import {
   createWorkspaceDirectory,
   listWorkspaceDirectory,
   readWorkspaceFile,
+  resolveWorkspaceAbsolutePath,
   saveWorkspaceFile,
 } from './session-workspace'
 import {
@@ -20,6 +21,7 @@ import {
   createInternalThread,
 } from './internal-bus'
 import * as path from 'path'
+import { readFile, writeFile } from 'fs/promises'
 
 // 持久化文件读取缓存
 const teammateReadFileCache = new Map<string, Map<string, string>>()
@@ -348,6 +350,99 @@ export function buildTeammateToolExecutor(
         toolCache.set(cacheKey, result)
         persistentReadCache.set(filePath, result)
         return result
+      }
+
+      case 'replace_in_file': {
+        const relativePath = input.path as string
+        const replacements = input.replacements as Array<{ old_str: string; new_str: string }>
+
+        if (!replacements || !Array.isArray(replacements) || replacements.length === 0) {
+          return JSON.stringify({ success: false, error: 'replacements 数组不能为空' })
+        }
+
+        const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, relativePath)
+        let content: string
+        try {
+          content = await readFile(resolved.absolutePath, 'utf-8')
+        } catch {
+          return JSON.stringify({ success: false, error: `文件不存在: ${relativePath}` })
+        }
+
+        const results: Array<{ index: number; status: 'ok' | 'not_found' | 'ambiguous'; old_str: string; count?: number }> = []
+        let modified = content
+
+        for (let i = 0; i < replacements.length; i++) {
+          const { old_str, new_str } = replacements[i]
+
+          // Empty old_str means insert at beginning
+          if (old_str === '') {
+            modified = new_str + modified
+            results.push({ index: i, status: 'ok', old_str: '(insert at start)' })
+            continue
+          }
+
+          const occurrences = modified.split(old_str).length - 1
+          if (occurrences === 0) {
+            results.push({ index: i, status: 'not_found', old_str: old_str.slice(0, 80) })
+          } else if (occurrences > 1) {
+            // Replace only the first occurrence to be safe, but warn
+            modified = modified.replace(old_str, new_str)
+            results.push({ index: i, status: 'ambiguous', old_str: old_str.slice(0, 80), count: occurrences })
+          } else {
+            modified = modified.replace(old_str, new_str)
+            results.push({ index: i, status: 'ok', old_str: old_str.slice(0, 80) })
+          }
+        }
+
+        if (modified === content) {
+          return JSON.stringify({ success: false, error: '文件内容未发生变化', results })
+        }
+
+        await writeFile(resolved.absolutePath, modified, 'utf-8')
+
+        // Invalidate read cache for this file
+        toolCache.delete(`read_workspace_file:${relativePath}`)
+        persistentReadCache.delete(relativePath)
+
+        // Also update the DB record if it exists
+        const mimeType = inferMimeType(relativePath)
+        await saveWorkspaceFile({
+          swarmSessionId,
+          relativePath,
+          content: modified,
+          mimeType,
+          mode: 'replace',
+          metadata: {
+            sourceTaskId: taskId,
+            sourceAgentId: teammateId,
+            kind: 'agent_output',
+          },
+        })
+
+        publishRealtimeMessage({
+          type: 'internal_message',
+          payload: {
+            agent_id: teammateId,
+            agent_name: teammate.name,
+            action: 'file_edited',
+            file_name: relativePath,
+            swarm_session_id: swarmSessionId,
+            replacements_count: replacements.length,
+            timestamp: new Date().toISOString(),
+          },
+        }, { sessionId: swarmSessionId })
+
+        const succeeded = results.filter(r => r.status === 'ok' || r.status === 'ambiguous').length
+        const failed = results.filter(r => r.status === 'not_found').length
+
+        return JSON.stringify({
+          success: failed === 0,
+          path: relativePath,
+          total: replacements.length,
+          succeeded,
+          failed,
+          results,
+        })
       }
 
       case 'report_task_completion': {

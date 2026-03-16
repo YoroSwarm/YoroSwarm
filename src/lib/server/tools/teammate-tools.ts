@@ -92,6 +92,41 @@ export const teammateTools: ToolDefinition[] = [
     },
   },
   {
+    name: 'replace_in_file',
+    description:
+      '在工作区文件中进行精确的文本查找替换。支持批量替换多处内容。每个替换项包含要查找的原始文本和替换后的新文本。' +
+      '原始文本(old_str)必须在文件中精确匹配（包括空格和缩进）。如果 old_str 为空字符串，则在文件开头插入 new_str。' +
+      '适用于对文件进行局部修改，无需重写整个文件。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '要编辑的文件相对路径',
+        },
+        replacements: {
+          type: 'array',
+          description: '替换操作列表，按顺序依次执行',
+          items: {
+            type: 'object',
+            properties: {
+              old_str: {
+                type: 'string',
+                description: '要查找的原始文本（精确匹配，包含空格缩进）。空字符串表示在文件开头插入。',
+              },
+              new_str: {
+                type: 'string',
+                description: '替换后的新文本。如果为空字符串则删除 old_str。',
+              },
+            },
+            required: ['old_str', 'new_str'],
+          },
+        },
+      },
+      required: ['path', 'replacements'],
+    },
+  },
+  {
     name: 'report_task_completion',
     description: '向 Lead 汇报任务完成情况。只有在任务目标已经真正达成时才能调用；未调用该工具，系统会视为任务仍未完成。',
     input_schema: {
