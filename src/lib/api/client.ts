@@ -3,6 +3,7 @@ import axios, {
   type AxiosRequestConfig,
   type AxiosResponse,
   type AxiosError,
+  type InternalAxiosRequestConfig,
 } from 'axios';
 import type { ApiError } from '@/types/index';
 import { storage } from '@/utils/storage';
@@ -41,33 +42,109 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-// 响应拦截器 - 统一错误处理
+// Token refresh state — prevents concurrent refresh attempts
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+function onTokenRefreshed(token: string) {
+  refreshSubscribers.forEach(cb => cb(token));
+  refreshSubscribers = [];
+}
+
+function addRefreshSubscriber(cb: (token: string) => void) {
+  refreshSubscribers.push(cb);
+}
+
+const AUTH_ENDPOINTS = ['/auth/login', '/auth/register', '/auth/refresh'];
+
+function isAuthEndpoint(url?: string): boolean {
+  return AUTH_ENDPOINTS.some(ep => url?.includes(ep));
+}
+
+function forceLogout() {
+  storage.remove('access_token');
+  storage.remove('refresh_token');
+  storage.remove('user');
+  if (typeof window !== 'undefined') {
+    window.location.href = '/login';
+  }
+}
+
+// 响应拦截器 - 统一错误处理 + 自动 token 刷新
 client.interceptors.response.use(
   (response: AxiosResponse) => {
     return response;
   },
-  (error: AxiosError<ApiResponse<unknown>>) => {
+  async (error: AxiosError<ApiResponse<unknown>>) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+
+    // 401 auto-refresh: attempt token refresh before logging out
+    if (
+      error.response?.status === 401 &&
+      !isAuthEndpoint(originalRequest?.url) &&
+      !originalRequest?._retry
+    ) {
+      if (isRefreshing) {
+        // Another refresh is in progress — queue this request
+        return new Promise((resolve) => {
+          addRefreshSubscriber((newToken: string) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Bearer ${newToken}`;
+            }
+            resolve(client(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      try {
+        const response = await axios.post<ApiResponse<{
+          access_token: string;
+          refresh_token: string;
+          expires_in: number;
+        }>>(`${API_BASE_URL}/auth/refresh`, {}, {
+          timeout: 10000,
+          withCredentials: true,
+        });
+
+        if (response.data.success && response.data.data) {
+          const { access_token, refresh_token } = response.data.data;
+          storage.set('access_token', access_token);
+          storage.set('refresh_token', refresh_token);
+
+          if (originalRequest.headers) {
+            originalRequest.headers.Authorization = `Bearer ${access_token}`;
+          }
+
+          onTokenRefreshed(access_token);
+          return client(originalRequest);
+        } else {
+          forceLogout();
+        }
+      } catch {
+        forceLogout();
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    // Standard error handling for non-401 or post-refresh failures
     const apiError: ApiError = {
       code: 'UNKNOWN_ERROR',
       message: '发生未知错误',
     };
 
     if (error.response) {
-      // 服务器返回错误响应
       const { status, data } = error.response;
 
       switch (status) {
         case 401:
           apiError.code = 'UNAUTHORIZED';
           apiError.message = data?.error || '登录已过期，请重新登录';
-          // 只有非登录/注册请求才跳转
-          const isAuthEndpoint = error.config?.url?.includes('/auth/login') ||
-                                error.config?.url?.includes('/auth/register');
-          if (!isAuthEndpoint && typeof window !== 'undefined') {
-            // 清除token并跳转到登录页
-            storage.remove('access_token');
-            storage.remove('user');
-            window.location.href = '/login';
+          if (!isAuthEndpoint(originalRequest?.url) && typeof window !== 'undefined') {
+            forceLogout();
           }
           break;
         case 403:
@@ -95,11 +172,9 @@ client.interceptors.response.use(
           apiError.message = data?.error || `请求失败 (${status})`;
       }
     } else if (error.request) {
-      // 请求发出但没有收到响应
       apiError.code = 'NETWORK_ERROR';
       apiError.message = '网络连接失败，请检查网络设置';
     } else {
-      // 请求配置出错
       apiError.code = 'REQUEST_ERROR';
       apiError.message = error.message || '请求配置错误';
     }

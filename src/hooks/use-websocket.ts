@@ -146,8 +146,8 @@ export function useWebSocket({
   onConnect,
   onDisconnect,
   onError,
-  reconnectInterval = 3000,
-  maxReconnectAttempts = 5,
+  reconnectInterval = 2000,
+  maxReconnectAttempts = 20,
   heartbeatInterval = 30000,
   heartbeatTimeout = 10000,
   autoConnect = true,
@@ -330,6 +330,8 @@ export function useWebSocket({
           pendingAcksRef.current.clear();
 
           if (autoReconnect && !isManualDisconnectRef.current && connectionAttemptsRef.current < maxReconnectAttempts) {
+            // Exponential backoff: base * 2^attempt, capped at 30s
+            const backoff = Math.min(reconnectInterval * Math.pow(2, connectionAttemptsRef.current), 30000);
             reconnectTimeoutRef.current = setTimeout(() => {
               setConnectionAttempts((prev) => {
                 const next = prev + 1;
@@ -337,7 +339,7 @@ export function useWebSocket({
                 return next;
               });
               connectRef.current?.();
-            }, reconnectInterval);
+            }, backoff);
           }
         };
 
