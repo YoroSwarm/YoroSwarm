@@ -3,13 +3,25 @@ import type { ToolDefinition } from '../llm/types'
 export const leadTools: ToolDefinition[] = [
   {
     name: 'reply_to_user',
-    description: '回复用户消息。当你准备好回应用户时使用此工具。这是你与用户沟通的唯一方式。',
+    description: '回复用户消息。当你准备好回应用户时使用此工具。这是你与用户沟通的唯一方式。可以附带文件引用，让用户看到相关文件的下载链接。',
     input_schema: {
       type: 'object' as const,
       properties: {
         content: {
           type: 'string',
           description: '回复给用户的消息内容',
+        },
+        file_references: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              file_id: { type: 'string', description: '文件 ID（从会话文件列表或队友汇报中获取）' },
+              file_name: { type: 'string', description: '文件名（用于显示）' },
+            },
+            required: ['file_id', 'file_name'],
+          },
+          description: '可选。要附带给用户的文件引用列表。文件 ID 可从上下文中的「会话文件」部分获取。',
         },
       },
       required: ['content'],

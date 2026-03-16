@@ -334,6 +334,7 @@ export async function replyToUser(
   })
 
   // 广播到 WebSocket
+  const wsAttachments = metadata?.attachments as Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
   publishRealtimeMessage(
     {
       type: 'chat_message',
@@ -345,6 +346,7 @@ export async function replyToUser(
         sender_name: 'Lead',
         content,
         message_type: 'text',
+        metadata: wsAttachments ? { attachments: wsAttachments } : undefined,
         created_at: reply.createdAt.toISOString(),
         timestamp: reply.createdAt.toISOString(),
       },

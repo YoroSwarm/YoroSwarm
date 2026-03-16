@@ -60,9 +60,29 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           })
         }
 
+        // Resolve file references into attachment metadata
+        const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
+        let attachments: Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
+        if (fileRefs.length > 0) {
+          const files = await prisma.file.findMany({
+            where: { id: { in: fileRefs.map(f => f.file_id) } },
+            select: { id: true, originalName: true, mimeType: true },
+          })
+          const fileMap = new Map(files.map(f => [f.id, f]))
+          attachments = fileRefs.map(ref => {
+            const dbFile = fileMap.get(ref.file_id)
+            return {
+              fileId: ref.file_id,
+              fileName: dbFile?.originalName || ref.file_name,
+              mimeType: dbFile?.mimeType || 'application/octet-stream',
+            }
+          })
+        }
+
         const metadata = {
           ...((toolInput.metadata as Record<string, unknown> | undefined) || {}),
           ...(replyKey ? { replyKey } : {}),
+          ...(attachments ? { attachments } : {}),
         }
 
         const result = await replyToUser(
