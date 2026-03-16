@@ -193,6 +193,59 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
             { label: '内容', value: input.content, truncate: true },
           ],
         };
+      case 'update_self_todo': {
+        const action = input.action as string || 'unknown';
+        const actionLabels: Record<string, string> = {
+          add: '添加', insert: '插入', delete: '删除', update: '更新', clear: '清空',
+        };
+        const fields: { label: string; value: string; truncate?: boolean }[] = [
+          { label: '操作', value: actionLabels[action] || action },
+        ];
+        if (input.item) fields.push({ label: '内容', value: input.item as string, truncate: true });
+        if (input.index !== undefined) fields.push({ label: '位置', value: `#${(input.index as number) + 1}` });
+        if (input.new_item) fields.push({ label: '新内容', value: input.new_item as string, truncate: true });
+        return { icon: '📝', title: '更新待办', fields };
+      }
+      case 'verify_result':
+        return {
+          icon: '🔍',
+          title: '验证结果',
+          fields: [
+            { label: '任务', value: input.task_id as string },
+            { label: '方式', value: input.verification_type === 'cross_validate' ? '交叉验证' : (input.verification_type as string || '验证') },
+            ...(input.focus_areas?.length ? [{ label: '重点', value: (input.focus_areas as string[]).join(', '), truncate: true }] : []),
+          ],
+        };
+      case 'save_progress':
+        return {
+          icon: '💾',
+          title: '保存进度',
+          fields: [
+            ...(input.summary ? [{ label: '摘要', value: input.summary as string, truncate: true }] : []),
+          ],
+        };
+      case 'resume_work':
+        return {
+          icon: '▶️',
+          title: '恢复工作',
+          fields: [
+            ...(input.snapshot_id ? [{ label: '快照', value: input.snapshot_id as string }] : []),
+          ],
+        };
+      case 'broadcast_to_team':
+        return {
+          icon: '📢',
+          title: '团队广播',
+          fields: [
+            { label: '内容', value: input.content as string, truncate: true },
+          ],
+        };
+      case 'get_team_roster':
+        return {
+          icon: '👥',
+          title: '获取团队',
+          fields: [],
+        };
       default:
         return null;
     }
@@ -217,6 +270,12 @@ function getToolDisplayName(toolName: string | undefined): string {
     'replace_workspace_file': '替换文件',
     'read_workspace_file': '读取文件',
     'report_task_completion': '报告完成',
+    'update_self_todo': '更新待办',
+    'verify_result': '验证结果',
+    'save_progress': '保存进度',
+    'resume_work': '恢复工作',
+    'broadcast_to_team': '团队广播',
+    'get_team_roster': '获取团队',
   };
   return nameMap[toolName] || toolName;
 }
