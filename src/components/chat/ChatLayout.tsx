@@ -131,6 +131,16 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
       }
       if (message.type === 'agent_thinking' || message.type === 'tool_activity') {
         handleStreamEvent(message.type, message.payload);
+        // Infer busy status from thinking/tool activity events
+        const payload = message.payload as { agent_id?: string; agent_name?: string; status?: string; swarm_session_id?: string };
+        if (payload.agent_id && payload.agent_name) {
+          const inferredStatus = (message.type === 'agent_thinking' && payload.status === 'end') ? 'online' : 'busy';
+          updateSessionParticipant(resolvedSessionId, {
+            id: payload.agent_id,
+            name: payload.agent_name,
+            status: inferredStatus,
+          });
+        }
         return;
       }
       // Handle agent status updates to add new teammates to the session
