@@ -218,25 +218,28 @@ export function useMessages(options: UseMessagesOptions) {
             },
           });
         } else if (activity.activityType === 'assistant_response') {
-          // Show teammate assistant responses as agent messages
-          // Lead's reply_to_user responses are shown via ExternalMessage, but other
-          // assistant_response entries (teammate work output, intermediate results) need display
-          activityMessages.push({
-            id: activity.id,
-            sessionId,
-            type: 'text' as const,
-            content: activity.content,
-            sender: {
-              id: activity.agentId,
-              type: 'agent' as const,
-              name: activity.agentName,
-            },
-            status: 'received' as const,
-            createdAt: activity.createdAt,
-            metadata: {
-              activityType: 'assistant_response',
-            },
-          });
+          // Lead communicates only via reply_to_user tool — skip its raw responses
+          const activityIsLead = currentParticipants.some(
+            (p) => p.id === activity.agentId && p.role === 'lead'
+          );
+          if (!activityIsLead) {
+            activityMessages.push({
+              id: activity.id,
+              sessionId,
+              type: 'text' as const,
+              content: activity.content,
+              sender: {
+                id: activity.agentId,
+                type: 'agent' as const,
+                name: activity.agentName,
+              },
+              status: 'received' as const,
+              createdAt: activity.createdAt,
+              metadata: {
+                activityType: 'assistant_response',
+              },
+            });
+          }
         } else if (isToolCall) {
           // Show ALL tool calls (no isHighSignalTool filter — consistent with real-time)
           activityMessages.push({
@@ -550,35 +553,41 @@ export function useMessages(options: UseMessagesOptions) {
             });
           }
         } else if (data.status === 'response' && data.content) {
-          // Agent produced a final text response — add it as a message
-          // Use DB entry_id for deduplication with API-loaded messages
-          const responseId = data.entry_id || `response-${agentId}-${Date.now()}`;
-          const responseContent = data.content;
-          setMessages((prev) => {
-            // Avoid duplicate by checking DB entry ID
-            if (prev.some((m) => m.id === responseId)) {
-              return prev;
-            }
-            return sortMessages([
-              ...prev,
-              {
-                id: responseId,
-                sessionId: sessionId || '',
-                type: 'text' as const,
-                content: responseContent,
-                sender: {
-                  id: agentId,
-                  type: 'agent' as const,
-                  name: data.agent_name,
+          // Lead communicates via reply_to_user tool only — skip raw assistant responses
+          const isLead = participantMapRef.current.some(
+            (p) => p.id === agentId && p.role === 'lead'
+          );
+          if (!isLead) {
+            // Teammate produced a final text response — add it as a message
+            // Use DB entry_id for deduplication with API-loaded messages
+            const responseId = data.entry_id || `response-${agentId}-${Date.now()}`;
+            const responseContent = data.content;
+            setMessages((prev) => {
+              // Avoid duplicate by checking DB entry ID
+              if (prev.some((m) => m.id === responseId)) {
+                return prev;
+              }
+              return sortMessages([
+                ...prev,
+                {
+                  id: responseId,
+                  sessionId: sessionId || '',
+                  type: 'text' as const,
+                  content: responseContent,
+                  sender: {
+                    id: agentId,
+                    type: 'agent' as const,
+                    name: data.agent_name,
+                  },
+                  status: 'received' as const,
+                  createdAt: new Date().toISOString(),
+                  metadata: {
+                    activityType: 'assistant_response',
+                  },
                 },
-                status: 'received' as const,
-                createdAt: new Date().toISOString(),
-                metadata: {
-                  activityType: 'assistant_response',
-                },
-              },
-            ]);
-          });
+              ]);
+            });
+          }
         } else if (data.status === 'end') {
           const current = newMap.get(agentId);
           if (current) {
