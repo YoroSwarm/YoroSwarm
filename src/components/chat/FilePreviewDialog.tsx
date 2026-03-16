@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Loader2, ExternalLink } from 'lucide-react';
+import { Download, FileText, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -252,29 +252,24 @@ export function FilePreviewDialog({
           (isPdfFile || isVideoFile) && "sm:max-w-4xl"
         )}
       >
-        <DialogHeader className="flex flex-row items-center justify-between gap-2 pr-8">
+        {/* Download button - positioned at top-right, left of close button */}
+        <a
+          href={downloadUrl}
+          download={fileName}
+          className="absolute top-2 right-10 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            title="下载文件"
+          >
+            <Download className="h-4 w-4" />
+          </Button>
+        </a>
+        <DialogHeader className="flex flex-row items-center gap-2 pr-20">
           <DialogTitle className="truncate text-sm font-medium">{fileName}</DialogTitle>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              onClick={() => window.open(inlineUrl, '_blank')}
-              title="在新标签页打开"
-            >
-              <ExternalLink className="h-3.5 w-3.5" />
-            </Button>
-            <a href={downloadUrl} download={fileName}>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                title="下载文件"
-              >
-                <Download className="h-3.5 w-3.5" />
-              </Button>
-            </a>
-          </div>
         </DialogHeader>
         <div className="flex-1 min-h-0 overflow-auto">
           {renderPreview()}
