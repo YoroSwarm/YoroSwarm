@@ -76,7 +76,7 @@ export interface Session {
   unreadCount: number;
   createdAt: string;
   updatedAt: string;
-  status: 'active' | 'archived' | 'deleted';
+  status: 'active' | 'archived' | 'deleted' | 'paused';
   tags?: string[];
 }
 

@@ -56,7 +56,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     unreadCount: 0,
     createdAt: session.created_at,
     updatedAt: session.updated_at,
-    status: session.status === 'archived' ? 'archived' : 'active',
+    status: session.status === 'archived' ? 'archived' : session.status === 'PAUSED' ? 'paused' : 'active',
   };
 }
 
@@ -72,6 +72,8 @@ interface SessionsActions {
   createSession: (input?: { title?: string; goal?: string; description?: string }) => Promise<Session>;
   deleteSession: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
+  pauseSession: (sessionId: string) => Promise<void>;
+  resumeSession: (sessionId: string) => Promise<void>;
   setSessions: (sessions: Session[] | ((prev: Session[]) => Session[])) => void;
   updateSessionParticipant: (sessionId: string, agent: { id: string; name: string; role?: string; status?: string }) => void;
 }
@@ -121,6 +123,36 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
     const converted = convertSession(updated);
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === sessionId ? converted : s)),
+    }));
+  },
+
+  pauseSession: async (sessionId: string) => {
+    await swarmSessionsApi.pauseSession(sessionId);
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              status: 'paused' as const,
+              participants: s.participants.map((p) => ({ ...p, status: 'offline' as const })),
+            }
+          : s
+      ),
+    }));
+  },
+
+  resumeSession: async (sessionId: string) => {
+    await swarmSessionsApi.resumeSession(sessionId);
+    set((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.id === sessionId
+          ? {
+              ...s,
+              status: 'active' as const,
+              participants: s.participants.map((p) => ({ ...p, status: 'idle' as const })),
+            }
+          : s
+      ),
     }));
   },
 

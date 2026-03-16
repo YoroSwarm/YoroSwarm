@@ -13,11 +13,14 @@ import {
   Archive,
   PanelLeftClose,
   CheckSquare,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthStore, useUIStore } from '@/stores';
 import { useSessions } from '@/hooks/use-sessions';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
@@ -49,6 +52,8 @@ export function Sidebar() {
     createSession,
     deleteSession,
     archiveSession,
+    pauseSession,
+    resumeSession,
   } = useSessions();
 
   const handleCreateSession = async () => {
@@ -71,6 +76,16 @@ export function Sidebar() {
   const handleArchiveSession = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     await archiveSession(sessionId);
+  };
+
+  const handlePauseSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    await pauseSession(sessionId);
+  };
+
+  const handleResumeSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    await resumeSession(sessionId);
   };
 
   return (
@@ -152,10 +167,15 @@ export function Sidebar() {
                 </Avatar>
                 
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
+                  <div className="flex items-center gap-1.5 mb-0.5">
                      <span className={cn("font-semibold text-sm truncate", currentSessionId === session.id ? "text-foreground" : "text-muted-foreground")}>
                        {session.title || '未命名会话'}
                      </span>
+                     {session.status === 'paused' && (
+                       <Badge variant="outline" className="shrink-0 text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950">
+                         暂停
+                       </Badge>
+                     )}
                   </div>
                   <p className="text-xs text-muted-foreground truncate">
                     {session.lastMessage?.content || session.description || '无预览'}
@@ -172,6 +192,17 @@ export function Sidebar() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
+                    {session.status === 'paused' ? (
+                      <DropdownMenuItem onClick={(e) => handleResumeSession(e, session.id)}>
+                        <Play className="w-4 h-4 mr-2" />
+                        恢复
+                      </DropdownMenuItem>
+                    ) : session.status === 'active' ? (
+                      <DropdownMenuItem onClick={(e) => handlePauseSession(e, session.id)}>
+                        <Pause className="w-4 h-4 mr-2" />
+                        暂停
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem onClick={(e) => handleArchiveSession(e, session.id)}>
                       <Archive className="w-4 h-4 mr-2" />
                       归档

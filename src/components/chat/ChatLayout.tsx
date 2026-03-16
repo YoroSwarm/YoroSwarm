@@ -13,7 +13,7 @@ import { useTeamStats } from '@/hooks/use-team-stats';
 import { useSidebar } from '@/stores';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
-import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ChatLayoutProps {
@@ -48,6 +48,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     createSession,
     deleteSession: _deleteSession,
     archiveSession: _archiveSession,
+    pauseSession,
+    resumeSession,
     setSessions,
     updateSessionParticipant,
   } = useSessions();
@@ -327,6 +329,27 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           </div>
 
           <div className="flex items-center gap-2">
+            {resolvedSessionId && currentSession && (
+              currentSession.status === 'paused' ? (
+                <button
+                  onClick={() => resumeSession(resolvedSessionId)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 transition-all"
+                  title="恢复会话"
+                >
+                  <Play className="h-4 w-4" />
+                  <span className="hidden sm:inline">恢复</span>
+                </button>
+              ) : currentSession.status === 'active' ? (
+                <button
+                  onClick={() => pauseSession(resolvedSessionId)}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950 border border-amber-200 dark:border-amber-800 transition-all"
+                  title="暂停会话"
+                >
+                  <Pause className="h-4 w-4" />
+                  <span className="hidden sm:inline">暂停</span>
+                </button>
+              ) : null
+            )}
             <button
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
               className="hidden rounded-lg p-2 hover:bg-accent md:flex border border-transparent hover:border-border transition-all"
@@ -392,8 +415,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
                         <ChatInput
                             sessionId={resolvedSessionId}
-                            disabled={isCreatingSession}
-                            placeholder={resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
+                            disabled={isCreatingSession || currentSession?.status === 'paused'}
+                            placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
                             onSend={async (content, attachments) => {
                             let targetSessionId = resolvedSessionId;
 
@@ -465,7 +488,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">状态</span>
-                      <span>{currentSession?.status === 'archived' ? '已归档' : '活跃'}</span>
+                      <span>{currentSession?.status === 'paused' ? '已暂停' : currentSession?.status === 'archived' ? '已归档' : '活跃'}</span>
                     </div>
                     {stats?.llm_usage.session ? (
                       <>

@@ -231,4 +231,12 @@ export const swarmSessionsApi = {
   getAgentActivities: async (sessionId: string): Promise<{ items: AgentActivityItem[]; total: number }> => {
     return api.get<{ items: AgentActivityItem[]; total: number }>(`/swarm-sessions/${sessionId}/agent-activities`);
   },
+
+  pauseSession: async (sessionId: string): Promise<{ pausedAgents: number; message: string }> => {
+    return api.post<{ pausedAgents: number; message: string }>(`/swarm-sessions/${sessionId}/pause`);
+  },
+
+  resumeSession: async (sessionId: string): Promise<{ resumedAgents: number; pendingTasks: number; message: string }> => {
+    return api.post<{ resumedAgents: number; pendingTasks: number; message: string }>(`/swarm-sessions/${sessionId}/resume`);
+  },
 };

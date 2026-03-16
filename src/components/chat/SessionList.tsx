@@ -13,6 +13,8 @@ import {
   MessageSquare,
   X,
   AlertCircle,
+  Pause,
+  Play,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -37,6 +39,8 @@ interface SessionListProps {
   onCreateSession: () => void;
   onDeleteSession: (sessionId: string) => Promise<void> | void;
   onArchiveSession: (sessionId: string) => Promise<void> | void;
+  onPauseSession?: (sessionId: string) => Promise<void> | void;
+  onResumeSession?: (sessionId: string) => Promise<void> | void;
   onCloseMobile?: () => void;
 }
 
@@ -49,6 +53,8 @@ export function SessionList({
   onCreateSession,
   onDeleteSession,
   onArchiveSession,
+  onPauseSession,
+  onResumeSession,
   onCloseMobile,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +81,22 @@ export function SessionList({
       await onArchiveSession(sessionId);
     } catch (err) {
       console.error('归档会话失败:', err);
+    }
+  };
+
+  const handlePauseSession = async (sessionId: string) => {
+    try {
+      await onPauseSession?.(sessionId);
+    } catch (err) {
+      console.error('暂停会话失败:', err);
+    }
+  };
+
+  const handleResumeSession = async (sessionId: string) => {
+    try {
+      await onResumeSession?.(sessionId);
+    } catch (err) {
+      console.error('恢复会话失败:', err);
     }
   };
 
@@ -173,6 +195,11 @@ export function SessionList({
                     >
                       {session.title}
                     </h3>
+                    {session.status === 'paused' && (
+                      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950">
+                        已暂停
+                      </Badge>
+                    )}
                     <span className="shrink-0 text-xs text-muted-foreground">
                       {formatSessionTime(session.updatedAt)}
                     </span>
@@ -203,6 +230,17 @@ export function SessionList({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
+                    {session.status === 'paused' ? (
+                      <DropdownMenuItem onClick={() => handleResumeSession(session.id)}>
+                        <Play className="h-4 w-4" />
+                        恢复
+                      </DropdownMenuItem>
+                    ) : session.status === 'active' ? (
+                      <DropdownMenuItem onClick={() => handlePauseSession(session.id)}>
+                        <Pause className="h-4 w-4" />
+                        暂停
+                      </DropdownMenuItem>
+                    ) : null}
                     <DropdownMenuItem onClick={() => handleArchiveSession(session.id)}>
                       <Archive className="h-4 w-4" />
                       归档
