@@ -22,10 +22,13 @@ import path from 'path'
 // Token 估算
 // ============================================
 
-const CHARS_PER_TOKEN = 3.5
+const CHARS_PER_TOKEN = 3.0  // conservative: underestimate chars-per-token to avoid context overflow
 
 export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN)
+  // Chinese/CJK characters consume ~1-2 tokens each, so count them separately
+  const cjkCount = (text.match(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g) || []).length
+  const nonCjkLength = text.length - cjkCount
+  return Math.ceil(nonCjkLength / CHARS_PER_TOKEN + cjkCount * 1.5)
 }
 
 export function estimateMessagesTokens(messages: LLMMessage[]): number {

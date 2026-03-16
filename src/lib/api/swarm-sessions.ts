@@ -113,6 +113,7 @@ export interface SwarmSessionMonitorResponse {
         total_processed_input_tokens: number;
         cache_hit_rate: number;
       };
+      lead_last_call_context_tokens: number;
       teammates: Array<{
         agent_id: string;
         agent_name: string;
@@ -126,6 +127,7 @@ export interface SwarmSessionMonitorResponse {
           total_processed_input_tokens: number;
           cache_hit_rate: number;
         };
+        last_call_context_tokens: number;
       }>;
     };
     lead_self_todos: Array<{

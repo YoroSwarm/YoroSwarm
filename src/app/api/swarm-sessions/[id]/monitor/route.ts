@@ -44,6 +44,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           outputTokens: true,
           cacheCreationTokens: true,
           cacheReadTokens: true,
+          createdAt: true,
         },
       }),
       prisma.leadSelfTodo.findMany({
@@ -65,9 +66,15 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     }
 
     const usageByAgentId = new Map<string, ReturnType<typeof summarizeUsageTotals>>();
+    const lastCallByAgentId = new Map<string, number>();
     for (const agent of session.agents) {
       const rows = usageEvents.filter((event) => event.agentId === agent.id);
       usageByAgentId.set(agent.id, summarizeUsageTotals(rows));
+      // Find last call's input tokens (current context fill level)
+      if (rows.length > 0) {
+        const latest = rows.reduce((a, b) => a.createdAt > b.createdAt ? a : b);
+        lastCallByAgentId.set(agent.id, latest.inputTokens + latest.cacheReadTokens);
+      }
     }
 
     const llmConfig = getProviderConfig();
@@ -89,6 +96,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
         session: summarizeUsageTotals(usageEvents),
         lead_agent_id: session.leadAgentId || undefined,
         lead: session.leadAgentId ? usageByAgentId.get(session.leadAgentId) || summarizeUsageTotals([]) : summarizeUsageTotals([]),
+        lead_last_call_context_tokens: session.leadAgentId ? lastCallByAgentId.get(session.leadAgentId) || 0 : 0,
         teammates: session.agents
           .filter((agent) => agent.id !== session.leadAgentId)
           .map((agent) => ({
@@ -96,6 +104,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
             agent_name: agent.name,
             role: agent.role,
             usage: usageByAgentId.get(agent.id) || summarizeUsageTotals([]),
+            last_call_context_tokens: lastCallByAgentId.get(agent.id) || 0,
           })),
       },
       lead_self_todos: leadSelfTodos.map((item) => ({

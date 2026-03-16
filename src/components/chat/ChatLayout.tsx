@@ -218,17 +218,18 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
       total_tokens: number;
       total_processed_input_tokens: number;
       cache_hit_rate: number;
+      last_call_context_tokens: number;
     }>();
 
     const lead = stats?.llm_usage.lead;
     const leadId = stats?.llm_usage.lead_agent_id
       || currentSession?.participants.find((participant) => participant.role === 'lead')?.id;
     if (lead && leadId) {
-      map.set(leadId, lead);
+      map.set(leadId, { ...lead, last_call_context_tokens: stats?.llm_usage.lead_last_call_context_tokens || 0 });
     }
 
     for (const teammate of stats?.llm_usage.teammates || []) {
-      map.set(teammate.agent_id, teammate.usage);
+      map.set(teammate.agent_id, { ...teammate.usage, last_call_context_tokens: teammate.last_call_context_tokens || 0 });
     }
 
     return map;
@@ -484,8 +485,9 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
                       const usage = usageByParticipantId.get(participant.id);
                       const modelContextSize = stats?.model_context_size || 0;
-                      const contextUsageRatio = usage && modelContextSize > 0
-                        ? Math.min(usage.total_processed_input_tokens / modelContextSize, 1)
+                      const lastCallTokens = usage?.last_call_context_tokens || 0;
+                      const contextUsageRatio = lastCallTokens > 0 && modelContextSize > 0
+                        ? Math.min(lastCallTokens / modelContextSize, 1)
                         : 0;
 
                       return (
@@ -512,7 +514,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                                     />
                                   </div>
                                   <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
-                                    {usage ? formatTokenCount(usage.total_processed_input_tokens) : '—'}
+                                    {lastCallTokens > 0 ? formatTokenCount(lastCallTokens) : '—'}
                                   </span>
                                 </div>
                               </div>
@@ -537,7 +539,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                                   <div>
                                     <div className="flex items-center justify-between mb-1">
                                       <span className="text-xs text-muted-foreground">上下文用量</span>
-                                      <span className="text-xs font-medium tabular-nums">{formatTokenCount(usage.total_processed_input_tokens)} / {modelContextSize > 0 ? formatTokenCount(modelContextSize) : '—'}</span>
+                                      <span className="text-xs font-medium tabular-nums">{formatTokenCount(lastCallTokens)} / {modelContextSize > 0 ? formatTokenCount(modelContextSize) : '—'}</span>
                                     </div>
                                     <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
                                       <div
