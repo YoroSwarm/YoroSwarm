@@ -27,9 +27,18 @@ type DeliveryScope = {
   taskId?: string
 }
 
-let wss: WebSocketServer | null = null
-const clients = new Map<string, ClientState>()
-let hasLoggedPortInUse = false
+// Use globalThis to survive Next.js HMR module re-evaluation (same pattern as Prisma)
+const globalForWs = globalThis as unknown as {
+  __wss?: WebSocketServer | null
+  __wsClients?: Map<string, ClientState>
+  __wsPortLogged?: boolean
+}
+
+if (!globalForWs.__wsClients) {
+  globalForWs.__wsClients = new Map()
+}
+
+const clients = globalForWs.__wsClients
 
 function getPayloadObject(payload: unknown): Record<string, unknown> {
   return typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {}
@@ -169,16 +178,16 @@ function handleSubscriptionMessage(clientId: string, type: 'subscribe' | 'unsubs
 }
 
 export function ensureWebSocketServer(): WebSocketServer | null {
-  if (wss) return wss
+  if (globalForWs.__wss) return globalForWs.__wss
 
   try {
-    wss = new WebSocketServer({ port: 3001 })
+    globalForWs.__wss = new WebSocketServer({ port: 3001 })
   } catch (error) {
     // @ts-expect-error code might not exist on all error types
     if (error?.code === 'EADDRINUSE') {
-      if (!hasLoggedPortInUse) {
+      if (!globalForWs.__wsPortLogged) {
         console.warn('[WebSocket] Port 3001 already in use, server likely already running')
-        hasLoggedPortInUse = true
+        globalForWs.__wsPortLogged = true
       }
       return null
     }
@@ -186,19 +195,19 @@ export function ensureWebSocketServer(): WebSocketServer | null {
   }
 
   // Handle async errors (e.g., port already in use)
-  wss.on('error', (error: NodeJS.ErrnoException) => {
+  globalForWs.__wss.on('error', (error: NodeJS.ErrnoException) => {
     if (error.code === 'EADDRINUSE') {
-      if (!hasLoggedPortInUse) {
+      if (!globalForWs.__wsPortLogged) {
         console.warn('[WebSocket] Port 3001 already in use, another instance may be running')
-        hasLoggedPortInUse = true
+        globalForWs.__wsPortLogged = true
       }
-      wss = null
+      globalForWs.__wss = null
     } else {
       console.error('[WebSocket] Server error:', error)
     }
   })
 
-  wss.on('connection', (socket: WebSocket, request) => {
+  globalForWs.__wss.on('connection', (socket: WebSocket, request) => {
     const requestedClientId = new URL(request.url || '/', 'ws://localhost:3001').searchParams.get('clientId') || undefined
     const clientId = requestedClientId || createClientId()
     const state: ClientState = {
@@ -311,7 +320,7 @@ export function ensureWebSocketServer(): WebSocketServer | null {
     })
   })
 
-  return wss
+  return globalForWs.__wss
 }
 
 export function publishRealtimeMessage(message: WebSocketMessage, scope?: DeliveryScope) {
