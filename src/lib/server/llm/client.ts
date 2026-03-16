@@ -114,13 +114,28 @@ export async function callLLM(options: LLMCallOptions): Promise<LLMResponse> {
 }
 
 /**
+ * 检测并清理代理 API 生成的 "(Empty response: ...)" 占位文本
+ * 某些 API 代理（如 Kimi）会在 LLM 仅返回 thinking 块（无文本内容）时，
+ * 将原始响应包装为 "(Empty response: {raw response})" 格式的文本块注入。
+ * 这种文本不应作为有效内容保存或展示。
+ */
+function stripProxyEmptyResponse(text: string): string {
+  const trimmed = text.trim()
+  if (trimmed.startsWith('(Empty response:') && trimmed.endsWith(')')) {
+    return ''
+  }
+  return text
+}
+
+/**
  * 从 LLMResponse 提取纯文本内容
  */
 export function extractTextContent(response: LLMResponse): string {
-  return response.content
+  const raw = response.content
     .filter((block): block is ContentBlock & { type: 'text' } => block.type === 'text')
     .map(block => block.text)
     .join('')
+  return stripProxyEmptyResponse(raw)
 }
 
 /**
