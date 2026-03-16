@@ -194,16 +194,25 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           ],
         };
       case 'update_self_todo': {
-        const action = input.action as string || 'unknown';
+        const action = input.action || input.operation as string || 'unknown';
         const actionLabels: Record<string, string> = {
           add: '添加', insert: '插入', delete: '删除', update: '更新', clear: '清空',
         };
         const fields: { label: string; value: string; truncate?: boolean }[] = [
           { label: '操作', value: actionLabels[action] || action },
         ];
-        if (input.item) fields.push({ label: '内容', value: input.item as string, truncate: true });
-        if (input.index !== undefined) fields.push({ label: '位置', value: `#${(input.index as number) + 1}` });
-        if (input.new_item) fields.push({ label: '新内容', value: input.new_item as string, truncate: true });
+        if (input.item && typeof input.item === 'object') {
+          const item = input.item as Record<string, unknown>;
+          if (item.title) fields.push({ label: '标题', value: String(item.title), truncate: true });
+          if (item.status) fields.push({ label: '状态', value: String(item.status) });
+          if (item.category) fields.push({ label: '分类', value: String(item.category) });
+        } else if (input.item) {
+          fields.push({ label: '内容', value: String(input.item), truncate: true });
+        }
+        if (input.item_id) fields.push({ label: 'ID', value: String(input.item_id) });
+        if (input.index !== undefined) fields.push({ label: '位置', value: `#${Number(input.index) + 1}` });
+        if (input.new_item) fields.push({ label: '新内容', value: String(input.new_item), truncate: true });
+        if (input.status) fields.push({ label: '新状态', value: String(input.status) });
         return { icon: '📝', title: '更新待办', fields };
       }
       case 'verify_result':
@@ -742,7 +751,7 @@ export function MessageItem({
                               {toolDisplay.fields.map(({ label, value, truncate }) => (
                                 <div key={label} className="flex gap-2 items-start">
                                   <span className="text-muted-foreground/50 shrink-0 min-w-12">{label}</span>
-                                  <span className={cn("text-foreground", truncate && "truncate max-w-50")}>{value}</span>
+                                  <span className={cn("text-foreground", truncate && "truncate max-w-50")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
                                 </div>
                               ))}
                             </div>
@@ -821,7 +830,7 @@ export function MessageItem({
                           <span className={cn("font-medium text-[10px] uppercase tracking-wider", isError ? "text-red-600" : "text-green-600")}>
                             {isError ? '❌ 错误' : '✅ 输出'}
                           </span>
-                          <div className="text-muted-foreground mt-1.5 wrap-break-word">{tc.resultSummary}</div>
+                          <div className="text-muted-foreground mt-1.5 wrap-break-word">{typeof tc.resultSummary === 'object' ? JSON.stringify(tc.resultSummary) : tc.resultSummary}</div>
                         </>
                       );
                     })()}
