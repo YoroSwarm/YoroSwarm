@@ -9,32 +9,22 @@
  * 4. 不再有竞态条件问题，因为所有消息都通过收件箱序列化
  */
 
-import { runAgentLoop, type ToolExecutor } from './agent-loop'
+import { runAgentLoop } from './agent-loop'
 import { leadTools } from './tools/lead-tools'
 import { listAgentContextEntries } from './agent-context'
 import { buildLeadContextMessages } from './llm-context'
 import { listExternalMessages } from './external-chat'
+import { buildLeadToolExecutor } from './lead-tool-executor'
 import prisma from '@/lib/db'
 
 // 认知收件箱
 import {
   initCognitiveEngine,
   deliverMessage,
-  createSnapshot,
-  resumeSnapshot,
   startAttentionLoop,
   type InboxMessage,
   type CurrentWorkContext,
 } from './cognitive-inbox'
-
-// Lead编排器工具
-import {
-  provisionTeammate,
-  decomposeTask,
-  assignTaskToTeammate,
-  replyToUser,
-  sendToTeammate,
-} from './lead-orchestrator'
 
 const LEAD_SYSTEM_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
 
@@ -365,132 +355,6 @@ ${messageSummary}
   )
 
   // 注意：消息完成标记已由 handleProcessNow 在 attention-manager.ts 中处理
-}
-
-/**
- * 构建Lead工具执行器
- */
-function buildLeadToolExecutor(input: LeadProcessorInput): ToolExecutor {
-  const { swarmSessionId, userId, leadAgentId } = input
-
-  return async (name: string, toolInput: Record<string, unknown>) => {
-    switch (name) {
-      case 'reply_to_user': {
-        const result = await replyToUser(
-          swarmSessionId,
-          userId,
-          leadAgentId,
-          toolInput.content as string,
-          toolInput.metadata as Record<string, unknown> | undefined
-        )
-        return JSON.stringify({ success: true, message_id: result.id })
-      }
-
-      case 'provision_teammate': {
-        try {
-          const result = await provisionTeammate(swarmSessionId, leadAgentId, {
-            name: toolInput.name as string,
-            role: toolInput.role as string,
-            description: (toolInput.description as string) || '',
-            capabilities: (toolInput.capabilities as string[]) || [],
-          })
-          return JSON.stringify({
-            success: true,
-            teammate_id: result.agent.id,
-            name: result.agent.name,
-            role: result.agent.role,
-            status: result.agent.status,
-          })
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error'
-          if (message.startsWith('TEAMMATE_DEFINITION_EXISTS:')) {
-            const [, teammateId, name, role, status] = message.split(':')
-            return JSON.stringify({
-              success: false,
-              error: 'matching_teammate_exists',
-              teammate_id: teammateId,
-              name,
-              role,
-              status,
-              message: `已存在完全相同定义的队友 ${name} (${role}, ${status})，请优先复用；若只是同角色但分工不同，则允许继续创建。`,
-            })
-          }
-          throw error
-        }
-      }
-
-      case 'decompose_task': {
-        const tasks = toolInput.tasks as Array<{
-          title: string
-          description?: string
-          priority?: number
-          parentId?: string
-          parentTitle?: string
-          dependsOnTaskIds?: string[]
-          dependsOnTaskTitles?: string[]
-        }>
-        const result = await decomposeTask(swarmSessionId, leadAgentId, tasks)
-        return JSON.stringify({
-          success: true,
-          tasks: result.map(t => ({ task_id: t.id, title: t.title })),
-        })
-      }
-
-      case 'assign_task': {
-        const taskId = toolInput.task_id as string
-        const teammateId = toolInput.teammate_id as string
-        // assignTaskToTeammate 已经处理了任务触发逻辑（包括依赖检查和triggerTaskExecution）
-        const result = await assignTaskToTeammate(swarmSessionId, leadAgentId, taskId, teammateId)
-
-        return JSON.stringify({
-          success: true,
-          task_id: result.id,
-          assignee: result.assignee?.name,
-        })
-      }
-
-      case 'send_message_to_teammate': {
-        const result = await sendToTeammate(
-          swarmSessionId,
-          leadAgentId,
-          toolInput.teammate_id as string,
-          toolInput.content as string,
-          (toolInput.message_type as string) || 'coordination'
-        )
-        return JSON.stringify({ success: !result.skipped, message_id: result.id, skipped: result.skipped, reason: result.reason })
-      }
-
-      case 'save_progress': {
-        // 保存当前工作进度
-        await createSnapshot(swarmSessionId, leadAgentId, toolInput.reason as string, {
-          currentTask: {
-            type: (toolInput.work_type as string) || 'general',
-            description: (toolInput.description as string) || '',
-            progress: (toolInput.progress as number) || 50,
-            partialResult: toolInput.partial_result as string,
-          },
-          conversationContext: {
-            messages: [],
-            thinkingContent: toolInput.thinking as string,
-          },
-        })
-        return JSON.stringify({ success: true, saved: true })
-      }
-
-      case 'resume_work': {
-        // 恢复之前的工作
-        const snapshot = await resumeSnapshot(swarmSessionId, leadAgentId)
-        return JSON.stringify({
-          success: !!snapshot,
-          resumed: !!snapshot,
-          previous_work: snapshot?.currentTask?.description,
-        })
-      }
-
-      default:
-        return JSON.stringify({ error: `Unknown tool: ${name}` })
-    }
-  }
 }
 
 /**
