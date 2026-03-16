@@ -48,6 +48,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     createSession,
     deleteSession: _deleteSession,
     archiveSession: _archiveSession,
+    setSessions,
     updateSessionParticipant,
   } = useSessions();
 
@@ -192,6 +193,14 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
         const payload = message.payload as { action?: string; swarm_session_id?: string };
         if (payload.swarm_session_id === resolvedSessionId && payload.action === 'file_created') {
           setFileRefreshTick((value) => value + 1);
+        }
+      }
+      if (message.type === 'session_updated') {
+        const payload = message.payload as { swarm_session_id?: string; title?: string };
+        if (payload.swarm_session_id === resolvedSessionId && payload.title) {
+          setSessions((prev) =>
+            prev.map((s) => s.id === resolvedSessionId ? { ...s, title: payload.title! } : s)
+          );
         }
       }
     },

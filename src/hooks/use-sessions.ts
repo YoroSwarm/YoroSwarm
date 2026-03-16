@@ -27,6 +27,7 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const createSession = useSessionsStore((state) => state.createSession);
   const deleteSession = useSessionsStore((state) => state.deleteSession);
   const archiveSession = useSessionsStore((state) => state.archiveSession);
+  const setSessions = useSessionsStore((state) => state.setSessions);
   const updateSessionParticipant = useSessionsStore((state) => state.updateSessionParticipant);
 
   const createSessionWithStorage = useCallback(async (input?: string | CreateSessionInput) => {
@@ -73,6 +74,7 @@ export function useSessions(options: UseSessionsOptions = {}) {
     openDirectSessionForAgent,
     deleteSession: deleteSessionWithStorage,
     archiveSession,
+    setSessions,
     updateSessionParticipant,
   };
 }

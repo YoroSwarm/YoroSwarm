@@ -9,6 +9,7 @@ export type WebSocketMessageType =
   | 'internal_message'
   | 'agent_thinking'
   | 'tool_activity'
+  | 'session_updated'
   | 'system'
   | 'broadcast'
   | 'presence'

@@ -7,6 +7,7 @@ import { listExternalMessages } from '@/lib/server/external-chat'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { getLeadSelfTodoItems } from './lead-self-todo'
 import { decomposeTask, assignTaskToTeammate, handleTeammateReport } from './lead-orchestrator-tasks'
+import { callLLM, extractTextContent } from './llm/client'
 
 export { decomposeTask, assignTaskToTeammate, handleTeammateReport }
 
@@ -275,6 +276,73 @@ export async function provisionTeammate(
 }
 
 /**
+ * Auto-rename session based on conversation content.
+ * Fires asynchronously after Lead's first reply — does not block response delivery.
+ */
+async function maybeAutoRenameSession(swarmSessionId: string) {
+  try {
+    const session = await prisma.swarmSession.findUnique({
+      where: { id: swarmSessionId },
+      select: { title: true },
+    })
+    if (!session || !session.title.startsWith('新对话')) return
+
+    // Grab first few user + lead messages for context
+    const conversation = await prisma.externalConversation.findFirst({
+      where: { swarmSessionId },
+      select: { id: true },
+    })
+    if (!conversation) return
+
+    const messages = await prisma.externalMessage.findMany({
+      where: { conversationId: conversation.id },
+      orderBy: { createdAt: 'asc' },
+      take: 6,
+      select: { senderType: true, content: true },
+    })
+    if (messages.length === 0) return
+
+    const transcript = messages
+      .map((m) => `${m.senderType === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 200)}`)
+      .join('\n')
+
+    const response = await callLLM({
+      systemPrompt:
+        'Generate a concise session title (max 20 characters, Chinese preferred) summarizing the conversation topic. Reply with ONLY the title text, no quotes or explanation.',
+      messages: [
+        {
+          role: 'user',
+          content: `Based on this conversation, generate a short title:\n\n${transcript}`,
+        },
+      ],
+      maxTokens: 60,
+      usageContext: { swarmSessionId, requestKind: 'auto_rename' },
+    })
+
+    const title = extractTextContent(response).trim().replace(/^["'""]+|["'""]+$/g, '')
+    if (!title || title.length > 50) return
+
+    await prisma.swarmSession.update({
+      where: { id: swarmSessionId },
+      data: { title },
+    })
+
+    publishRealtimeMessage(
+      {
+        type: 'session_updated',
+        payload: {
+          swarm_session_id: swarmSessionId,
+          title,
+        },
+      },
+      { sessionId: swarmSessionId }
+    )
+  } catch (err) {
+    console.error('[AutoRename] Failed to auto-rename session:', err)
+  }
+}
+
+/**
  * Lead 向用户回复的工具函数
  */
 export async function replyToUser(
@@ -353,6 +421,9 @@ export async function replyToUser(
     },
     { sessionId: swarmSessionId }
   )
+
+  // Fire-and-forget: auto-rename session if it still has the default title
+  void maybeAutoRenameSession(swarmSessionId)
 
   return reply
 }
