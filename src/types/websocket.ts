@@ -10,6 +10,7 @@ export type WebSocketMessageType =
   | 'agent_thinking'
   | 'tool_activity'
   | 'session_updated'
+  | 'session_status'
   | 'system'
   | 'broadcast'
   | 'presence'
@@ -143,4 +144,13 @@ export interface ToolActivityPayload {
 export interface WebSocketSubscription {
   target: 'all' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
   id?: string;
+}
+
+export interface SessionStatusUpdate {
+  session_id: string;
+  status: 'paused' | 'active';
+  paused_agents?: number;
+  resumed_agents?: number;
+  pending_tasks?: number;
+  timestamp: string;
 }

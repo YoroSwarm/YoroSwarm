@@ -11,7 +11,7 @@ import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
 import { useSidebar } from '@/stores';
-import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate } from '@/types/websocket';
+import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
 import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -202,6 +202,15 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
         if (payload.swarm_session_id === resolvedSessionId && payload.title) {
           setSessions((prev) =>
             prev.map((s) => s.id === resolvedSessionId ? { ...s, title: payload.title! } : s)
+          );
+        }
+      }
+      if (message.type === 'session_status') {
+        const payload = message.payload as SessionStatusUpdate;
+        if (payload.session_id === resolvedSessionId) {
+          const newStatus = payload.status === 'paused' ? 'paused' as const : 'active' as const;
+          setSessions((prev) =>
+            prev.map((s) => s.id === resolvedSessionId ? { ...s, status: newStatus } : s)
           );
         }
       }

@@ -93,6 +93,7 @@ export type WebSocketMessageType =
   | 'agent_thinking'
   | 'tool_activity'
   | 'session_updated'
+  | 'session_status'
   | 'system'
   | 'broadcast'
   | 'presence'
