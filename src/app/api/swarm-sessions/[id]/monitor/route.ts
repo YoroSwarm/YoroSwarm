@@ -87,6 +87,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       model_context_size: llmConfig.maxContextTokens,
       llm_usage: {
         session: summarizeUsageTotals(usageEvents),
+        lead_agent_id: session.leadAgentId || undefined,
         lead: session.leadAgentId ? usageByAgentId.get(session.leadAgentId) || summarizeUsageTotals([]) : summarizeUsageTotals([]),
         teammates: session.agents
           .filter((agent) => agent.id !== session.leadAgentId)

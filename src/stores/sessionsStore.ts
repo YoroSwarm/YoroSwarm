@@ -147,12 +147,12 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
         const normalizedName = normalizeParticipantName(agent.name, agent.role || 'teammate');
 
         if (existingIndex >= 0) {
-          // Update existing participant
+          // Update existing participant — preserve role if not provided
           const updatedParticipants = [...session.participants];
           updatedParticipants[existingIndex] = {
             ...updatedParticipants[existingIndex],
             name: normalizedName || updatedParticipants[existingIndex].name,
-            role: agent.role || updatedParticipants[existingIndex].role,
+            role: updatedParticipants[existingIndex].role,
             status: normalizedStatus as Agent['status'],
           };
           return { ...session, participants: dedupeParticipants(updatedParticipants) };

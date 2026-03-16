@@ -103,6 +103,7 @@ export interface SwarmSessionMonitorResponse {
         total_processed_input_tokens: number;
         cache_hit_rate: number;
       };
+      lead_agent_id?: string;
       lead: {
         input_tokens: number;
         output_tokens: number;

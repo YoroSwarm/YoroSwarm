@@ -151,7 +151,6 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           updateSessionParticipant(resolvedSessionId, {
             id: update.agent_id,
             name: update.name,
-            role: 'teammate',
             status: normalizedStatus,
           });
         }
@@ -174,7 +173,6 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           updateSessionParticipant(resolvedSessionId, {
             id: update.agent_id,
             name: update.agent_name,
-            role: 'teammate',
             status: normalizedStatus,
           });
         }
@@ -223,7 +221,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }>();
 
     const lead = stats?.llm_usage.lead;
-    const leadId = currentSession?.participants.find((participant) => participant.role === 'lead')?.id;
+    const leadId = stats?.llm_usage.lead_agent_id
+      || currentSession?.participants.find((participant) => participant.role === 'lead')?.id;
     if (lead && leadId) {
       map.set(leadId, lead);
     }

@@ -1,0 +1,682 @@
+
+> swarm@0.1.0 dev
+> node scripts/next-with-access-code.mjs dev
+
+Generating Prisma client...
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+
+✔ Generated Prisma Client (v7.5.0) to ./node_modules/@prisma/client in 166ms
+
+Start by importing your Prisma Client (See: https://pris.ly/d/importing-client)
+
+
+Ensuring database schema is up to date...
+Loaded Prisma config from prisma.config.ts.
+
+Prisma schema loaded from prisma/schema.prisma.
+Datasource "db": SQLite database "dev.db" at "file:./dev.db"
+
+3 migrations found in prisma/migrations
+
+
+No pending migrations to apply.
+🔑 Current Access Code: F286B608
+   (This code is required for new user registration)
+
+▲ Next.js 16.1.6 (Turbopack)
+
+- Local:         http://localhost:3000
+- Network:       http://183.172.193.86:3000
+- Environments: .env
+
+✓ Starting...
+
+✓ Ready in 1428ms
+
+
+ GET /api/auth/me 401 in 164ms (compile: 153ms, render: 11ms)
+
+
+
+ GET /flutter_service_worker.js?v=null 404 in 111ms (compile: 58ms, render: 53ms)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[ExternalMessages] Verified lead agent exists: Team Lead (30067cdd-2b0a-4c1b-a7c5-a857da4ee936)
+
+[CognitiveLeadRunner] Starting loop with leadAgentId: 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+
+[CognitiveLeadRunner] Lead agent check: Found Team Lead
+
+[CognitiveLeadRunner] Processor not found, initializing...
+
+[CognitiveLeadRunner] Initialized for e45b710d-e7a6-455d-99ee-a1c119b2568c:30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveLeadRunner] User message delivered to inbox
+
+
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE（空闲），无工作在进行，消息优先级为HIGH，来自用户的直接工作请求（完善报告），等待时间仅1秒。根据决策原则，空闲状态且消息为HIGH优先级时应立即处理。',
+  messageCount: 1
+}
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] Processing 1 messages (requested: 1)
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: IDLE -> PROCESSING (Processing messages)
+
+
+
+[AgentLoop][Team Lead] Tool call #1: provision_teammate
+
+[MessageBridge] Bridged message c4342c65-f2bb-4978-bfa6-6e9cdadfbcaf to inbox of agent 7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba
+
+[LeadOrchestrator] Created teammate 研究员-Keats, initialized team awareness: 8 existing teammates
+
+
+
+
+
+
+[AgentLoop][Team Lead] Tool call #2: decompose_task
+
+[decomposeTask] Creating 6 tasks with creatorId: 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[decomposeTask] Verified creator agent exists: Team Lead
+
+
+
+[AgentLoop][Team Lead] Tool call #3: assign_task
+
+[MessageBridge] Bridged message bd8854af-3a4d-4df4-b411-be2580753cc9 to inbox of agent 7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba
+
+[Scheduler] Started for session e45b710d-e7a6-455d-99ee-a1c119b2568c
+
+[MessageBridge] Bridged message fd4c3ec7-3ff9-4bb8-9430-0b7c30250dc4 to inbox of agent 7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba
+
+[Scheduler] Starting task e7d2d13c-45ba-421c-9bd2-343aee336e32 with teammate 7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba
+
+
+[AgentLoop][研究员-Keats] Tool call #1: read_workspace_file
+
+
+[AgentLoop][Team Lead] Tool call #4: assign_task
+
+[MessageBridge] Bridged message 221f9ec1-3e92-4f54-96a6-fcdeb51efa37 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[MessageBridge] Bridged message 6074b8e5-ca72-485c-a7cc-11f7b83ff163 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[Scheduler] Starting task a15e11c8-03d6-4ab0-b5b0-4233a9c87141 with teammate f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+[AgentLoop][Team Lead] Tool call #5: assign_task
+
+[MessageBridge] Bridged message 99b46d31-2ed5-4a61-b187-2f2a80d99ec1 to inbox of agent 84f1ed3f-e1be-4207-9576-be52eb476534
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE（空闲），没有正在执行的任务，可以立即处理新任务。两条消息都是关于同一个任务"分析Keats文档"的任务分配，其中一条为HIGH优先级（来自Team Lead），一条为NORMAL优先级。HIGH优先级消息应优先处理，且当前无工作冲突，因此选择process_now立即开始执行任务。',
+  messageCount: 2
+}
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] Processing 2 messages (requested: 2)
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: IDLE -> PROCESSING (Processing messages)
+
+[MessageBridge] Bridged message 0512bd4a-f074-4f87-989a-4be811cd4e36 to inbox of agent 84f1ed3f-e1be-4207-9576-be52eb476534
+
+[Scheduler] Starting task 5d6d934d-310e-4976-b7ee-41c816a88768 with teammate 84f1ed3f-e1be-4207-9576-be52eb476534
+
+[AgentLoop][研究员-Austen] Tool call #1: read_workspace_file
+
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] LLM Decision: {
+  action: 'batch',
+  reasoning: '两条消息都是关于同一任务"分析Thackeray文档"的分配通知，来自Team Lead（HIGH优先级）和System（NORMAL优先级）。当前工作状态为IDLE，完全可中断，且任务目标明确，合并处理效率最高。',
+  messageCount: 2
+}
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] Processing 2 messages (requested: 2)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: IDLE -> BATCHING (Batch processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: BATCHING -> PROCESSING (Processing messages)
+
+[AgentLoop][研究员-Coleridge] Tool call #1: read_workspace_file
+
+[AgentLoop][Team Lead] Tool call #6: assign_task
+
+[MessageBridge] Bridged message 056e3b26-88a2-48f9-8926-2227b153f210 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+
+[AgentLoop][Team Lead] Tool call #7: assign_task
+
+[MessageBridge] Bridged message 603becfe-bf37-4cc4-8060-7a07e2d14030 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE（空闲），且可中断。有1条HIGH优先级消息（来自Team Lead的任务分配），1条NORMAL优先级消息（系统任务说明）。两条消息内容高度相关，都是关于"分析Tennyson文档"任务。当前无工作进行，应立即处理高优先级任务。',
+  messageCount: 2
+}
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] Processing 2 messages (requested: 2)
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: IDLE -> PROCESSING (Processing messages)
+
+
+[AgentLoop][Team Lead] Tool call #8: assign_task
+
+[MessageBridge] Bridged message d2ca476f-4d06-4cd6-8921-a600b59b850a to inbox of agent 0712aa11-edfd-40e2-b0d6-70fe5eeba317
+
+[MessageBridge] Bridged message 6b8b1e70-40be-40d2-93d9-e5eda6d016f8 to inbox of agent 0712aa11-edfd-40e2-b0d6-70fe5eeba317
+
+[Scheduler] Starting task 59149e9f-0009-4e87-ab87-75c87851f83b with teammate 0712aa11-edfd-40e2-b0d6-70fe5eeba317
+
+
+
+[AgentLoop][报告撰写员] Tool call #1: read_workspace_file
+
+
+[AgentLoop][研究员-Keats] Tool call #2: create_workspace_file
+
+
+
+[AgentLoop][Team Lead] Tool call #9: decompose_task
+
+[decomposeTask] Creating 1 tasks with creatorId: 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[decomposeTask] Verified creator agent exists: Team Lead
+
+[AgentLoop][研究员-Austen] Tool call #2: create_workspace_file
+
+
+[AgentLoop][研究员-Keats] Tool call #3: report_task_completion
+
+[MessageBridge] Bridged message 9e93555b-9e70-4c95-97fc-fa407cabee72 to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Keats] Processed 0 messages: 3 iterations
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: PROCESSING -> IDLE (Work completed)
+
+[CognitiveTeammateRunner] Task completed for 研究员-Keats
+
+[Scheduler] Task e7d2d13c-45ba-421c-9bd2-343aee336e32 completed successfully
+
+
+[AgentLoop][研究员-Coleridge] Tool call #2: create_workspace_file
+
+[AgentLoop][Team Lead] Tool call #10: assign_task
+
+[MessageBridge] Bridged message 3d3d251f-b58c-4df3-816b-9c5da41ffc24 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[AgentLoop][研究员-Austen] Tool call #3: report_task_completion
+
+[MessageBridge] Bridged message d2ca6f2a-3166-404f-b1aa-fff84353a2f8 to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Austen] Processed 0 messages: 3 iterations
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: PROCESSING -> IDLE (Work completed)
+
+[CognitiveTeammateRunner] Task completed for 研究员-Austen
+
+[Scheduler] Task a15e11c8-03d6-4ab0-b5b0-4233a9c87141 completed successfully
+
+[MessageBridge] Bridged message 40933aa7-ccf6-4733-b5dc-817fa2a120dc to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[Scheduler] Starting task 5334a058-b461-468c-9417-c8ee3f79c953 with teammate f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] LLM Decision: {
+  action: 'defer',
+  reasoning: `当前工作"分析Thackeray文档"进度已达50%，预计几秒内完成。虽然当前任务可中断，但考虑到：(1) 任务即将完成，无需中断；(2) 新分配的任务（Dickens、Bronte、Mrs Warren's Profession）已自动进入等待队列；(3) 系统会在空闲后自动处理这些任务。保持当前工作流的连续性效率更高。`,
+  messageCount: 4
+}
+
+[AgentLoop][研究员-Austen] Tool call #1: report_task_completion
+
+[MessageBridge] Bridged message 83b75f40-48bd-48b1-809c-6ca3d45a620d to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Austen] Processed 0 messages: 1 iterations
+
+[CognitiveTeammateRunner] Task completed for 研究员-Austen
+
+[Scheduler] Task 5334a058-b461-468c-9417-c8ee3f79c953 completed successfully
+
+[AgentLoop][研究员-Coleridge] Tool call #3: report_task_completion
+
+[MessageBridge] Bridged message 379d75a1-19c5-4aab-9f3e-4b2b5b9d10d6 to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Coleridge] Processed 0 messages: 3 iterations
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: PROCESSING -> IDLE (Work completed)
+
+[MessageBridge] Bridged message 3aab8783-f60c-4e1a-938b-6a90f2595654 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[Scheduler] Starting task 9ec04994-f0f9-4ad5-acce-a3b6543a9ec1 with teammate f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[CognitiveTeammateRunner] Task completed for 研究员-Coleridge
+
+[Scheduler] Task 5d6d934d-310e-4976-b7ee-41c816a88768 completed successfully
+
+
+[AgentLoop][Team Lead] Tool call #11: send_message_to_teammate
+
+[MessageBridge] Bridged message ee119911-9fea-4819-913e-fa755439dfb5 to inbox of agent 7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba
+
+
+[AgentLoop][研究员-Austen] Tool call #1: read_workspace_file
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前状态是IDLE（空闲），不是正在执行其他任务，工作可以中断。有3条HIGH优先级消息和1条NORMAL优先级消息。根据决策原则：当前工作可中断，且消息为high/critical优先级 → process_now。这些任务都是文档分析任务，可以按优先级和顺序处理。',
+  messageCount: 4
+}
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] Processing 4 messages (requested: 4)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: IDLE -> PROCESSING (Processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: PROCESSING -> FOCUSED (Starting focused work)
+
+[AgentLoop][研究员-Austen] Tool call #2: read_workspace_file
+
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE（空闲），且工作内容正好是"分析Keats文档"，与消息请求内容高度一致。消息为HIGH优先级，来自Team Lead，任务相关性100%。当前工作可中断，且任务目标完全匹配，继续执行效率最高。',
+  messageCount: 1
+}
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] Processing 1 messages (requested: 1)
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: IDLE -> PROCESSING (Processing messages)
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: PROCESSING -> FOCUSED (Starting focused work)
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: FOCUSED -> COMPLETED (Focused work completed)
+
+[AttentionManager][7e1488e4-fb59-49aa-aeaf-dbc1f0a08aba] State: COMPLETED -> IDLE (Context cleaned up)
+
+
+[AgentLoop][Team Lead] Tool call #12: send_message_to_teammate
+
+[MessageBridge] Bridged message c0b14641-91d2-410d-aab0-f5136c0f8d49 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+
+
+[AgentLoop][Team Lead] Tool call #13: send_message_to_teammate
+
+[MessageBridge] Bridged message 122c61fa-d973-42d8-a6ff-1ff94b47abde to inbox of agent 84f1ed3f-e1be-4207-9576-be52eb476534
+
+
+[AgentLoop][Team Lead] Tool call #14: send_message_to_teammate
+
+[MessageBridge] Bridged message dd4be730-cd82-4d16-873b-37a5124f497a to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+[AgentLoop][报告撰写员] Tool call #2: replace_workspace_file
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE且可中断，工作内容正好是"分析Tennyson文档"，与收到的消息任务高度重叠。消息来自Team Lead，优先级为HIGH，内容要求分析Alfred Tennyson的诗歌风格及其与英国浪漫主义文学的关联，这与当前任务完全一致。消息中断等级为soft，当前工作进度50%且可中断，适合立即处理以保持工作连续性。',
+  messageCount: 1
+}
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] Processing 1 messages (requested: 1)
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: IDLE -> PROCESSING (Processing messages)
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: PROCESSING -> FOCUSED (Starting focused work)
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: FOCUSED -> COMPLETED (Focused work completed)
+
+[AttentionManager][84f1ed3f-e1be-4207-9576-be52eb476534] State: COMPLETED -> IDLE (Context cleaned up)
+
+
+[AgentLoop][Team Lead] Tool call #15: send_message_to_teammate
+
+[MessageBridge] Bridged message 0b57a13e-a24f-4673-908a-234fa61da80f to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[AgentLoop][Team Lead] Max iterations (15) reached
+
+[CognitiveLeadRunner] Processed 1 messages: 15 iterations
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: PROCESSING -> IDLE (Work completed)
+
+[AgentLoop][研究员-Austen] Tool call #3: create_workspace_file
+
+
+
+[AgentLoop][报告撰写员] Tool call #3: report_task_completion
+
+[MessageBridge] Bridged message db001556-e25b-48d0-a7d9-ada00479428a to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][报告撰写员] Processed 0 messages: 3 iterations
+
+[CognitiveTeammateRunner] Task completed for 报告撰写员
+
+[Scheduler] Task 59149e9f-0009-4e87-ab87-75c87851f83b completed successfully
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] LLM Decision: {
+  action: 'process_now',
+  reasoning: '当前工作状态为IDLE（空闲），且明确标注为"可中断"。4条消息均为HIGH优先级、task_complete类型，来自团队成员的任务完成通知，需要及时确认和记录。这些消息都是重要的交付成果汇报（诗歌分析报告、文学分析报告），直接关系到项目进度。考虑到当前空闲状态且无其他高优先级工作正在执行，应立即处理这些任务完成通知。',
+  messageCount: 4
+}
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] Processing 4 messages (requested: 4)
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: IDLE -> PROCESSING (Processing messages)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[AgentLoop][研究员-Austen] Tool call #4: create_workspace_file
+
+
+
+[AgentLoop][研究员-Austen] Tool call #5: read_workspace_file
+
+
+
+[AgentLoop][Team Lead] Tool call #1: reply_to_user
+
+
+
+
+
+
+
+
+[AgentLoop][研究员-Austen] Tool call #6: create_workspace_file
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+[AgentLoop][研究员-Austen] Tool call #7: report_task_completion
+
+[MessageBridge] Bridged message f7eafe2b-d725-49ae-a66f-62bfd4cd9836 to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Austen] Processed 0 messages: 7 iterations
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: FOCUSED -> COMPLETED (Focused work completed)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: COMPLETED -> IDLE (Context cleaned up)
+
+[CognitiveTeammateRunner] Task completed for 研究员-Austen
+
+[Scheduler] Task 9ec04994-f0f9-4ad5-acce-a3b6543a9ec1 completed successfully
+
+[MessageBridge] Bridged message a32db38f-33ef-471e-89d6-0081c6b33a64 to inbox of agent f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+[Scheduler] Starting task 9f554231-afca-4f7d-ae01-2caf1eb034e7 with teammate f1f57532-3f28-4384-9671-0cd6657f6f1f
+
+
+
+
+
+[AgentLoop][研究员-Austen] Tool call #1: list_workspace_files
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] LLM Decision: {
+  action: 'batch',
+  reasoning: '3条HIGH优先级消息均为Team Lead要求的文档分析任务（Thackeray、Dickens、Bronte），内容相似且优先级相同，适合批量处理以提高效率。当前工作可中断，等待时间较长(125-155秒)的消息应优先处理。',
+  messageCount: 3
+}
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] Processing 3 messages (requested: 3)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: IDLE -> BATCHING (Batch processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: BATCHING -> PROCESSING (Processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: PROCESSING -> FOCUSED (Starting focused work)
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+[AgentLoop][研究员-Austen] Tool call #2: report_task_completion
+
+[MessageBridge] Bridged message a213be27-b0e9-4a00-a02a-81f277a33ea2 to inbox of agent 30067cdd-2b0a-4c1b-a7c5-a857da4ee936
+
+[CognitiveTeammateRunner][研究员-Austen] Processed 0 messages: 2 iterations
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: FOCUSED -> COMPLETED (Focused work completed)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: COMPLETED -> IDLE (Context cleaned up)
+
+[CognitiveTeammateRunner] Task completed for 研究员-Austen
+
+[Scheduler] Task 9f554231-afca-4f7d-ae01-2caf1eb034e7 completed successfully
+
+[Scheduler] All tasks completed. Success: 14, Failed: 0
+
+[Scheduler] Stopped for session e45b710d-e7a6-455d-99ee-a1c119b2568c
+
+
+
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] LLM Decision: {
+  action: 'batch',
+  reasoning: "当前任务（分析Mrs Warren's Profession文档）进度50%，且明确可中断。有4条相关消息：其中2条是任务分配（分析Mrs Warren's Profession和分析Bronte文档），2条是同事的任务开始通知。所有消息优先级都是NORMAL，不是紧急情况。\n" +
+    '\n' +
+    '决策理由：\n' +
+    '1. 两条任务分配消息（msg_1773636305386_vc6gf4a20和msg_1773636476472_9exbfsigf）都是需要处理的任务，应该接受\n' +
+    '2. 两条通知消息（msg_1773636305380_l6ggmxwsl和msg_1773636476465_70itaejpq）虽然来自同事，但内容是关于任务开始的通知，优先级较低但不应完全忽略\n' +
+    '3. 当前状态为IDLE且可中断，适合批量处理这些消息\n' +
+    "4. 由于当前任务与其中一条新任务分配（Mrs Warren's Profession）高度相关，应优先处理\n" +
+    '\n' +
+    '建议：批量接受所有任务分配，通知消息可以选择性忽略或记录',
+  messageCount: 4
+}
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] Processing 4 messages (requested: 4)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: IDLE -> BATCHING (Batch processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: BATCHING -> PROCESSING (Processing messages)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: PROCESSING -> FOCUSED (Starting focused work)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: FOCUSED -> COMPLETED (Focused work completed)
+
+[AttentionManager][f1f57532-3f28-4384-9671-0cd6657f6f1f] State: COMPLETED -> IDLE (Context cleaned up)
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ GET /flutter_service_worker.js?v=null 404 in 22ms (compile: 5ms, render: 17ms)
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ GET /flutter_service_worker.js?v=null 404 in 41ms (compile: 7ms, render: 33ms)
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+✓ Compiled in 92ms
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+✓ Compiled in 52ms
+
+
+
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+✓ Compiled in 50ms
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+
+
+
+
+[AgentLoop][Team Lead] Skipping repeated single-use tool: reply_to_user
+
+[AgentLoop][Team Lead] Max iterations (15) reached
+
+[CognitiveLeadRunner] Processed 4 messages: 15 iterations
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: PROCESSING -> IDLE (Work completed)
+
+
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] LLM Decision: {
+  action: 'batch',
+  reasoning: '当前Agent处于IDLE状态，无进行中的工作，可中断性强。收件箱中有3条HIGH优先级的任务完成通知消息，分别来自报告撰写员（完成英国浪漫主义文学综合报告，含济慈分析）和研究员-Austen（完成4项文档分析任务）。所有消息均为task_complete类型，属于需要Agent知悉的重要工作成果汇报。由于消息数量适中（3条）且优先级均为HIGH，批量处理比逐条处理更高效，既能一次性确认所有任务完成状态，又符合批量处理多条款高优先级消息的最佳实践。',
+  messageCount: 3
+}
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] Processing 3 messages (requested: 3)
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: IDLE -> BATCHING (Batch processing messages)
+
+[AttentionManager][30067cdd-2b0a-4c1b-a7c5-a857da4ee936] State: BATCHING -> PROCESSING (Processing messages)
+
+
+
+
+
+[AgentLoop][Team Lead] Tool call #1: update_self_todo
+
+
+
+
+[AgentLoop][Team Lead] Tool call #2: reply_to_user
+
+
+
+
+
+
