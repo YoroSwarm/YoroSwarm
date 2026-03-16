@@ -23,6 +23,7 @@ import {
   Brain,
   ChevronDown,
   Wrench,
+  Paperclip,
   X,
   Loader2,
   Bot,
@@ -652,6 +653,27 @@ export function MessageItem({
             >
               {message.content}
             </ReactMarkdown>
+            {message.attachments && message.attachments.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {message.attachments.map((att) => (
+                  <a
+                    key={att.id}
+                    href={`${att.url}?download=1`}
+                    download={att.name}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-colors",
+                      isUser
+                        ? "bg-primary-foreground/20 hover:bg-primary-foreground/30 text-primary-foreground"
+                        : "bg-muted hover:bg-accent text-foreground"
+                    )}
+                    title={att.name}
+                  >
+                    <Paperclip className="h-3 w-3 shrink-0" />
+                    <span className="truncate max-w-[150px]">{att.name}</span>
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         );
     }

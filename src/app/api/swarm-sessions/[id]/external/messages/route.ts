@@ -94,7 +94,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
     console.log(`[ExternalMessages] Verified lead agent exists: ${leadAgentCheck.name} (${lead.id})`);
 
     // 5. 触发认知 Lead Agent Loop（投递到收件箱，异步，不阻塞响应）
-    const attachments = body.attachments || [];
+    // 附件在 body.metadata.attachments 中（前端发送格式）
+    const attachments = body.metadata?.attachments || body.attachments || [];
 
     runCognitiveLeadLoop({
       swarmSessionId: id,
