@@ -93,21 +93,26 @@ function convertToAnthropicTools(tools: ToolDefinition[]): Anthropic.Tool[] {
 }
 
 function convertFromAnthropicResponse(response: Anthropic.Message): LLMResponse {
-  const content: ContentBlock[] = response.content.map(block => {
+  const content: ContentBlock[] = []
+  for (const block of response.content) {
     if (block.type === 'text') {
-      return { type: 'text' as const, text: block.text }
-    }
-    if (block.type === 'tool_use') {
-      return {
+      content.push({ type: 'text' as const, text: block.text })
+    } else if (block.type === 'tool_use') {
+      content.push({
         type: 'tool_use' as const,
         id: block.id,
         name: block.name,
         input: block.input as Record<string, unknown>,
-      }
+      })
+    } else if (block.type === 'thinking') {
+      // Extended thinking blocks are internal reasoning — skip from content output
+      // They should not appear in user-facing responses
+      continue
+    } else {
+      // Unknown block types — skip silently to avoid leaking internal data
+      console.warn('Unknown Anthropic content block type:', (block as { type: string }).type)
     }
-    // Fallback
-    return { type: 'text' as const, text: JSON.stringify(block) }
-  })
+  }
 
   let stopReason: StopReason = 'end_turn'
   if (response.stop_reason === 'tool_use') stopReason = 'tool_use'
