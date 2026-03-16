@@ -71,9 +71,11 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       const rows = usageEvents.filter((event) => event.agentId === agent.id);
       usageByAgentId.set(agent.id, summarizeUsageTotals(rows));
       // Find last call's input tokens (current context fill level)
+      // Total context = inputTokens + cacheCreationTokens + cacheReadTokens
+      // (all three are part of the prompt sent to the model)
       if (rows.length > 0) {
         const latest = rows.reduce((a, b) => a.createdAt > b.createdAt ? a : b);
-        lastCallByAgentId.set(agent.id, latest.inputTokens + latest.cacheReadTokens);
+        lastCallByAgentId.set(agent.id, latest.inputTokens + (latest.cacheCreationTokens ?? 0) + (latest.cacheReadTokens ?? 0));
       }
     }
 
