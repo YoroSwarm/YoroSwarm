@@ -17,6 +17,7 @@ import { listExternalMessages } from './external-chat'
 import { buildLeadToolExecutor } from './lead-tool-executor'
 import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
+import { getLeadSelfTodoItems } from './lead-self-todo'
 
 // 认知收件箱
 import {
@@ -345,6 +346,15 @@ ${messageSummary}
       senderType: m.senderType,
       content: m.content,
     })),
+    selfTodos: leadContext.selfTodos?.map(t => ({
+      id: t.id,
+      title: t.title,
+      details: t.details,
+      status: t.status,
+      category: t.category,
+      sourceRef: t.sourceRef,
+      updatedAt: t.updatedAt,
+    })),
     currentUserMessage,
     swarmSessionId,
     agentId: leadAgentId,
@@ -377,7 +387,7 @@ async function getLeadOrchestrationContext(
   leadAgentId: string,
   userId: string
 ) {
-  const [contextEntries, tasks, teammates, session, attachments] = await Promise.all([
+  const [contextEntries, tasks, teammates, session, attachments, selfTodos] = await Promise.all([
     listAgentContextEntries(leadAgentId, 50),
     prisma.teamLeadTask.findMany({
       where: { swarmSessionId },
@@ -394,6 +404,7 @@ async function getLeadOrchestrationContext(
       orderBy: { createdAt: 'desc' },
       take: 20,
     }),
+    getLeadSelfTodoItems(leadAgentId),
   ])
 
   return {
@@ -403,6 +414,7 @@ async function getLeadOrchestrationContext(
       teammates,
       session,
       attachments,
+      selfTodos,
     },
     userId,
   }
