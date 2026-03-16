@@ -101,7 +101,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       userId: payload.userId,
       leadAgentId: lead.id,
       userMessage: content,
-      sourceRef: `external:${message.id}`,
       attachments: attachments.map((a: { fileId?: string; fileName?: string; mimeType?: string }) => ({
         fileId: a.fileId || '',
         fileName: a.fileName || '',

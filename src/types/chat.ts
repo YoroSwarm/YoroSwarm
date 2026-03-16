@@ -56,7 +56,7 @@ export interface Message {
     mimeType?: string;
     size?: number;
     toolCalls?: ToolCall[];
-    activityType?: 'thinking' | 'tool_call' | 'tool_result';
+    activityType?: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response';
     isError?: boolean;
     toolName?: string;
     toolCallId?: string;

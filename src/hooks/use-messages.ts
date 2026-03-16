@@ -72,18 +72,6 @@ function mergeUniqueMessages(existing: Message[], incoming: Message[]): Message[
   return dedupeMessages([...existing, ...incoming]);
 }
 
-function isHighSignalTool(toolName: string | undefined): boolean {
-  if (!toolName) return false;
-  return [
-    'decompose_task',
-    'provision_teammate',
-    'assign_task',
-    'create_workspace_file',
-    'replace_workspace_file',
-    'report_task_completion',
-  ].includes(toolName);
-}
-
 const EMPTY_PARTICIPANTS: Agent[] = [];
 
 function convertExternalMessage(message: ExternalMessageResponse, participants: Agent[]): Message {
@@ -181,6 +169,9 @@ export function useMessages(options: UseMessagesOptions) {
   }, [activeStreamingStates]);
 
   const participantMap = useMemo(() => participants, [participants]);
+  // Use ref for participantMap inside loadMessages to prevent unnecessary recreation
+  const participantMapRef = useRef(participantMap);
+  useEffect(() => { participantMapRef.current = participantMap; }, [participantMap]);
 
   const loadMessages = useCallback(async (_isLoadMore = false) => {
     if (!sessionId) return;
@@ -194,8 +185,11 @@ export function useMessages(options: UseMessagesOptions) {
         swarmSessionsApi.getAgentActivities(sessionId),
       ]);
 
+      // Use ref to avoid re-creating this callback when participants change
+      const currentParticipants = participantMapRef.current;
+
       // Convert external messages
-      const externalMessages = messagesResponse.items.map((message) => convertExternalMessage(message, participantMap));
+      const externalMessages = messagesResponse.items.map((message) => convertExternalMessage(message, currentParticipants));
 
       // Convert agent activities to individual messages (chronological order)
       // Process in order to handle tool_result -> tool_call associations
@@ -206,11 +200,28 @@ export function useMessages(options: UseMessagesOptions) {
         const isToolResult = activity.activityType === 'tool_result';
 
         if (activity.activityType === 'thinking') {
+          // Show thinking entries as collapsible messages
+          activityMessages.push({
+            id: activity.id,
+            sessionId,
+            type: 'text' as const,
+            content: activity.content,
+            sender: {
+              id: activity.agentId,
+              type: 'agent' as const,
+              name: activity.agentName,
+            },
+            status: 'received' as const,
+            createdAt: activity.createdAt,
+            metadata: {
+              activityType: 'thinking',
+            },
+          });
+        } else if (activity.activityType === 'assistant_response') {
+          // Skip assistant_response — already shown as ExternalMessage or InternalMessage
           continue;
         } else if (isToolCall) {
-          if (!isHighSignalTool(activity.metadata?.toolName)) {
-            continue;
-          }
+          // Show ALL tool calls (no isHighSignalTool filter — consistent with real-time)
           activityMessages.push({
             id: activity.id,
             sessionId,
@@ -236,9 +247,6 @@ export function useMessages(options: UseMessagesOptions) {
             }],
           });
         } else if (isToolResult) {
-          if (!isHighSignalTool(activity.metadata?.toolName)) {
-            continue;
-          }
           // Find the matching tool_call message by toolCallId, or fallback to agent+name
           const toolCallId = activity.metadata?.toolCallId;
           let matchingToolCallIndex: number;
@@ -288,7 +296,7 @@ export function useMessages(options: UseMessagesOptions) {
     } finally {
       setIsLoading(false);
     }
-  }, [participantMap, sessionId]);
+  }, [sessionId]); // Only depend on sessionId, use ref for participantMap
 
   const streamingStateMapRef = useRef(streamingStateMap);
   useEffect(() => {
@@ -322,7 +330,7 @@ export function useMessages(options: UseMessagesOptions) {
         type: incoming.sender_type === 'user' ? 'user' : 'agent',
         name: incoming.sender_type === 'user'
           ? '我'
-          : participantMap.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Swarm',
+          : participantMapRef.current.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Swarm',
       },
       status: 'received',
       createdAt: incoming.created_at || incoming.timestamp,
@@ -358,7 +366,7 @@ export function useMessages(options: UseMessagesOptions) {
         });
       }, 100);
     }
-  }, [participantMap, sessionId]);
+  }, [sessionId]);
 
   const sendMessage = useCallback(async (
     content: string,
@@ -433,7 +441,7 @@ export function useMessages(options: UseMessagesOptions) {
         }
 
         const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);
-        const serverMessage = convertExternalMessage(response, participantMap);
+        const serverMessage = convertExternalMessage(response, participantMapRef.current);
         
         setMessages((prev) => {
           // 如果 WebSocket 已经推送了这条消息，直接删除临时消息
@@ -451,7 +459,7 @@ export function useMessages(options: UseMessagesOptions) {
       throw err;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadMessages, participantMap, sessionId]);
+  }, [loadMessages, sessionId]);
 
   const handleStreamEvent = useCallback((type: string, payload: unknown) => {
     if (type === 'agent_thinking') {
@@ -712,11 +720,15 @@ export function useMessages(options: UseMessagesOptions) {
     }
   }, [sessionId]);
 
+  // Use ref for loadMessages so the effect doesn't re-trigger when the callback changes
+  const loadMessagesRef = useRef(loadMessages);
+  useEffect(() => { loadMessagesRef.current = loadMessages; }, [loadMessages]);
+
   useEffect(() => {
     if (autoLoad && sessionId) {
-      void loadMessages();
+      void loadMessagesRef.current();
     }
-  }, [autoLoad, loadMessages, sessionId]);
+  }, [autoLoad, sessionId]); // Only re-run on sessionId change, not loadMessages recreation
 
   // 确保消息列表去重（防止竞态条件导致的重复消息）
   const prevMessagesRef = useRef<Message[]>([]);

@@ -1,126 +1,44 @@
 import type { LLMMessage, ContentBlock } from './llm/types'
+import {
+  estimateTokens,
+  estimateMessagesTokens,
+  compressContext,
+  ensureToolPairIntegrity,
+  microCompactToolResults,
+} from './context-compaction'
+
+// Re-export for backward compatibility
+export { estimateTokens, estimateMessagesTokens }
 
 // ============================================
-// Token 估算与上下文压缩
+// 两级压缩入口（替代旧的粗暴截断）
 // ============================================
 
-const CHARS_PER_TOKEN = 3.5 // 中文约 1.5-2 字符/token，英文约 4 字符/token，取中间值
-const MAX_CONTEXT_TOKENS = 180000 // 保守上限，留余量给 system prompt 和 output
-const COMPRESS_THRESHOLD = 0.7 // 当使用率超过 70% 时开始压缩
-
 /**
- * 估算文本的 token 数量
+ * 上下文压缩入口
+ * 使用两级策略：Micro-compact + Auto-compact
  */
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN)
-}
-
-/**
- * 估算消息数组的总 token 数量
- */
-export function estimateMessagesTokens(messages: LLMMessage[]): number {
-  let total = 0
-  for (const msg of messages) {
-    if (typeof msg.content === 'string') {
-      total += estimateTokens(msg.content)
-    } else if (Array.isArray(msg.content)) {
-      for (const block of msg.content) {
-        if (block.type === 'text') {
-          total += estimateTokens(block.text)
-        } else if (block.type === 'tool_result') {
-          total += estimateTokens(typeof block.content === 'string' ? block.content : '')
-        } else if (block.type === 'tool_use') {
-          total += estimateTokens(JSON.stringify(block.input))
-        }
-      }
-    }
-    total += 4 // message overhead
-  }
-  return total
-}
-
-/**
- * 按优先级截断上下文消息
- * 优先级：最近消息 > 系统上下文 > 工具调用/结果 > 早期对话
- */
-export function compressContextMessages(
+export async function compressContextMessages(
   messages: LLMMessage[],
-  maxTokens: number = MAX_CONTEXT_TOKENS
-): LLMMessage[] {
-  const totalTokens = estimateMessagesTokens(messages)
-  if (totalTokens <= maxTokens * COMPRESS_THRESHOLD) {
-    return messages
+  options?: {
+    swarmSessionId?: string
+    agentId?: string
+    model?: string
   }
-
-  // 策略：保留最早 2 条（系统状态）和最后 6 条（最近交互），中间部分截断
-  if (messages.length <= 10) {
-    return messages // 消息太少，不压缩
-  }
-
-  const keepEarly = 2
-  const keepRecent = 6
-  const earlyMessages = messages.slice(0, keepEarly)
-  const recentMessages = messages.slice(-keepRecent)
-  const middleMessages = messages.slice(keepEarly, -keepRecent)
-
-  // 对中间消息进行摘要压缩
-  const compressedMiddle = compressMiddleMessages(middleMessages, maxTokens - estimateMessagesTokens(earlyMessages) - estimateMessagesTokens(recentMessages))
-
-  return [...earlyMessages, ...compressedMiddle, ...recentMessages]
+): Promise<LLMMessage[]> {
+  return compressContext(messages, {
+    swarmSessionId: options?.swarmSessionId,
+    agentId: options?.agentId,
+    model: options?.model,
+  })
 }
 
 /**
- * 压缩中间部分消息
+ * 同步版本的压缩（仅 Micro-compact，不触发 Auto-compact）
+ * 用于不需要异步 LLM 摘要的场景
  */
-function compressMiddleMessages(messages: LLMMessage[], budgetTokens: number): LLMMessage[] {
-  if (messages.length === 0) return []
-
-  const result: LLMMessage[] = []
-  let usedTokens = 0
-
-  // 工具调用对保留完整性很重要，但结果可以截断
-  for (const msg of messages) {
-    const msgTokens = estimateMessagesTokens([msg])
-
-    if (usedTokens + msgTokens <= budgetTokens) {
-      result.push(msg)
-      usedTokens += msgTokens
-      continue
-    }
-
-    // 超出预算，尝试截断内容
-    if (typeof msg.content === 'string') {
-      const truncatedContent = truncateText(msg.content, Math.max(200, (budgetTokens - usedTokens) * CHARS_PER_TOKEN | 0))
-      if (truncatedContent) {
-        result.push({ role: msg.role, content: truncatedContent })
-        usedTokens += estimateTokens(truncatedContent)
-      }
-    } else if (Array.isArray(msg.content) && hasToolBlock(msg.content)) {
-      // 工具调用/结果保留，但截断结果内容
-      const truncatedBlocks = msg.content.map(block => {
-        if (block.type === 'tool_result' && typeof block.content === 'string' && block.content.length > 500) {
-          return { ...block, content: block.content.slice(0, 500) + '\n...(已截断)' }
-        }
-        return block
-      })
-      result.push({ role: msg.role, content: truncatedBlocks })
-      usedTokens += estimateMessagesTokens([{ role: msg.role, content: truncatedBlocks }])
-    }
-
-    if (usedTokens >= budgetTokens * 0.95) break
-  }
-
-  if (result.length < messages.length && result.length > 0) {
-    const skipped = messages.length - result.length
-    pushMessage(result, 'user', `[上下文压缩] 已省略 ${skipped} 条早期消息以节省上下文空间。`)
-  }
-
-  return result
-}
-
-function truncateText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text
-  return text.slice(0, maxChars) + '\n...(已截断)'
+export function compressContextMessagesSync(messages: LLMMessage[]): LLMMessage[] {
+  return microCompactToolResults(messages, 3)
 }
 
 type ContextEntryRecord = {
@@ -242,35 +160,11 @@ function appendToolContextMessage(messages: LLMMessage[], entry: ContextEntryRec
   }])
 }
 
-function getToolUseId(entry: ContextEntryRecord): string | null {
-  const metadata = parseMetadata(entry.metadata)
-  return typeof metadata?.toolUseId === 'string' ? metadata.toolUseId : null
-}
-
 function appendToolAwareEntries(messages: LLMMessage[], entries: ContextEntryRecord[]) {
-  const toolCallEntries = new Set<string>()
-  for (const entry of entries) {
-    if (entry.entryType !== 'tool_call') continue
-    const toolUseId = getToolUseId(entry)
-    if (toolUseId) {
-      toolCallEntries.add(toolUseId)
-    }
-  }
+  // 先过滤掉不完整的 tool_call/tool_result 配对
+  const integrityChecked = ensureToolPairIntegrity(entries)
 
-  for (const entry of entries) {
-    if (entry.entryType === 'tool_result') {
-      const toolUseId = getToolUseId(entry)
-      if (!toolUseId || !toolCallEntries.has(toolUseId)) {
-        const metadata = parseMetadata(entry.metadata)
-        const toolName = typeof metadata?.toolName === 'string' ? metadata.toolName : 'unknown_tool'
-        const resultContent = typeof metadata?.resultContent === 'string' ? metadata.resultContent : entry.content
-        pushMessage(messages, 'user', `[历史工具结果回退]
-- 工具: ${toolName}
-- 结果: ${resultContent}`)
-        continue
-      }
-    }
-
+  for (const entry of integrityChecked) {
     appendLeadMemoryMessage(messages, entry)
   }
 }
@@ -380,7 +274,7 @@ function buildLeadSystemStateMessage(input: {
   return parts.length > 0 ? `[系统状态更新]\n${parts.join('\n')}` : null
 }
 
-export function buildLeadContextMessages(input: {
+export async function buildLeadContextMessages(input: {
   teammates: LeadTeammateRecord[]
   tasks: LeadTaskRecord[]
   attachments: LeadAttachmentRecord[]
@@ -389,7 +283,9 @@ export function buildLeadContextMessages(input: {
   selfTodos?: LeadSelfTodoRecord[]
   currentUserMessage?: string
   currentAttachments?: Array<{ fileName: string; mimeType: string }>
-}): LLMMessage[] {
+  swarmSessionId?: string
+  agentId?: string
+}): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
 
   const stateMessage = buildLeadSystemStateMessage({
@@ -422,7 +318,14 @@ export function buildLeadContextMessages(input: {
     pushMessage(messages, 'user', `[回合末尾实时校验]\n${liveTodoBoard}`)
   }
 
-  return messages.length > 0 ? compressContextMessages(messages) : [{ role: 'user', content: '你好' }]
+  if (messages.length === 0) {
+    return [{ role: 'user', content: '你好' }]
+  }
+
+  return compressContextMessages(messages, {
+    swarmSessionId: input.swarmSessionId,
+    agentId: input.agentId,
+  })
 }
 
 export function buildLeadContextSummary(input: {
@@ -456,22 +359,21 @@ export function buildLeadContextSummary(input: {
   return parts.join('\n')
 }
 
-export function buildTeammateContextMessages(input: {
+export async function buildTeammateContextMessages(input: {
   contextEntries: ContextEntryRecord[]
   workspaceFileSummary?: string | null
   upstreamFileSummary?: string | null
   newMessagesSummary: string
-}): LLMMessage[] {
+  swarmSessionId?: string
+  agentId?: string
+}): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
   const chronologicalEntries = [...input.contextEntries].reverse()
-  const toolCallEntries = new Set(
-    chronologicalEntries
-      .filter(entry => entry.entryType === 'tool_call')
-      .map(entry => getToolUseId(entry))
-      .filter((value): value is string => Boolean(value))
-  )
 
-  for (const entry of chronologicalEntries) {
+  // 先确保 tool_call/tool_result 配对完整
+  const integrityChecked = ensureToolPairIntegrity(chronologicalEntries)
+
+  for (const entry of integrityChecked) {
     const metadata = parseMetadata(entry.metadata)
     switch (entry.entryType) {
       case 'system_bootstrap':
@@ -493,21 +395,9 @@ ${entry.content}`)
         pushMessage(messages, 'assistant', entry.content)
         break
       case 'tool_call':
+      case 'tool_result':
         if (metadata) appendToolContextMessage(messages, entry, metadata)
         break
-      case 'tool_result': {
-        const toolUseId = getToolUseId(entry)
-        if (metadata && toolUseId && toolCallEntries.has(toolUseId)) {
-          appendToolContextMessage(messages, entry, metadata)
-        } else {
-          const toolName = typeof metadata?.toolName === 'string' ? metadata.toolName : 'unknown_tool'
-          const resultContent = typeof metadata?.resultContent === 'string' ? metadata.resultContent : entry.content
-          pushMessage(messages, 'user', `[历史工具结果回退]
-- 工具: ${toolName}
-- 结果: ${resultContent}`)
-        }
-        break
-      }
       case 'error':
         pushMessage(messages, 'user', `[系统错误]
 ${entry.content}`)
@@ -531,5 +421,12 @@ ${input.newMessagesSummary}
 
 请处理这些消息。若附件正文不可读或缺失，请明确报告阻塞，不要基于常识伪造已阅读结果。`)
 
-  return messages.length > 0 ? compressContextMessages(messages) : [{ role: 'user', content: input.newMessagesSummary }]
+  if (messages.length === 0) {
+    return [{ role: 'user', content: input.newMessagesSummary }]
+  }
+
+  return compressContextMessages(messages, {
+    swarmSessionId: input.swarmSessionId,
+    agentId: input.agentId,
+  })
 }

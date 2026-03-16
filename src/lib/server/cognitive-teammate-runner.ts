@@ -63,6 +63,12 @@ const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}
   - 使用 resume_work 恢复之前的工作
 - 任务应尽量连续完成，但如 Lead 明确要求处理其他事项，应优先执行
 
+## 上下文压缩
+- 系统会自动压缩旧的工具调用结果以节省上下文空间
+- 标记为 [Previous: used {tool_name}] 的条目表示该工具已执行过但结果被压缩
+- 如果看到 "This session is being continued from a previous conversation" 消息，说明之前的对话已被摘要压缩
+- 遇到压缩后的上下文时，依据摘要和当前任务信息继续工作即可
+
 ## 工具使用说明
 - **list_workspace_files**：列出工作区中的文件和目录
 - **create_workspace_directory**：创建目录
@@ -555,6 +561,8 @@ async function buildTeammateContextMessages(
     workspaceFileSummary,
     upstreamFileSummary: upstreamParts.length > 0 ? upstreamParts.join('\n\n') : null,
     newMessagesSummary,
+    swarmSessionId,
+    agentId: teammateId,
   })
 }
 

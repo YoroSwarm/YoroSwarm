@@ -21,15 +21,11 @@ function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
 }
 
 function buildToolCallFallbackText(block: MessageToolUseBlock): string {
-  return `[历史工具调用回退]
-工具: ${block.name}
-输入: ${JSON.stringify(block.input)}`
+  return `[Previous: used ${block.name}]`
 }
 
 function buildToolResultFallbackText(block: ToolResultBlock): string {
-  return `[历史工具结果回退]
-工具调用ID: ${block.tool_use_id}
-结果: ${block.content}`
+  return `[Previous: tool result for ${block.tool_use_id.slice(0, 12)}]`
 }
 
 function countToolResults(messages: LLMMessage[]): Map<string, number> {

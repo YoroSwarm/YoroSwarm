@@ -7,7 +7,7 @@ export interface AgentActivityItem {
   agentName: string;
   agentRole: 'lead' | 'teammate';
   agentKind: string;
-  activityType: 'thinking' | 'tool_call' | 'tool_result';
+  activityType: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response';
   content: string;
   metadata?: {
     toolName?: string;
@@ -156,7 +156,7 @@ export interface AgentActivityItem {
   agentName: string;
   agentRole: 'lead' | 'teammate';
   agentKind: string;
-  activityType: 'thinking' | 'tool_call' | 'tool_result';
+  activityType: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response';
   content: string;
   metadata?: {
     toolName?: string;

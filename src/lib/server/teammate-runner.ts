@@ -431,6 +431,10 @@ ${caps.length > 0 ? `- 能力：${caps.join(', ')}` : ''}
 - **broadcast_to_team**：向全队广播重要信息
 - **get_team_roster**：查看团队成员列表
 
+## 上下文压缩
+- 标记为 [Previous: used {tool_name}] 的条目是已执行但结果被压缩的工具调用
+- 遇到压缩后的上下文时，依据当前任务信息继续工作即可
+
 ## 禁止行为
 - ❌ 调用工具汇报"正在分析"等状态
 - ❌ 每完成一小步就发送消息
@@ -453,7 +457,24 @@ async function buildTeammateContextMessages(
   const entries = await listAgentContextEntries(teammateId, 30)
   const chronological = [...entries].reverse()
 
+  // Ensure tool_call/tool_result pairs are complete before processing
+  const { ensureToolPairIntegrity } = await import('./context-compaction')
+  const integrityChecked = ensureToolPairIntegrity(chronological.map(e => ({
+    entryType: e.entryType,
+    content: e.content,
+    metadata: e.metadata as string | null,
+  })))
+
+  // Build a set of entry identifiers for quick lookup
+  const checkedSet = new Set(integrityChecked.map(e => `${e.entryType}:${e.content.slice(0, 50)}`))
+
   for (const entry of chronological) {
+    // Skip entries that were removed by integrity check
+    const entryKey = `${entry.entryType}:${entry.content.slice(0, 50)}`
+    if ((entry.entryType === 'tool_call' || entry.entryType === 'tool_result') && !checkedSet.has(entryKey)) {
+      continue
+    }
+
     const metadata = entry.metadata ? JSON.parse(entry.metadata as string) : null
 
     if (entry.entryType === 'task_assignment' || entry.entryType === 'system_bootstrap') {

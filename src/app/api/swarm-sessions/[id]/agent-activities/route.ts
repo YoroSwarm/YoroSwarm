@@ -9,7 +9,7 @@ export interface AgentActivityItem {
   agentName: string
   agentRole: 'lead' | 'teammate'
   agentKind: string
-  activityType: 'thinking' | 'tool_call' | 'tool_result'
+  activityType: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response'
   content: string
   metadata?: {
     toolName?: string
@@ -75,10 +75,16 @@ export async function GET(
         createdAt: entry.createdAt.toISOString(),
       }
 
-      if (entry.entryType === 'thinking' || entry.entryType === 'assistant_response') {
+      if (entry.entryType === 'thinking') {
         items.push({
           ...baseItem,
           activityType: 'thinking' as const,
+          content: entry.content,
+        })
+      } else if (entry.entryType === 'assistant_response') {
+        items.push({
+          ...baseItem,
+          activityType: 'assistant_response' as const,
           content: entry.content,
         })
       } else if (entry.entryType === 'tool_call') {
