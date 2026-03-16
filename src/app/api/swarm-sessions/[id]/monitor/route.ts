@@ -4,6 +4,7 @@ import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse 
 import { requireTokenPayload } from '@/lib/server/swarm';
 import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
 import { summarizeUsageTotals } from '@/lib/server/llm/usage';
+import { getProviderConfig } from '@/lib/server/llm/config';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -69,6 +70,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       usageByAgentId.set(agent.id, summarizeUsageTotals(rows));
     }
 
+    const llmConfig = getProviderConfig();
+
     const metrics = {
       total_agents: session.agents.length,
       active_agents: session.agents.filter((agent) => agent.status !== 'OFFLINE').length,
@@ -81,6 +84,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       context_entries: contextCount,
       internal_threads: internalThreads,
       internal_messages: internalMessages,
+      model_context_size: llmConfig.maxContextTokens,
       llm_usage: {
         session: summarizeUsageTotals(usageEvents),
         lead: session.leadAgentId ? usageByAgentId.get(session.leadAgentId) || summarizeUsageTotals([]) : summarizeUsageTotals([]),

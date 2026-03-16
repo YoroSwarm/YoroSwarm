@@ -92,6 +92,7 @@ export interface SwarmSessionMonitorResponse {
     context_entries: number;
     internal_threads: number;
     internal_messages: number;
+    model_context_size: number;
     llm_usage: {
       session: {
         input_tokens: number;

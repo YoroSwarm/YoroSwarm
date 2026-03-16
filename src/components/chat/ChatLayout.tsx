@@ -484,6 +484,10 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       const participantStatus = participant.status || 'offline';
 
                       const usage = usageByParticipantId.get(participant.id);
+                      const modelContextSize = stats?.model_context_size || 0;
+                      const contextUsageRatio = usage && modelContextSize > 0
+                        ? Math.min(usage.total_processed_input_tokens / modelContextSize, 1)
+                        : 0;
 
                       return (
                         <Popover key={participant.id}>
@@ -494,7 +498,24 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-bold">{participantName}</p>
-                                <p className="text-xs text-muted-foreground">{participantRole}</p>
+                                <div className="mt-1 flex items-center gap-1.5">
+                                  <div className="h-1.5 flex-1 rounded-full bg-muted/60 overflow-hidden">
+                                    <div
+                                      className={cn(
+                                        'h-full rounded-full transition-all duration-500',
+                                        contextUsageRatio >= 0.8
+                                          ? 'bg-red-500'
+                                          : contextUsageRatio >= 0.5
+                                            ? 'bg-amber-500'
+                                            : 'bg-blue-500'
+                                      )}
+                                      style={{ width: `${Math.max(contextUsageRatio * 100, contextUsageRatio > 0 ? 2 : 0)}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] tabular-nums text-muted-foreground shrink-0">
+                                    {usage ? formatTokenCount(usage.total_processed_input_tokens) : '—'}
+                                  </span>
+                                </div>
                               </div>
                               <div className={cn(
                                 'h-2.5 w-2.5 border border-border',
@@ -514,6 +535,25 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                               </div>
                               {usage ? (
                                 <div className="space-y-2 text-sm">
+                                  <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                      <span className="text-xs text-muted-foreground">上下文用量</span>
+                                      <span className="text-xs font-medium tabular-nums">{formatTokenCount(usage.total_processed_input_tokens)} / {modelContextSize > 0 ? formatTokenCount(modelContextSize) : '—'}</span>
+                                    </div>
+                                    <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden">
+                                      <div
+                                        className={cn(
+                                          'h-full rounded-full transition-all duration-500',
+                                          contextUsageRatio >= 0.8
+                                            ? 'bg-red-500'
+                                            : contextUsageRatio >= 0.5
+                                              ? 'bg-amber-500'
+                                              : 'bg-blue-500'
+                                        )}
+                                        style={{ width: `${Math.max(contextUsageRatio * 100, contextUsageRatio > 0 ? 2 : 0)}%` }}
+                                      />
+                                    </div>
+                                  </div>
                                   <div className="flex items-center justify-between">
                                     <span className="text-muted-foreground">总 Token</span>
                                     <span className="font-semibold">{formatTokenCount(usage.total_tokens)}</span>
