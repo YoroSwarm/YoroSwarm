@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { MessageList } from './MessageList';
@@ -37,6 +38,7 @@ function formatPercent(value: number) {
 }
 
 export function ChatLayout({ className, initialSessionId = null }: ChatLayoutProps) {
+  const router = useRouter();
   const [isRightPanelOpen, setIsRightPanelOpen] = useState(() =>
     storage.get(RIGHT_PANEL_STORAGE_KEY, true)
   );
@@ -288,6 +290,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
       setCreateError(null);
       const created = await createSession();
       setCurrentSessionId(created.id);
+      router.push(`/chat?sessionId=${created.id}`);
       return created;
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : '创建会话失败');
