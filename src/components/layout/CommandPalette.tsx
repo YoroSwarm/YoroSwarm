@@ -166,7 +166,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-[520px] p-0 gap-0 overflow-hidden [&>button]:hidden">
+      <DialogContent className="sm:max-w-130 p-0 gap-0 overflow-hidden [&>button]:hidden">
         <DialogTitle className="sr-only">搜索</DialogTitle>
         <div className="flex items-center border-b border-border px-3">
           <Search className="w-4 h-4 text-muted-foreground mr-2 shrink-0" />
@@ -182,7 +182,7 @@ export function CommandPalette({ open, onOpenChange }: CommandPaletteProps) {
             <span className="text-xs text-muted-foreground shrink-0 animate-pulse">搜索中...</span>
           )}
         </div>
-        <div className="max-h-[360px] overflow-y-auto py-1">
+        <div className="max-h-90 overflow-y-auto py-1">
           {results.length === 0 && !isSearching && (
             <div className="py-8 text-center text-sm text-muted-foreground">
               无匹配结果

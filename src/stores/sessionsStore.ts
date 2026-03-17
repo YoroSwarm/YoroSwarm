@@ -72,6 +72,7 @@ interface SessionsActions {
   createSession: (input?: { title?: string; goal?: string; description?: string }) => Promise<Session>;
   deleteSession: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
+  unarchiveSession: (sessionId: string) => Promise<void>;
   pauseSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
   setSessions: (sessions: Session[] | ((prev: Session[]) => Session[])) => void;
@@ -120,6 +121,14 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
 
   archiveSession: async (sessionId: string) => {
     const updated = await swarmSessionsApi.updateSession(sessionId, { status: 'archived' });
+    const converted = convertSession(updated);
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? converted : s)),
+    }));
+  },
+
+  unarchiveSession: async (sessionId: string) => {
+    const updated = await swarmSessionsApi.updateSession(sessionId, { status: 'active' });
     const converted = convertSession(updated);
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === sessionId ? converted : s)),

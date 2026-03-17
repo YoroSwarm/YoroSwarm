@@ -349,7 +349,7 @@ export async function autoResumeActiveSessions(): Promise<{
   errors: string[]
 }> {
   const activeSessions = await prisma.swarmSession.findMany({
-    where: { status: 'ACTIVE' },
+    where: { status: 'ACTIVE', archivedAt: null },
     select: {
       id: true,
       userId: true,
@@ -379,6 +379,26 @@ export async function autoResumeActiveSessions(): Promise<{
       continue // Already running
     }
 
+    // Check if session has pending work (tasks or inbox messages)
+    const pendingTasks = await prisma.teamLeadTask.count({
+      where: {
+        swarmSessionId: session.id,
+        status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] },
+      },
+    })
+
+    // Also check for persisted inbox messages that need processing
+    const { listAgentContextEntries } = await import('./agent-context')
+    const contextEntries = await listAgentContextEntries(session.leadAgentId, 10)
+    const hasInboxSnapshot = contextEntries.some(e => e.entryType === 'inbox_snapshot')
+
+    if (pendingTasks === 0 && !hasInboxSnapshot) {
+      console.log(
+        `[Lifecycle] Skipping idle session "${session.title}" (${session.id}): no pending work`
+      )
+      continue
+    }
+
     try {
       await initCognitiveLead({
         swarmSessionId: session.id,
@@ -405,14 +425,6 @@ export async function autoResumeActiveSessions(): Promise<{
           )
         }
       }
-
-      // Check for pending tasks and inject reminder
-      const pendingTasks = await prisma.teamLeadTask.count({
-        where: {
-          swarmSessionId: session.id,
-          status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] },
-        },
-      })
 
       if (pendingTasks > 0) {
         const { deliverMessage } = await import('./cognitive-inbox')
@@ -469,7 +481,7 @@ export function registerGracefulShutdown(): void {
       try {
         // Find all active sessions
         const activeSessions = await prisma.swarmSession.findMany({
-          where: { status: 'ACTIVE' },
+          where: { status: 'ACTIVE', archivedAt: null },
           include: { agents: true },
         })
 

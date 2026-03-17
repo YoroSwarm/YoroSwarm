@@ -3,6 +3,7 @@ import prisma from '@/lib/db';
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response';
 import { requireTokenPayload } from '@/lib/server/swarm';
 import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
+import { deleteSessionWorkspace } from '@/lib/server/session-workspace';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -92,6 +93,9 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
     if (!existing) {
       return notFoundResponse('Swarm session not found');
     }
+
+    // 删除会话工作区文件
+    await deleteSessionWorkspace(id);
 
     await prisma.swarmSession.delete({
       where: { id },

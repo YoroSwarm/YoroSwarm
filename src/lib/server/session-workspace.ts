@@ -1,5 +1,5 @@
 import path from 'path'
-import { mkdir, readFile, readdir, stat, unlink, writeFile } from 'fs/promises'
+import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from 'fs/promises'
 import prisma from '@/lib/db'
 import { extractFileText } from './file-text-extractor'
 
@@ -551,4 +551,12 @@ export async function listWorkspaceDirectory(
 
 export async function readRawWorkspaceFile(filePath: string): Promise<string> {
   return readFile(filePath, 'utf-8')
+}
+
+export async function deleteSessionWorkspace(swarmSessionId: string): Promise<void> {
+  const root = getSessionWorkspaceRoot(swarmSessionId)
+  const exists = await pathExists(root)
+  if (exists) {
+    await rm(root, { recursive: true, force: true })
+  }
 }

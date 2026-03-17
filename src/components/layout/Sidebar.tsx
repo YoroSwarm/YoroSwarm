@@ -39,6 +39,7 @@ export function Sidebar() {
     createSession,
     deleteSession,
     archiveSession,
+    unarchiveSession,
     pauseSession,
     resumeSession,
   } = useSessions();
@@ -63,6 +64,11 @@ export function Sidebar() {
   const handleArchiveSession = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     await archiveSession(sessionId);
+  };
+
+  const handleUnarchiveSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    await unarchiveSession(sessionId);
   };
 
   const handlePauseSession = async (e: React.MouseEvent, sessionId: string) => {
@@ -166,11 +172,23 @@ export function Sidebar() {
                         <Pause className="w-4 h-4 mr-2" />
                         暂停
                       </DropdownMenuItem>
+                    ) : session.status === 'archived' ? (
+                      <DropdownMenuItem onClick={(e) => handleResumeSession(e, session.id)}>
+                        <Play className="w-4 h-4 mr-2" />
+                        恢复
+                      </DropdownMenuItem>
                     ) : null}
-                    <DropdownMenuItem onClick={(e) => handleArchiveSession(e, session.id)}>
-                      <Archive className="w-4 h-4 mr-2" />
-                      归档
-                    </DropdownMenuItem>
+                    {session.status === 'archived' ? (
+                      <DropdownMenuItem onClick={(e) => handleUnarchiveSession(e, session.id)}>
+                        <Archive className="w-4 h-4 mr-2" />
+                        取消归档
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={(e) => handleArchiveSession(e, session.id)}>
+                        <Archive className="w-4 h-4 mr-2" />
+                        归档
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem
                       variant="destructive"
                       onClick={(e) => handleDeleteSession(e, session.id)}

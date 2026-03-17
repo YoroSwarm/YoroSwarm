@@ -7,6 +7,7 @@ import { serializeExternalMessage } from '@/lib/server/swarm-session-view';
 import { publishRealtimeMessage } from '@/app/api/ws/route';
 import { getLeadAgentForSession } from '@/lib/server/swarm-session';
 import { runCognitiveLeadLoop } from '@/lib/server/cognitive-lead-runner';
+import { maybeAutoRenameSession } from '@/lib/server/lead-orchestrator';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -67,6 +68,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     });
 
     const serialized = serializeExternalMessage(message);
+
+    // Fire-and-forget: auto-rename session after user sends message
+    void maybeAutoRenameSession(id);
 
     // 2. 广播用户消息到 WebSocket
     publishRealtimeMessage({

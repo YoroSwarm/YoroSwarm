@@ -295,20 +295,32 @@ export async function provisionTeammate(
  * Auto-rename session based on conversation content.
  * Fires asynchronously after Lead's first reply — does not block response delivery.
  */
-async function maybeAutoRenameSession(swarmSessionId: string) {
+export async function maybeAutoRenameSession(swarmSessionId: string) {
   try {
+    console.log(`[AutoRename] Starting auto-rename for session ${swarmSessionId}`)
+
     const session = await prisma.swarmSession.findUnique({
       where: { id: swarmSessionId },
       select: { title: true },
     })
-    if (!session || !session.title.startsWith('新对话')) return
+    if (!session) {
+      console.log(`[AutoRename] Session ${swarmSessionId} not found`)
+      return
+    }
+    if (!session.title.startsWith('新对话')) {
+      console.log(`[AutoRename] Session title "${session.title}" does not start with "新对话", skipping`)
+      return
+    }
 
     // Grab first few user + lead messages for context
     const conversation = await prisma.externalConversation.findFirst({
       where: { swarmSessionId },
       select: { id: true },
     })
-    if (!conversation) return
+    if (!conversation) {
+      console.log(`[AutoRename] No conversation found for session ${swarmSessionId}`)
+      return
+    }
 
     const messages = await prisma.externalMessage.findMany({
       where: { conversationId: conversation.id },
@@ -316,7 +328,12 @@ async function maybeAutoRenameSession(swarmSessionId: string) {
       take: 6,
       select: { senderType: true, content: true },
     })
-    if (messages.length === 0) return
+    if (messages.length === 0) {
+      console.log(`[AutoRename] No messages found for conversation ${conversation.id}`)
+      return
+    }
+
+    console.log(`[AutoRename] Found ${messages.length} messages for title generation`)
 
     const transcript = messages
       .map((m) => `${m.senderType === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 200)}`)
@@ -331,17 +348,30 @@ async function maybeAutoRenameSession(swarmSessionId: string) {
           content: `Based on this conversation, generate a short title:\n\n${transcript}`,
         },
       ],
-      maxTokens: 60,
+      maxTokens: 4096,
       usageContext: { swarmSessionId, requestKind: 'auto_rename' },
     })
 
-    const title = extractTextContent(response).trim().replace(/^["'""]+|["'""]+$/g, '')
-    if (!title || title.length > 50) return
+    console.log(`[AutoRename] LLM response content:`, JSON.stringify(response.content))
+
+    const title = extractTextContent(response).trim().replace(/^["\'""]+|["\'""]+$/g, '')
+    if (!title) {
+      console.log(`[AutoRename] Generated title is empty, raw response:`, JSON.stringify(response))
+      return
+    }
+    if (title.length > 50) {
+      console.log(`[AutoRename] Generated title "${title}" is too long (${title.length} chars), skipping`)
+      return
+    }
+
+    console.log(`[AutoRename] Generated title: "${title}"`)
 
     await prisma.swarmSession.update({
       where: { id: swarmSessionId },
       data: { title },
     })
+
+    console.log(`[AutoRename] Updated session ${swarmSessionId} title to "${title}"`)
 
     publishRealtimeMessage(
       {
@@ -353,6 +383,8 @@ async function maybeAutoRenameSession(swarmSessionId: string) {
       },
       { sessionId: swarmSessionId }
     )
+
+    console.log(`[AutoRename] Published session_updated message for session ${swarmSessionId}`)
   } catch (err) {
     console.error('[AutoRename] Failed to auto-rename session:', err)
   }
@@ -437,9 +469,6 @@ export async function replyToUser(
     },
     { sessionId: swarmSessionId }
   )
-
-  // Fire-and-forget: auto-rename session if it still has the default title
-  void maybeAutoRenameSession(swarmSessionId)
 
   return reply
 }
