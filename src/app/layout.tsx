@@ -9,8 +9,15 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Swarm - Agent集群系统",
+  title: "Swarm - 合千心为一智",
   description: "通用办公助手Agent集群系统，支持信息搜集、文档撰写、代码编程、多文件处理等",
+  icons: {
+    icon: [
+      { url: '/favicon.ico', sizes: '16x16 32x32 64x64' },
+      { url: '/icon.svg', type: 'image/svg+xml' },
+    ],
+    apple: '/apple-icon.png',
+  },
 };
 
 export default function RootLayout({

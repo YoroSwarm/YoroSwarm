@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
@@ -444,23 +445,26 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               {activeTab === 'tasks' && <SessionTasks sessionId={resolvedSessionId} />}
             </>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center text-muted-foreground p-6 text-center">
-              <div className="mb-6 rounded-full bg-secondary p-8 border border-border">
-                <Plus className="h-12 w-12 text-primary" />
+            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+              <div className="mb-8 relative">
+                <Image src="/icon.svg" alt="" width={96} height={96} className="opacity-40" />
+                <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                </div>
               </div>
-              <h2 className="text-3xl font-bold font-heading mb-2 text-foreground">开始新旅程</h2>
-              <p className="text-lg max-w-md font-body">
-                像在笔记本上涂鸦一样，记录你的想法。Agent 蜂群将在后台为你整理、执行和创造。
+              <h2 className="text-2xl font-bold text-foreground mb-2">开始新旅程</h2>
+              <p className="text-muted-foreground max-w-sm leading-relaxed">
+                记录你的想法，Agent 蜂群将在后台为你整理、执行和创造
               </p>
               <button
                 onClick={() => {
                   void handleCreateSession();
                 }}
                 disabled={isCreatingSession}
-                className="mt-8 inline-flex items-center gap-2 px-8 py-3 text-lg font-bold btn-hand"
+                className="mt-8 inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold btn-hand rounded-lg"
               >
-                <Plus className="h-5 w-5" />
-                {isCreatingSession ? '准备画纸...' : '新建会话'}
+                <Plus className="h-4 w-4" />
+                {isCreatingSession ? '准备中...' : '新建会话'}
               </button>
               {createError ? <p className="mt-4 text-sm text-destructive font-bold">{createError}</p> : null}
             </div>

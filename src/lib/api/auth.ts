@@ -12,11 +12,33 @@ interface TokenResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
-  user: User;
+  user: UserResponse['user'];
 }
 
 interface UserResponse {
-  user: User;
+  user: {
+    id: string;
+    username: string;
+    email: string;
+    displayName?: string | null;
+    avatarUrl?: string | null;
+    isActive: boolean;
+    isSuperuser: boolean;
+    createdAt: string;
+    lastLogin?: string | null;
+  };
+}
+
+function mapUser(raw: UserResponse['user']): User {
+  return {
+    id: raw.id,
+    username: raw.username,
+    email: raw.email,
+    displayName: raw.displayName || undefined,
+    avatar: raw.avatarUrl || undefined,
+    role: raw.isSuperuser ? 'admin' : 'user',
+    createdAt: raw.createdAt,
+  };
 }
 
 export const authApi = {
@@ -27,7 +49,7 @@ export const authApi = {
       password: credentials.password,
     });
     return {
-      user: data.user,
+      user: mapUser(data.user),
       tokens: {
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
@@ -60,7 +82,7 @@ export const authApi = {
   // 获取当前用户信息
   getCurrentUser: async (): Promise<User> => {
     const data = await api.get<UserResponse>('/auth/me');
-    return data.user;
+    return mapUser(data.user);
   },
 
   // 刷新token
@@ -69,8 +91,22 @@ export const authApi = {
   },
 
   // 修改密码
-  changePassword: async (oldPassword: string, newPassword: string): Promise<void> => {
-    await api.post('/auth/change-password', { oldPassword, newPassword });
+  changePassword: async (currentPassword: string, newPassword: string): Promise<void> => {
+    await api.put('/auth/me/password', { currentPassword, newPassword });
+  },
+
+  updateProfile: async (data: { displayName?: string; avatarUrl?: string }): Promise<User> => {
+    const res = await api.put<UserResponse>('/auth/me', data);
+    return mapUser(res.user);
+  },
+
+  uploadAvatar: async (file: File): Promise<User> => {
+    const formData = new FormData();
+    formData.append('avatar', file);
+    const res = await api.post<UserResponse>('/auth/me/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return mapUser(res.user);
   },
 
   // 获取权限码信息

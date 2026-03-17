@@ -13,26 +13,26 @@ interface StoreProviderProps {
  */
 export function StoreProvider({ children }: StoreProviderProps) {
   const [isHydrated, setIsHydrated] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
   const { checkAuth } = useAuthStore();
 
   useEffect(() => {
-    // Rehydrate stores
     useAuthStore.persist.rehydrate();
 
-    // Check authentication status
-    checkAuth().finally(() => {
-      setIsHydrated(true);
-    });
+    const splashMinTime = new Promise<void>(r => setTimeout(r, 1200));
+
+    Promise.all([
+      checkAuth().finally(() => setIsHydrated(true)),
+      splashMinTime,
+    ]).then(() => setShowSplash(false));
   }, [checkAuth]);
 
-  // Prevent flash of unauthenticated content
-  if (!isHydrated) {
+  if (!isHydrated || showSplash) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-pulse">
-          <div className="w-8 h-8 rounded-lg bg-linear-to-br from-blue-500 to-purple-600 flex items-center justify-center">
-            <span className="text-white font-bold text-sm">S</span>
-          </div>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-pulse flex flex-col items-center gap-4">
+          <img src="/icon.svg" alt="Swarm" className="w-20 h-20" />
+          <span className="text-2xl font-bold text-muted-foreground tracking-[0.35em]">SWARM</span>
         </div>
       </div>
     );

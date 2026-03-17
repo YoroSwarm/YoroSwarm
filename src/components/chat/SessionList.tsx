@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { formatSessionTime } from '@/lib/utils/date';
 import type { Session } from '@/types/chat';
@@ -10,7 +11,6 @@ import {
   MoreVertical,
   Trash2,
   Archive,
-  MessageSquare,
   X,
   AlertCircle,
   Pause,
@@ -104,7 +104,7 @@ export function SessionList({
     <div className="flex h-full flex-col bg-card">
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-primary" />
+          <Image src="/icon.svg" alt="" width={20} height={20} className="opacity-70" />
           <h2 className="font-semibold text-lg">会话</h2>
         </div>
         <div className="flex items-center gap-1">
@@ -165,7 +165,9 @@ export function SessionList({
           </div>
         ) : filteredSessions.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
-            <MessageSquare className="h-12 w-12 mb-2 opacity-50" />
+            <div className="h-10 w-10 mb-2 opacity-40 flex items-center justify-center">
+              <Image src="/icon.svg" alt="" width={28} height={28} />
+            </div>
             <p className="text-sm">没有找到会话</p>
           </div>
         ) : (

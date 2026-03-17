@@ -138,6 +138,7 @@ async function shouldSkipLeadTeammateMessage(input: {
   teammateId: string
   content: string
   messageType: string
+  leadAgentId?: string
 }): Promise<{ skipped: boolean; reason?: string }> {
   if (input.messageType !== 'coordination') {
     return { skipped: false }
@@ -146,6 +147,21 @@ async function shouldSkipLeadTeammateMessage(input: {
   const normalized = input.content.replace(/\s+/g, ' ').trim()
   if (!normalized) {
     return { skipped: true, reason: 'empty_coordination_message' }
+  }
+
+  // Rate limit: no more than 5 messages to the same teammate within 60 seconds
+  if (input.leadAgentId) {
+    const recentCount = await prisma.internalMessage.count({
+      where: {
+        swarmSessionId: input.swarmSessionId,
+        senderAgentId: input.leadAgentId,
+        recipientAgentId: input.teammateId,
+        createdAt: { gte: new Date(Date.now() - 60000) },
+      },
+    })
+    if (recentCount >= 5) {
+      return { skipped: true, reason: 'rate_limited_5_per_60s' }
+    }
   }
 
   const [tasks, teammateTasks] = await Promise.all([
@@ -456,6 +472,7 @@ export async function sendToTeammate(
     teammateId: teammate.id,
     content,
     messageType,
+    leadAgentId,
   })
   if (skipDecision.skipped) {
     console.log(`[LeadOrchestrator] Skipping teammate message: ${skipDecision.reason}`)

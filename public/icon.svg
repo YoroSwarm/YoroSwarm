@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#b0b0b0"/>
+    </linearGradient>
+    <linearGradient id="gr" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#909090"/>
+      <stop offset="100%" stop-color="#606060"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Surrounding hexagons -->
+  <polygon points="158.0,76.0 143.0,102.0 113.0,102.0 98.0,76.0 113.0,50.1 143.0,50.1"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.7"/>
+  <polygon points="203.0,102.0 188.0,128.0 158.0,128.0 143.0,102.0 158.0,76.0 188.0,76.0"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.8"/>
+  <polygon points="203.0,154.0 188.0,180.0 158.0,180.0 143.0,154.0 158.0,128.0 188.0,128.0"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.75"/>
+  <polygon points="158.0,180.0 143.0,205.9 113.0,205.9 98.0,180.0 113.0,154.0 143.0,154.0"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.7"/>
+  <polygon points="113.0,154.0 98.0,180.0 68.0,180.0 53.0,154.0 68.0,128.0 98.0,128.0"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.75"/>
+  <polygon points="113.0,102.0 98.0,128.0 68.0,128.0 53.0,102.0 68.0,76.0 98.0,76.0"
+    fill="url(#gr)" stroke="#c0c0c0" stroke-width="1" opacity="0.8"/>
+
+  <!-- Central hexagon -->
+  <polygon points="158.0,128.0 143.0,154.0 113.0,154.0 98.0,128.0 113.0,102.0 143.0,102.0"
+    fill="url(#gc)" stroke="#ffffff" stroke-width="1.5"/>
+
+  <!-- Center node -->
+  <circle cx="128" cy="128" r="5" fill="#ffffff" opacity="0.95"/>
+  <circle cx="128" cy="128" r="2.5" fill="#333"/>
+
+  <!-- Outer nodes -->
+  <circle cx="128" cy="76" r="3" fill="#c0c0c0" opacity="0.7"/>
+  <circle cx="173" cy="102" r="3" fill="#c0c0c0" opacity="0.7"/>
+  <circle cx="173" cy="154" r="3" fill="#c0c0c0" opacity="0.7"/>
+  <circle cx="128" cy="180" r="3" fill="#c0c0c0" opacity="0.7"/>
+  <circle cx="83" cy="154" r="3" fill="#c0c0c0" opacity="0.7"/>
+  <circle cx="83" cy="102" r="3" fill="#c0c0c0" opacity="0.7"/>
+</svg>

@@ -24,6 +24,7 @@ import {
   initCognitiveEngine,
   deliverMessage,
   startAttentionLoop,
+  getCognitiveRuntime,
   type InboxMessage,
   type CurrentWorkContext,
 } from './cognitive-inbox'
@@ -78,7 +79,10 @@ Todo 是你的私有工作记忆，你**必须**在以下时机维护它：
 
 ## 监控与调整
 - 队友会自主执行任务并汇报结果
+- 队友状态中如果显示 FOCUSED 或 PROCESSING，说明**正在积极工作中**，不需要催促或发消息
+- 只有当队友状态为 IDLE 且任务仍为 IN_PROGRESS 超过合理时间时，才考虑发消息跟进
 - 如果队友报告失败，分析原因后决定是否重试或调整方案
+- **严禁向正在 FOCUSED/PROCESSING 状态的队友发送催促消息**
 - **当任务列表中所有任务状态均为 COMPLETED（无 PENDING、无 ASSIGNED、无 IN_PROGRESS）时**，用 reply_to_user **简短汇总**（200字以内）
 - 如果用户要求"完整报告/综合分析"，把撰写工作分配给队友，自己绝不动手写
 - ⚠️ **禁止在 PENDING 或 IN_PROGRESS 任务存在时调用 reply_to_user**（系统会拦截并报错）
@@ -186,6 +190,12 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
     },
     onProcessMessages: async (messages, context) => {
       await processInboxMessages(input, messages, context, abortController.signal)
+      // If abort happened during processing, throw so messages aren't marked completed
+      if (abortController.signal.aborted) {
+        const err = new Error('Processing aborted (session paused)')
+        err.name = 'AbortError'
+        throw err
+      }
     },
     checkIntervalMs: 500,
   })
@@ -332,13 +342,33 @@ ${messageSummary}
 
   // 使用共享的上下文构建器，正确重建对话历史（含工具调用/结果）
   const llmMessages = await buildLeadContextMessages({
-    teammates: leadContext.teammates.map(t => ({
-      id: t.id,
-      name: t.name,
-      role: t.role,
-      status: t.status,
-      capabilities: t.capabilities,
-    })),
+    teammates: leadContext.teammates.map(t => {
+      // Enrich with cognitive runtime state so Lead sees real working status
+      const runtime = getCognitiveRuntime(swarmSessionId, t.id)
+      let enrichedStatus = t.status as string
+      if (runtime) {
+        const cogState = runtime.currentState
+        const progress = runtime.currentWorkContext?.progress
+        const desc = runtime.currentWorkContext?.description
+        const eta = runtime.currentWorkContext?.estimatedTimeToComplete
+        if (cogState === 'FOCUSED' || cogState === 'PROCESSING') {
+          enrichedStatus = `${t.status} (${cogState}`
+          if (typeof progress === 'number' && progress > 0) enrichedStatus += `, ${progress}%完成`
+          if (eta) enrichedStatus += `, 预计${eta}`
+          enrichedStatus += ')'
+          if (desc) enrichedStatus += ` - ${desc.slice(0, 100)}`
+        } else if (cogState !== 'IDLE') {
+          enrichedStatus = `${t.status} (${cogState})`
+        }
+      }
+      return {
+        id: t.id,
+        name: t.name,
+        role: t.role,
+        status: enrichedStatus,
+        capabilities: t.capabilities,
+      }
+    }),
     tasks: leadContext.tasks.map(t => ({
       id: t.id,
       title: t.title,
@@ -382,6 +412,7 @@ ${messageSummary}
   const dynamicMaxIterations = Math.max(15, Math.min(taskCount * 2, 50))
 
   // 执行LLM循环
+  const communicationToolCounts = new Map<string, number>()
   const result = await runAgentLoop({
     systemPrompt: LEAD_SYSTEM_PROMPT,
     agentId: leadAgentId,
@@ -392,6 +423,20 @@ ${messageSummary}
     contextMessages: llmMessages,
     maxIterations: dynamicMaxIterations,
     abortSignal,
+    shouldStopAfterToolCall: ({ toolName, isError }) => {
+      if (isError) return false
+      // Track repeated communication tool calls to the same peer
+      if (toolName === 'send_message_to_teammate' || toolName === 'reply_to_user') {
+        const count = (communicationToolCounts.get(toolName) || 0) + 1
+        communicationToolCounts.set(toolName, count)
+        // Allow up to 3 communication calls per iteration batch, then stop
+        if (count >= 3) {
+          console.log(`[CognitiveLeadRunner] Stopping loop: ${toolName} called ${count} times`)
+          return true
+        }
+      }
+      return false
+    },
   })
 
   console.log(

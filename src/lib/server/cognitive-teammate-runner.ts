@@ -214,6 +214,12 @@ async function ensureCognitiveTeammateProcessor(
     },
     onProcessMessages: async (messages, context) => {
       await runSerializedTaskTurn(messages, context)
+      // If abort happened during processing, throw so messages aren't marked completed
+      if (taskRuntime.abortController?.signal.aborted) {
+        const err = new Error('Processing aborted (session paused)')
+        err.name = 'AbortError'
+        throw err
+      }
     },
     checkIntervalMs: 300,
   })

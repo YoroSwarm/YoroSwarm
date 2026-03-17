@@ -279,9 +279,9 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
     { sessionId: swarmSessionId }
   )
 
-  // 6. If there are pending tasks, inject a reminder message so Lead picks up where it left off
+  // 6. Inject a recovery message so Lead picks up where it left off
   const pendingTasks = session.tasks.length
-  if (pendingTasks > 0) {
+  {
     const { deliverMessage } = await import('./cognitive-inbox')
     const pendingList = session.tasks
       .filter(t => t.status === 'PENDING' && !t.assigneeId)
@@ -302,7 +302,11 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
     if (autoResumedList) content += `\n\n已自动恢复执行的任务：\n${autoResumedList}`
     if (pendingList) content += `\n\n未分配的待处理任务：\n${pendingList}`
     if (inProgressList) content += `\n\n执行中的任务（可能需要重新分配）：\n${inProgressList}`
-    content += `\n\n请检查任务状态并继续工作。`
+    if (pendingTasks === 0) {
+      content += `\n\n目前没有待处理任务。请检查之前的用户消息并继续工作。`
+    } else {
+      content += `\n\n请检查任务状态并继续工作。`
+    }
 
     try {
       await deliverMessage(swarmSessionId, leadAgentId, {

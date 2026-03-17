@@ -897,8 +897,21 @@ async function handleProcessNow(
       markMessageCompleted(runtime.swarmSessionId, runtime.agentId, msg.id)
     }
   } catch (error) {
-    console.error(`[AttentionManager] Error processing messages:`, error)
-    completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
+    // If aborted (session paused), reset messages to pending so they can be re-processed on resume
+    if (error instanceof Error && error.name === 'AbortError') {
+      console.log(`[AttentionManager][${runtime.agentId}] Processing aborted, resetting ${messages.length} messages to pending`)
+      for (const msg of messages) {
+        const inboxMsg = runtime.inbox.pending.find(m => m.id === msg.id)
+        if (inboxMsg) {
+          inboxMsg.status = 'pending'
+          runtime.inbox.processing = undefined
+        }
+      }
+      completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
+    } else {
+      console.error(`[AttentionManager] Error processing messages:`, error)
+      completeExecution(runtime.swarmSessionId, runtime.agentId, 'cancelled')
+    }
   } finally {
     if (runtime.contextStack.length > 0) {
       await resumeSnapshot(runtime.swarmSessionId, runtime.agentId)
@@ -968,7 +981,7 @@ function getPriorityWeight(priority: MessagePriority): number {
 }
 
 function canEvaluateInbox(state: CognitiveRuntime['currentState']): boolean {
-  return state === 'IDLE' || state === 'PROCESSING' || state === 'FOCUSED' || state === 'BATCHING' || state === 'INTERRUPTED'
+  return state === 'IDLE' || state === 'PROCESSING' || state === 'FOCUSED' || state === 'BATCHING' || state === 'INTERRUPTED' || state === 'RECOVERING'
 }
 
 function isDeepWorkContext(context: CurrentWorkContext): boolean {

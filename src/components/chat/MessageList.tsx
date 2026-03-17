@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
+import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { formatMessageGroup } from '@/lib/utils/date';
 import { MessageItem } from './MessageItem';
@@ -144,9 +145,9 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
 
       {messages.length === 0 && !isLoading && (
         <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-          <div className="mb-4 text-6xl">💬</div>
-          <p className="text-lg">还没有消息</p>
-          <p className="text-sm mt-2">发送一条消息开始对话</p>
+          <Image src="/icon.svg" alt="" width={64} height={64} className="mb-4 opacity-30" />
+          <p className="text-lg font-medium">还没有消息</p>
+          <p className="text-sm mt-1">发送一条消息开始对话</p>
         </div>
       )}
 

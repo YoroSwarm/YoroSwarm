@@ -2,6 +2,7 @@
 
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Header } from "@/components/layout/Header";
+import { CommandPalette, useCommandPalette } from "@/components/layout/CommandPalette";
 import { useUIStore } from "@/stores";
 
 export default function DashboardLayout({
@@ -11,15 +12,17 @@ export default function DashboardLayout({
 }) {
   const sidebarOpen = useUIStore((state) => state.sidebarOpen);
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
+  const { open: searchOpen, setOpen: setSearchOpen } = useCommandPalette();
 
   return (
     <div className="flex h-screen bg-background">
-      {/* 侧边栏容器 - 带宽度动画 */}
+      {/* 侧边栏容器 - translateX 滑入/滑出 */}
       <div
         className={`
-          shrink-0 overflow-hidden transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'}
+          shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out
+          ${sidebarOpen ? 'ml-0' : '-ml-72'}
         `}
+        style={{ width: '18rem' }}
       >
         <Sidebar />
       </div>
@@ -28,11 +31,14 @@ export default function DashboardLayout({
         <Header 
           showToggleButton={!sidebarOpen} 
           onToggleSidebar={() => setSidebarOpen(true)}
+          onSearchClick={() => setSearchOpen(true)}
         />
         <main className="flex-1 overflow-auto">
           {children}
         </main>
       </div>
+
+      <CommandPalette open={searchOpen} onOpenChange={setSearchOpen} />
     </div>
   );
 }

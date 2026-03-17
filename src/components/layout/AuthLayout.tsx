@@ -19,8 +19,8 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-12 h-12 rounded-xl bg-linear-to-br from-primary to-secondary flex items-center justify-center shadow-lg">
-            <span className="text-white font-bold text-xl">S</span>
+          <div className="w-12 h-12 rounded-xl bg-black/30 flex items-center justify-center shadow-lg border border-border/50">
+            <img src="/icon.svg" alt="Swarm" className="w-8 h-8" />
           </div>
           <span className="text-2xl font-bold text-foreground">Swarm</span>
         </div>

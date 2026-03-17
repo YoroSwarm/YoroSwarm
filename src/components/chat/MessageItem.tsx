@@ -946,8 +946,16 @@ export function MessageItem({
               height={32}
               className="h-full w-full rounded-full object-cover"
             />
-          ) : (
+          ) : isUser ? (
             message.sender.name.charAt(0).toUpperCase()
+          ) : (
+            <Image
+              src="/icon.svg"
+              alt="Swarm"
+              width={20}
+              height={20}
+              className="opacity-70"
+            />
           )}
         </div>
       ) : (

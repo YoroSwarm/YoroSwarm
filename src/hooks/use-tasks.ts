@@ -11,6 +11,7 @@ const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 interface UseTasksOptions {
   swarmSessionId?: string;
   autoLoad?: boolean;
+  pollInterval?: number;
 }
 
 type SessionTask = {
@@ -40,7 +41,7 @@ const convertTask = (task: SessionTask): Task => ({
 });
 
 export function useTasks(options: UseTasksOptions = {}) {
-  const { swarmSessionId, autoLoad = true } = options;
+  const { swarmSessionId, autoLoad = true, pollInterval = 0 } = options;
   const [tasks, setTasks] = useState<Task[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,6 +113,12 @@ export function useTasks(options: UseTasksOptions = {}) {
       void loadTasks();
     }
   }, [autoLoad, loadTasks, resolvedSessionId]);
+
+  useEffect(() => {
+    if (!autoLoad || !resolvedSessionId || pollInterval <= 0) return;
+    const timer = setInterval(() => { void loadTasks(); }, pollInterval);
+    return () => clearInterval(timer);
+  }, [autoLoad, resolvedSessionId, pollInterval, loadTasks]);
 
   return {
     tasks,

@@ -17,10 +17,17 @@ export async function recordLlmUsageEvent(input: {
     return
   }
 
+  // Resolve userId from session for independent usage tracking
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: input.swarmSessionId },
+    select: { userId: true },
+  })
+
   await prisma.llmUsageEvent.create({
     data: {
       swarmSessionId: input.swarmSessionId,
       agentId: input.agentId || null,
+      userId: session?.userId || null,
       provider: input.provider,
       model: input.response.model,
       requestKind: input.requestKind || 'general',

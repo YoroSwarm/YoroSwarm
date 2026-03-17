@@ -18,6 +18,8 @@ model User {
   username       String    @unique
   email          String    @unique
   hashedPassword String    @map("hashed_password")
+  displayName    String?   @map("display_name")
+  avatarUrl      String?   @map("avatar_url")
   isActive       Boolean   @default(true) @map("is_active")
   isSuperuser    Boolean   @default(false) @map("is_superuser")
   createdAt      DateTime  @default(now()) @map("created_at")
@@ -29,6 +31,7 @@ model User {
   swarmSessions SwarmSession[]
   externalConversations ExternalConversation[]
   files         File[]
+  llmUsageEvents LlmUsageEvent[]
 
   @@map("users")
 }
@@ -269,8 +272,9 @@ model LeadSelfTodo {
 
 model LlmUsageEvent {
   id                  String   @id @default(uuid())
-  swarmSessionId      String   @map("swarm_session_id")
+  swarmSessionId      String?  @map("swarm_session_id")
   agentId             String?  @map("agent_id")
+  userId              String?  @map("user_id")
   provider            String
   model               String
   requestKind         String   @default("general") @map("request_kind")
@@ -280,11 +284,13 @@ model LlmUsageEvent {
   cacheReadTokens     Int      @default(0) @map("cache_read_tokens")
   createdAt           DateTime @default(now()) @map("created_at")
 
-  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
-  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  swarmSession SwarmSession? @relation(fields: [swarmSessionId], references: [id], onDelete: SetNull)
+  agent        Agent?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([swarmSessionId, createdAt])
   @@index([swarmSessionId, agentId, createdAt])
+  @@index([userId, createdAt])
   @@map("llm_usage_events")
 }
 

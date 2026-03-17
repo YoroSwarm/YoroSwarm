@@ -264,6 +264,10 @@ export async function restoreInboxState(runtime: CognitiveRuntime): Promise<numb
       // Avoid duplicates
       const exists = runtime.inbox.pending.some(m => m.id === msg.id)
       if (!exists) {
+        // Reset 'processing' status back to 'pending' so the attention loop picks them up
+        if (msg.status === 'processing') {
+          msg.status = 'pending'
+        }
         runtime.inbox.pending.push(msg)
         restoredCount++
       }

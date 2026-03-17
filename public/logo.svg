@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Center hex: brightest -->
+    <linearGradient id="gc" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e8e8e8"/>
+      <stop offset="100%" stop-color="#b0b0b0"/>
+    </linearGradient>
+    <!-- Ring hexes: medium -->
+    <linearGradient id="gr" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#909090"/>
+      <stop offset="100%" stop-color="#606060"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Surrounding hexagons (6 agents) -->
+  <polygon points="308.0,124.9 282.0,170.0 230.0,170.0 204.0,124.9 230.0,79.9 282.0,79.9"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.7"/>
+  <polygon points="386.0,170.0 360.0,215.0 308.0,215.0 282.0,170.0 308.0,124.9 360.0,124.9"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.8"/>
+  <polygon points="386.0,260.0 360.0,305.1 308.0,305.1 282.0,260.0 308.0,215.0 360.0,215.0"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.75"/>
+  <polygon points="308.0,305.1 282.0,350.1 230.0,350.1 204.0,305.1 230.0,260.0 282.0,260.0"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.7"/>
+  <polygon points="230.0,260.0 204.0,305.1 152.0,305.1 126.0,260.0 152.0,215.0 204.0,215.0"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.75"/>
+  <polygon points="230.0,170.0 204.0,215.0 152.0,215.0 126.0,170.0 152.0,124.9 204.0,124.9"
+    fill="url(#gr)" stroke="#d0d0d0" stroke-width="1.5" opacity="0.8"/>
+
+  <!-- Central hexagon (lead agent) — larger & brighter -->
+  <polygon points="308.0,215.0 282.0,260.0 230.0,260.0 204.0,215.0 230.0,170.0 282.0,170.0"
+    fill="url(#gc)" stroke="#ffffff" stroke-width="2.5"/>
+
+  <!-- Node dots at hex centers -->
+  <circle cx="256" cy="215" r="8" fill="#ffffff" opacity="0.95"/>
+  <circle cx="256" cy="215" r="4" fill="#333333"/>
+
+  <circle cx="256" cy="124.9" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+  <circle cx="334" cy="170" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+  <circle cx="334" cy="260" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+  <circle cx="256" cy="305.1" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+  <circle cx="178" cy="260" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+  <circle cx="178" cy="170" r="4.5" fill="#c0c0c0" opacity="0.8"/>
+
+  <!-- Connection lines (center to each neighbor) -->
+  <g stroke="#c0c0c0" stroke-width="1.2" opacity="0.5" stroke-dasharray="4 3">
+    <line x1="256" y1="215" x2="256" y2="124.9"/>
+    <line x1="256" y1="215" x2="334" y2="170"/>
+    <line x1="256" y1="215" x2="334" y2="260"/>
+    <line x1="256" y1="215" x2="256" y2="305.1"/>
+    <line x1="256" y1="215" x2="178" y2="260"/>
+    <line x1="256" y1="215" x2="178" y2="170"/>
+  </g>
+
+  <!-- Text: SWARM -->
+  <text x="256" y="440" text-anchor="middle" font-family="Inter, -apple-system, sans-serif"
+    font-size="52" font-weight="800" letter-spacing="14" fill="#d0d0d0">SWARM</text>
+</svg>
