@@ -202,11 +202,14 @@ export function useAgentWebSocket({
   if (clientId) query.set('clientId', clientId);
   if (swarmSessionId || sessionId) query.set('sessionId', swarmSessionId || sessionId || '');
 
-  const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
+  // 使用与页面相同的协议/主机/端口
+  const baseUrl = typeof window !== 'undefined'
+    ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`
+    : process.env.NEXT_PUBLIC_WS_URL || '';
   const resolvedScopePath = scopePath
     || path
     || (swarmSessionId || sessionId ? `/ws/sessions/${swarmSessionId || sessionId}` : clientId ? `/ws/agents/${clientId}` : '/ws');
-  const wsUrl = typeof window !== 'undefined'
+  const wsUrl = baseUrl
     ? `${baseUrl.replace(/\/$/, '')}${resolvedScopePath}${query.size ? `?${query.toString()}` : ''}`
     : '';
 

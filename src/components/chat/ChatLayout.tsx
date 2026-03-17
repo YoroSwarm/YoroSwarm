@@ -132,8 +132,10 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   const wsUrl = useMemo(() => {
     if (!resolvedSessionId || typeof window === 'undefined') return '';
 
-    const baseUrl = (process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001').replace(/\/$/, '');
-    return `${baseUrl}/ws/sessions/${resolvedSessionId}?sessionId=${resolvedSessionId}`;
+    // 使用与页面相同的协议/主机/端口
+    const baseUrl = (process.env.NEXT_PUBLIC_WS_URL || '').replace(/\/$/, '');
+    const wsBase = baseUrl || `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`;
+    return `${wsBase}/ws/sessions/${resolvedSessionId}?sessionId=${resolvedSessionId}`;
   }, [resolvedSessionId]);
 
   useWebSocket({

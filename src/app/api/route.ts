@@ -41,10 +41,10 @@ export async function GET() {
         'POST /api/files': 'Upload file into a swarm session (multipart/form-data)',
       },
       websocket: {
-        'GET  /api/ws': 'WebSocket server info',
-        'WS   ws://localhost:3001/ws/sessions/{id}': 'Session realtime stream',
-        'WS   ws://localhost:3001/ws/agents/{id}': 'Agent realtime stream',
-        'WS   ws://localhost:3001/ws/tasks/{id}': 'Task realtime stream',
+        'GET  /api/ws': 'WebSocket server info (deprecated, use /ws directly)',
+        'WS   ws://localhost:3000/ws/sessions/{id}': 'Session realtime stream',
+        'WS   ws://localhost:3000/ws/agents/{id}': 'Agent realtime stream',
+        'WS   ws://localhost:3000/ws/tasks/{id}': 'Task realtime stream',
       },
     },
     docs: {

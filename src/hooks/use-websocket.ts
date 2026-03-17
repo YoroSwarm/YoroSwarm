@@ -1,22 +1,24 @@
 /**
  * WebSocket Hook
  * 迁移自 React SPA: frontend/src/hooks/useWebSocket.ts
- * 适配 Next.js 环境变量
+ * 适配 Next.js 环境变量 - 支持 HTTP/WebSocket 共用端口
  */
 
 'use client';
 
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 
-const LOCAL_WS_SERVER_PORT = '3001';
-
 type SubscriptionTarget = 'all' | 'session' | 'agent' | 'task' | 'all_agents' | 'all_tasks';
-
-let wsServerInitializationPromise: Promise<void> | null = null;
 
 // 全局连接锁，防止 StrictMode 下的重复连接
 const globalConnectingLocks = new Map<string, boolean>();
 
+/**
+ * 解析 WebSocket URL
+ * - 支持环境变量配置
+ * - 默认使用与页面相同的协议/主机/端口
+ * - 自动将 http 转换为 ws，https 转换为 wss
+ */
 function resolveWebSocketUrl(rawUrl: string): string {
   if (!rawUrl || typeof window === 'undefined') {
     return rawUrl;
@@ -25,60 +27,17 @@ function resolveWebSocketUrl(rawUrl: string): string {
   try {
     const parsed = new URL(rawUrl, window.location.origin);
 
+    // 自动转换协议
     if (parsed.protocol === 'http:') {
       parsed.protocol = 'ws:';
     } else if (parsed.protocol === 'https:') {
       parsed.protocol = 'wss:';
     }
 
-    const usesApiWsBootstrapPath = parsed.pathname === '/api/ws' || parsed.pathname.startsWith('/api/ws/');
-    if (usesApiWsBootstrapPath) {
-      parsed.pathname = parsed.pathname.replace(/^\/api\/ws(?=\/|$)/, '') || '/';
-      parsed.port = LOCAL_WS_SERVER_PORT;
-    }
-
     return parsed.toString();
   } catch {
     return rawUrl;
   }
-}
-
-function shouldInitializeLocalWebSocketServer(resolvedUrl: string): boolean {
-  if (!resolvedUrl || typeof window === 'undefined') {
-    return false;
-  }
-
-  try {
-    const parsed = new URL(resolvedUrl);
-    return parsed.hostname === window.location.hostname && parsed.port === LOCAL_WS_SERVER_PORT;
-  } catch {
-    return false;
-  }
-}
-
-async function ensureLocalWebSocketServerInitialized(resolvedUrl: string): Promise<void> {
-  if (!shouldInitializeLocalWebSocketServer(resolvedUrl)) {
-    return;
-  }
-
-  if (!wsServerInitializationPromise) {
-    wsServerInitializationPromise = fetch('/api/ws', {
-      method: 'GET',
-      cache: 'no-store',
-      credentials: 'same-origin',
-    })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`WebSocket bootstrap failed with status ${response.status}`);
-        }
-      })
-      .catch((error) => {
-        wsServerInitializationPromise = null;
-        throw error;
-      });
-  }
-
-  await wsServerInitializationPromise;
 }
 
 export type WebSocketMessageType =
@@ -253,18 +212,14 @@ export function useWebSocket({
         isConnectingRef.current = false;
         setIsConnecting(false);
         setIsConnected(false);
+        globalConnectingLocks.delete(url);
         return;
-      }
-
-      try {
-        await ensureLocalWebSocketServerInitialized(resolvedUrl);
-      } catch (error) {
-        console.warn('Failed to initialize local WebSocket server before connect:', error);
       }
 
       if (isManualDisconnectRef.current) {
         isConnectingRef.current = false;
         setIsConnecting(false);
+        globalConnectingLocks.delete(url);
         return;
       }
 
