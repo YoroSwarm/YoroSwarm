@@ -11,6 +11,7 @@ import {
   PopoverContent,
 } from '@/components/ui/popover';
 import { Separator } from '@/components/ui/separator';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import { useAuthStore } from '@/stores';
 
 interface HeaderProps {
@@ -24,7 +25,7 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
   const router = useRouter();
 
   return (
-    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 sticky top-0 z-50">
+    <header className="h-16 bg-card border-b border-border flex items-center justify-between px-6 sticky top-0 z-50 transition-colors duration-200">
       {/* 左侧展开按钮 */}
       {showToggleButton && (
         <Button
@@ -36,7 +37,7 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
           <PanelLeft className="h-5 w-5" />
         </Button>
       )}
-      
+
       {/* 搜索栏 */}
       <div className="flex-1 max-w-xl">
         <div className="relative cursor-pointer" onClick={onSearchClick}>
@@ -50,8 +51,12 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
         </div>
       </div>
 
-      {/* 右侧用户头像 */}
+      {/* 右侧操作区 */}
       <div className="flex items-center gap-2 ml-4">
+        {/* 主题切换按钮 */}
+        <ThemeToggle />
+
+        {/* 用户头像 */}
         <Popover>
           <PopoverTrigger asChild>
             <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors">

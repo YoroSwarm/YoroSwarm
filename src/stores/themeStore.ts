@@ -12,12 +12,19 @@ interface ThemeActions {
 
 type ThemeStore = ThemeState & ThemeActions;
 
-const _getSystemTheme = (): 'light' | 'dark' => {
+const getSystemTheme = (): 'light' | 'dark' => {
   if (typeof window === 'undefined') return 'light';
   if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     return 'dark';
   }
   return 'light';
+};
+
+const resolveTheme = (theme: Theme): 'light' | 'dark' => {
+  if (theme === 'system') {
+    return getSystemTheme();
+  }
+  return theme;
 };
 
 const applyTheme = (theme: 'light' | 'dark') => {
@@ -32,25 +39,39 @@ const applyTheme = (theme: 'light' | 'dark') => {
 
 export const useThemeStore = create<ThemeStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       theme: 'system',
       resolvedTheme: 'light',
 
-      setTheme: (_theme) => {
-        // Force light mode
-        applyTheme('light');
-        set({ theme: 'light', resolvedTheme: 'light' });
+      setTheme: (newTheme) => {
+        const resolved = resolveTheme(newTheme);
+        applyTheme(resolved);
+        set({ theme: newTheme, resolvedTheme: resolved });
       },
 
       toggleTheme: () => {
-        // No-op or force light
-        applyTheme('light');
-        set({ theme: 'light', resolvedTheme: 'light' });
+        const currentTheme = get().theme;
+        let newTheme: Theme;
+
+        if (currentTheme === 'light') {
+          newTheme = 'dark';
+        } else if (currentTheme === 'dark') {
+          newTheme = 'system';
+        } else {
+          // system -> toggle based on current resolved
+          newTheme = get().resolvedTheme === 'light' ? 'dark' : 'light';
+        }
+
+        const resolved = resolveTheme(newTheme);
+        applyTheme(resolved);
+        set({ theme: newTheme, resolvedTheme: resolved });
       },
 
       initTheme: () => {
-        applyTheme('light');
-        set({ theme: 'light', resolvedTheme: 'light' });
+        const { theme } = get();
+        const resolved = resolveTheme(theme);
+        applyTheme(resolved);
+        set({ resolvedTheme: resolved });
       },
     }),
     {
@@ -64,7 +85,28 @@ export const useThemeStore = create<ThemeStore>()(
               removeItem: () => {},
             }
       ),
-      skipHydration: true,
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          const resolved = resolveTheme(state.theme);
+          applyTheme(resolved);
+          state.resolvedTheme = resolved;
+        }
+      },
     }
   )
 );
+
+// 监听系统主题变化
+if (typeof window !== 'undefined') {
+  const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const handleSystemThemeChange = () => {
+    const store = useThemeStore.getState();
+    if (store.theme === 'system') {
+      const resolved = getSystemTheme();
+      applyTheme(resolved);
+      store.resolvedTheme = resolved;
+    }
+  };
+
+  mediaQuery.addEventListener('change', handleSystemThemeChange);
+}

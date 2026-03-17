@@ -5,9 +5,10 @@ import { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '@/lib/utils';
 import { formatMessageTime } from '@/lib/utils/date';
+import { useThemeStore } from '@/stores/themeStore';
 import {
   Check,
   CheckCheck,
@@ -452,6 +453,7 @@ export function MessageItem({
   showTime = true,
   isLead = true,
 }: MessageItemProps) {
+  const { resolvedTheme } = useThemeStore();
   const isUser = message.sender.type === 'user';
   const isSystem = message.sender.type === 'system';
   const isAgent = message.sender.type === 'agent';
@@ -528,7 +530,7 @@ export function MessageItem({
             <div className="overflow-x-auto">
               <SyntaxHighlighter
                 language={message.metadata?.codeLanguage || 'typescript'}
-                style={vscDarkPlus}
+                style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
                 customStyle={{
                   margin: 0,
                   borderRadius: '0 0 0.5rem 0.5rem',
@@ -643,7 +645,7 @@ export function MessageItem({
         }
 
         return (
-          <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-word">
+          <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-wordword">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={{
@@ -652,7 +654,7 @@ export function MessageItem({
                   return !inline && match ? (
                     <div className="overflow-x-auto rounded-lg my-2 border border-border/50">
                       <SyntaxHighlighter
-                        style={vscDarkPlus}
+                        style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
                         language={match[1]}
                         PreTag="div"
                         customStyle={{
@@ -703,7 +705,7 @@ export function MessageItem({
                     title={`预览 ${att.name}`}
                   >
                     <Paperclip className="h-3 w-3 shrink-0" />
-                    <span className="truncate max-w-[150px]">{att.name}</span>
+                    <span className="truncate max-w-37.5">{att.name}</span>
                   </button>
                 ))}
               </div>

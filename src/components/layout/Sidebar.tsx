@@ -122,7 +122,7 @@ export function Sidebar() {
     <aside
       className={cn(
         'h-screen bg-card border-r border-border flex flex-col transition-all duration-300 relative z-20 shrink-0',
-        'w-72'
+        'w-72 transition-colors duration-200'
       )}
     >
       {/* 1. Logo (Return to Dashboard) + Close Button */}
