@@ -305,15 +305,15 @@ function initializeWebSocketServer(server) {
   // 处理 HTTP upgrade 请求
   server.on('upgrade', (request, socket, head) => {
     const { pathname } = parse(request.url)
-    
+
     // 只处理 /ws 路径的 WebSocket 升级请求
+    // 其他路径（如 /_next/webpack-hmr）留给 Next.js 处理
     if (pathname.startsWith('/ws')) {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit('connection', ws, request)
       })
-    } else {
-      socket.destroy()
     }
+    // 注意：不要销毁 socket，让 Next.js 处理 HMR WebSocket
   })
 
   console.log(`📡 WebSocket server attached to HTTP server`)
