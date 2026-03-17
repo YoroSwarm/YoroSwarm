@@ -472,11 +472,14 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
       <aside
         className={cn(
-          'fixed inset-y-0 right-0 z-30 w-80 transform border-l border-border bg-card transition-transform duration-300 ease-in-out md:static',
-          isRightPanelOpen ? 'translate-x-0' : 'translate-x-full md:w-0 md:overflow-hidden md:border-l-0'
+          'fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto',
+          isRightPanelOpen ? 'w-80 translate-x-0 border-l' : 'w-0 translate-x-full border-l-0 overflow-hidden opacity-0 md:translate-x-0'
         )}
       >
-        <div className="flex h-full flex-col">
+        <div className={cn(
+          'flex h-full flex-col min-w-80 transition-opacity duration-200',
+          isRightPanelOpen ? 'opacity-100' : 'opacity-0'
+        )}>
           <div className="flex h-14 items-center justify-between border-b border-border px-4 md:hidden">
             <h2 className="font-semibold">详情</h2>
             <button
