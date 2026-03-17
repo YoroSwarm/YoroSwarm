@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server'
+import { successResponse, errorResponse } from '@/lib/api/response'
 import { pauseSwarmSession } from '@/lib/server/swarm-session-lifecycle'
 
 export async function POST(
@@ -8,9 +8,9 @@ export async function POST(
   try {
     const { id } = await params
     const result = await pauseSwarmSession(id)
-    return NextResponse.json(result)
+    return successResponse(result)
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return errorResponse(message, 500)
   }
 }

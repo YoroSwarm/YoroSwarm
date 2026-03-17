@@ -98,9 +98,18 @@ export async function callLLM(options: LLMCallOptions): Promise<LLMResponse> {
     messages: sanitizeLLMMessages(options.messages),
   }
 
-  const response = provider === 'openai'
-    ? await callOpenAI(sanitizedOptions)
-    : await callAnthropic(sanitizedOptions)
+  let response: LLMResponse
+  try {
+    response = provider === 'openai'
+      ? await callOpenAI(sanitizedOptions)
+      : await callAnthropic(sanitizedOptions)
+  } catch (error) {
+    // Re-throw abort errors without wrapping
+    if (options.abortSignal?.aborted) {
+      throw new DOMException('LLM call aborted', 'AbortError')
+    }
+    throw error
+  }
 
   await recordLlmUsageEvent({
     provider,

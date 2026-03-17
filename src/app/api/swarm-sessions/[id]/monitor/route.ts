@@ -44,6 +44,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
           outputTokens: true,
           cacheCreationTokens: true,
           cacheReadTokens: true,
+          requestKind: true,
           createdAt: true,
         },
       }),
@@ -70,11 +71,12 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     for (const agent of session.agents) {
       const rows = usageEvents.filter((event) => event.agentId === agent.id);
       usageByAgentId.set(agent.id, summarizeUsageTotals(rows));
-      // Find last call's input tokens (current context fill level)
-      // Total context = inputTokens + cacheCreationTokens + cacheReadTokens
-      // (all three are part of the prompt sent to the model)
-      if (rows.length > 0) {
-        const latest = rows.reduce((a, b) => a.createdAt > b.createdAt ? a : b);
+      // Find last agent_loop call's context tokens (reflects actual working context).
+      // Attention manager calls use a much smaller context and would misrepresent the fill level.
+      const agentLoopRows = rows.filter((event) => event.requestKind === 'agent_loop');
+      const contextRows = agentLoopRows.length > 0 ? agentLoopRows : rows;
+      if (contextRows.length > 0) {
+        const latest = contextRows.reduce((a, b) => a.createdAt > b.createdAt ? a : b);
         lastCallByAgentId.set(agent.id, latest.inputTokens + (latest.cacheCreationTokens ?? 0) + (latest.cacheReadTokens ?? 0));
       }
     }

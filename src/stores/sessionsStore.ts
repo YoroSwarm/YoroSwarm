@@ -56,7 +56,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     unreadCount: 0,
     createdAt: session.created_at,
     updatedAt: session.updated_at,
-    status: session.status === 'archived' ? 'archived' : session.status === 'PAUSED' ? 'paused' : 'active',
+    status: session.status === 'archived' ? 'archived' : ['PAUSED', 'paused'].includes(session.status) ? 'paused' : 'active',
   };
 }
 

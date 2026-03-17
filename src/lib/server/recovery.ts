@@ -56,8 +56,12 @@ export async function recoverStuckState(): Promise<{
   let recoveredTasks = 0
 
   // 1. Find agents stuck in BUSY status (server died while they were processing)
+  // Only recover agents from ACTIVE sessions, keep PAUSED sessions as-is
   const stuckAgents = await prisma.agent.findMany({
-    where: { status: 'BUSY' },
+    where: {
+      status: 'BUSY',
+      swarmSession: { status: 'ACTIVE' }
+    },
     select: { id: true, name: true, swarmSessionId: true },
   })
 
@@ -87,9 +91,11 @@ export async function recoverStuckState(): Promise<{
   }
 
   // 2. Find tasks stuck in IN_PROGRESS or ASSIGNED (were being processed when server died)
+  // Only recover tasks from ACTIVE sessions, keep PAUSED sessions as-is
   const stuckTasks = await prisma.teamLeadTask.findMany({
     where: {
       status: { in: ['IN_PROGRESS', 'ASSIGNED'] },
+      swarmSession: { status: 'ACTIVE' }
     },
     select: { id: true, title: true, status: true, swarmSessionId: true, assigneeId: true },
   })

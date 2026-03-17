@@ -304,6 +304,20 @@ export function useMessages(options: UseMessagesOptions) {
         }
       }
 
+      // Fix orphaned tool_calls (server crashed before tool_result was saved)
+      for (const msg of activityMessages) {
+        if (msg.metadata?.activityType === 'tool_call' && msg.toolCalls?.[0]?.status === 'calling') {
+          msg.toolCalls[0].status = 'error';
+          msg.toolCalls[0].resultSummary = '工具调用中断（服务器重启）';
+          msg.metadata = {
+            ...msg.metadata,
+            hasResult: true,
+            isError: true,
+            orphaned: true,
+          };
+        }
+      }
+
       // Merge external messages and activity messages, sort by createdAt
       setMessages(dedupeMessages([...externalMessages, ...activityMessages]));
 

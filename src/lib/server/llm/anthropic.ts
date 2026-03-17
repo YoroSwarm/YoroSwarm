@@ -44,7 +44,12 @@ export async function callAnthropic(options: LLMCallOptions): Promise<LLMRespons
     params.tools = tools
   }
 
-  const response = await anthropic.messages.create(params)
+  const requestOptions: Anthropic.RequestOptions = {}
+  if (options.abortSignal) {
+    requestOptions.signal = options.abortSignal
+  }
+
+  const response = await anthropic.messages.create(params, requestOptions)
   return convertFromAnthropicResponse(response)
 }
 

@@ -131,6 +131,7 @@ const leadProcessors = new Map<string, {
   processUserMessage: (content: string, attachments?: unknown[]) => Promise<void>
   processTeammateMessage: (teammateId: string, content: string, taskId?: string) => Promise<void>
   processTaskCompletion: (teammateId: string, taskId: string, report: string) => Promise<void>
+  abortController: AbortController
 }>()
 
 interface LeadProcessorInput {
@@ -161,6 +162,9 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
     leadProcessors.delete(key)
   }
 
+  // 创建中止控制器用于强制停止
+  const abortController = new AbortController()
+
   // 初始化认知引擎
   await initCognitiveEngine({
     agentId: leadAgentId,
@@ -173,7 +177,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
   })
 
   // 启动注意力循环
-  const cleanup = await startAttentionLoop(swarmSessionId, leadAgentId, {
+  const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
     llmConfig: {
       systemPrompt: LEAD_SYSTEM_PROMPT,
       agentName: 'Team Lead',
@@ -181,14 +185,18 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
       executeTool: buildLeadToolExecutor(input),
     },
     onProcessMessages: async (messages, context) => {
-      await processInboxMessages(input, messages, context)
+      await processInboxMessages(input, messages, context, abortController.signal)
     },
     checkIntervalMs: 500,
   })
 
   // 创建处理器接口
   const processor = {
-    cleanup,
+    cleanup: () => {
+      abortController.abort()
+      cleanupAttentionLoop()
+    },
+    abortController,
 
     /**
      * 处理用户消息 - 投递到收件箱
@@ -282,7 +290,8 @@ export function cleanupCognitiveLead(swarmSessionId: string, leadAgentId: string
 async function processInboxMessages(
   input: LeadProcessorInput,
   messages: InboxMessage[],
-  context: CurrentWorkContext
+  context: CurrentWorkContext,
+  abortSignal?: AbortSignal
 ): Promise<void> {
   const { swarmSessionId, userId, leadAgentId } = input
 
@@ -382,6 +391,7 @@ ${messageSummary}
     executeTool: buildLeadToolExecutor(input),
     contextMessages: llmMessages,
     maxIterations: dynamicMaxIterations,
+    abortSignal,
   })
 
   console.log(

@@ -58,6 +58,7 @@ export interface LLMCallOptions {
   model?: string
   maxTokens?: number
   temperature?: number
+  abortSignal?: AbortSignal
   usageContext?: {
     swarmSessionId?: string
     agentId?: string

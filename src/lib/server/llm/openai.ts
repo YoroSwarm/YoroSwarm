@@ -44,7 +44,12 @@ export async function callOpenAI(options: LLMCallOptions): Promise<LLMResponse> 
     params.tool_choice = 'auto'
   }
 
-  const response = await openai.chat.completions.create(params)
+  const requestOptions: OpenAI.RequestOptions = {}
+  if (options.abortSignal) {
+    requestOptions.signal = options.abortSignal
+  }
+
+  const response = await openai.chat.completions.create(params, requestOptions)
   return convertFromOpenAIResponse(response, model)
 }
 

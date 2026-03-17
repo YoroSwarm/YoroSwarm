@@ -115,6 +115,7 @@ interface TeammateTaskRuntime {
   isTaskActive: boolean
   isLoopRunning: boolean
   activeTurnPromise: Promise<void> | null
+  abortController: AbortController | null
 }
 
 function isNonBlockingWorkMessage(message: InboxMessage): boolean {
@@ -143,6 +144,7 @@ async function ensureCognitiveTeammateProcessor(
     isTaskActive: false,
     isLoopRunning: false,
     activeTurnPromise: null,
+    abortController: null,
   }
 
   await initCognitiveEngine({
@@ -156,6 +158,12 @@ async function ensureCognitiveTeammateProcessor(
   })
 
   const runSerializedTaskTurn = async (messages: InboxMessage[], context: CurrentWorkContext) => {
+    // Check if aborted before starting
+    if (taskRuntime.abortController?.signal.aborted || !taskRuntime.isTaskActive) {
+      console.log(`[CognitiveTeammateRunner][${teammateId}] Turn aborted before start`)
+      return
+    }
+
     while (taskRuntime.activeTurnPromise) {
       await taskRuntime.activeTurnPromise
       if (taskRuntime.isTaskCompleted || !taskRuntime.isTaskActive) {
@@ -212,7 +220,12 @@ async function ensureCognitiveTeammateProcessor(
 
   const processor: TeammateProcessor = {
     cleanup: () => {
+      // Abort any ongoing work immediately
+      if (taskRuntime.abortController) {
+        taskRuntime.abortController.abort()
+      }
       taskRuntime.isTaskActive = false
+      taskRuntime.isTaskCompleted = true
       cleanupAttentionLoop()
     },
     isTaskActive: () => taskRuntime.isTaskActive && !taskRuntime.isTaskCompleted,
@@ -221,6 +234,8 @@ async function ensureCognitiveTeammateProcessor(
       taskRuntime.currentTaskId = taskId
       taskRuntime.isTaskCompleted = false
       taskRuntime.isTaskActive = true
+      // Create new abort controller for this task
+      taskRuntime.abortController = new AbortController()
     },
     markTaskCompleted: () => {
       taskRuntime.isTaskCompleted = true
@@ -228,6 +243,7 @@ async function ensureCognitiveTeammateProcessor(
       taskRuntime.isLoopRunning = false
       taskRuntime.activeTurnPromise = null
       taskRuntime.currentTaskId = null
+      taskRuntime.abortController = null
     },
     nudgeTaskExecution: async () => {
       if (taskRuntime.activeTurnPromise || !taskRuntime.isTaskActive || !taskRuntime.currentTaskId) {
@@ -277,6 +293,71 @@ export async function initCognitiveTeammate(
   leadAgentId: string
 ): Promise<void> {
   await ensureCognitiveTeammateProcessor(swarmSessionId, teammateId, leadAgentId)
+}
+
+/**
+ * 恢复 Teammate 的任务执行状态（用于会话暂停后恢复）
+ *
+ * 与 runCognitiveTeammateLoop 不同，此函数：
+ * - 不投递初始任务消息（避免重复）
+ * - 不修改任务 DB 状态（保持 IN_PROGRESS）
+ * - 依赖已恢复的 inbox 消息和 heartbeat 继续执行
+ */
+export async function resumeTeammateTask(
+  swarmSessionId: string,
+  teammateId: string,
+  taskId: string,
+  leadAgentId: string
+): Promise<void> {
+  const [teammate, task] = await Promise.all([
+    prisma.agent.findUnique({ where: { id: teammateId } }),
+    prisma.teamLeadTask.findUnique({ where: { id: taskId }, select: { id: true, title: true } }),
+  ])
+  if (!teammate) {
+    console.error(`[CognitiveTeammateRunner] Teammate not found for resume: ${teammateId}`)
+    return
+  }
+
+  const processor = await ensureCognitiveTeammateProcessor(swarmSessionId, teammateId, leadAgentId)
+
+  // Restore task runtime state
+  await processor.assignTask(taskId)
+
+  // Set agent to BUSY
+  await prisma.agent.update({ where: { id: teammateId }, data: { status: 'BUSY' } })
+
+  const taskInfo = { id: taskId, title: task?.title || '恢复任务' }
+  publishStatusUpdate(swarmSessionId, teammate, taskInfo, 'busy')
+
+  // Deliver a lightweight resume nudge so the attention loop has something to process
+  await deliverMessage(swarmSessionId, teammateId, {
+    source: 'system',
+    senderId: 'system',
+    senderName: '系统恢复',
+    type: 'system_alert',
+    content: `[会话恢复] 请继续执行你的当前任务「${taskInfo.title}」。检查之前的进度并继续工作。`,
+    metadata: { taskId, sessionResumed: true },
+    swarmSessionId,
+    agentId: teammateId,
+  })
+
+  // Start heartbeat for continued task nudging
+  const heartbeat = setInterval(() => {
+    if (!processor.isTaskActive()) {
+      clearInterval(heartbeat)
+      return
+    }
+    processor.nudgeTaskExecution().catch(error => {
+      console.error(`[CognitiveTeammateRunner] Failed to continue resumed task ${taskId}:`, error)
+    })
+  }, 1500)
+
+  // Wait for task completion in the background (fire-and-forget)
+  void (async () => {
+    await waitForTaskCompletion(() => !processor.isTaskActive(), 100)
+    clearInterval(heartbeat)
+    console.log(`[CognitiveTeammateRunner] Resumed task completed for ${teammate.name}`)
+  })()
 }
 
 /**
@@ -464,6 +545,7 @@ async function processTeammateMessages(
     contextMessages,
     maxIterations: 20,
     stopOnSuccessfulTools: ['report_task_completion'],
+    abortSignal: taskRuntime.abortController?.signal,
   })
 
   console.log(

@@ -41,6 +41,8 @@ export type {
 export {
   initCognitiveEngine,
   getCognitiveRuntime,
+  destroyRuntime,
+  resetProcessingMessages,
   deliverMessage,
   createSnapshot,
   resumeSnapshot,

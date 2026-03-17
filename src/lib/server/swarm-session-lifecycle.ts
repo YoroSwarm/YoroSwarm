@@ -11,6 +11,7 @@ import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import {
   getCognitiveRuntime,
+  destroyRuntime,
 } from './cognitive-inbox'
 import {
   initCognitiveLead,
@@ -20,8 +21,10 @@ import {
 import {
   getTeammateProcessor,
   cleanupCognitiveTeammate,
+  resumeTeammateTask,
 } from './cognitive-teammate-runner'
 import { persistInboxState, restoreInboxState } from './cognitive-inbox/cognitive-persistence'
+import { transitionState } from './cognitive-inbox/cognitive-engine'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pause
@@ -54,6 +57,11 @@ export async function pauseSwarmSession(swarmSessionId: string): Promise<{
         console.error(`[Lifecycle] Failed to persist inbox for agent ${agent.id}:`, err)
       }
     }
+  }
+
+  // 1.5. Destroy runtimes to prevent stale state on resume
+  for (const agent of session.agents) {
+    destroyRuntime(swarmSessionId, agent.id)
   }
 
   // 2. Cleanup Lead processor (stops attention loop)
@@ -177,10 +185,64 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
       // Restore Lead's inbox state from persistence
       const leadRuntime = getCognitiveRuntime(swarmSessionId, leadAgentId)
       if (leadRuntime) {
-        await restoreInboxState(leadRuntime)
+        const restoredCount = await restoreInboxState(leadRuntime)
+
+        // If runtime is in RECOVERING state from persisted context, transition to IDLE
+        // so the attention loop can process restored messages
+        if (leadRuntime.currentState === 'RECOVERING') {
+          transitionState(
+            swarmSessionId,
+            leadAgentId,
+            'IDLE',
+            `Session resumed: ${restoredCount} messages restored, ready to process`
+          )
+          console.log(
+            `[Lifecycle] Session ${swarmSessionId} transitioned from RECOVERING to IDLE (${restoredCount} messages restored)`
+          )
+        }
       }
     } catch (err) {
       console.error(`[Lifecycle] Failed to resume Lead ${leadAgentId}:`, err)
+    }
+  }
+
+  // 3.5. Re-initialize teammate processors and restore their state
+  const resumedTeammateTaskIds: string[] = []
+  for (const agent of session.agents) {
+    if (agent.id === leadAgentId) continue
+
+    try {
+      // Find IN_PROGRESS tasks assigned to this teammate
+      const activeTask = session.tasks.find(
+        t => t.assigneeId === agent.id && t.status === 'IN_PROGRESS'
+      )
+
+      if (activeTask) {
+        // resumeTeammateTask creates the processor (and runtime via initCognitiveEngine)
+        await resumeTeammateTask(swarmSessionId, agent.id, activeTask.id, leadAgentId)
+        resumedTeammateTaskIds.push(activeTask.id)
+        resumedAgents++
+
+        // Restore teammate's inbox state now that runtime exists
+        const teammateRuntime = getCognitiveRuntime(swarmSessionId, agent.id)
+        if (teammateRuntime) {
+          await restoreInboxState(teammateRuntime)
+          if (teammateRuntime.currentState === 'RECOVERING') {
+            transitionState(
+              swarmSessionId,
+              agent.id,
+              'IDLE',
+              'Teammate resumed from pause'
+            )
+          }
+        }
+
+        console.log(
+          `[Lifecycle] Resumed teammate ${agent.name} with task "${activeTask.title}"`
+        )
+      }
+    } catch (err) {
+      console.error(`[Lifecycle] Failed to resume teammate ${agent.id}:`, err)
     }
   }
 
@@ -227,11 +289,17 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
       .join('\n')
 
     const inProgressList = session.tasks
-      .filter(t => t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED')
+      .filter(t => (t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED') && !resumedTeammateTaskIds.includes(t.id))
       .map(t => `- [${t.status}] ${t.title}`)
       .join('\n')
 
+    const autoResumedList = session.tasks
+      .filter(t => resumedTeammateTaskIds.includes(t.id))
+      .map(t => `- [已自动恢复] ${t.title}`)
+      .join('\n')
+
     let content = `[会话恢复] 此会话从暂停状态恢复。`
+    if (autoResumedList) content += `\n\n已自动恢复执行的任务：\n${autoResumedList}`
     if (pendingList) content += `\n\n未分配的待处理任务：\n${pendingList}`
     if (inProgressList) content += `\n\n执行中的任务（可能需要重新分配）：\n${inProgressList}`
     content += `\n\n请检查任务状态并继续工作。`
@@ -317,7 +385,21 @@ export async function autoResumeActiveSessions(): Promise<{
       // Restore inbox state
       const leadRuntime = getCognitiveRuntime(session.id, session.leadAgentId)
       if (leadRuntime) {
-        await restoreInboxState(leadRuntime)
+        const restoredCount = await restoreInboxState(leadRuntime)
+
+        // If runtime is in RECOVERING state from persisted context, transition to IDLE
+        // so the attention loop can process restored messages
+        if (leadRuntime.currentState === 'RECOVERING') {
+          transitionState(
+            session.id,
+            session.leadAgentId,
+            'IDLE',
+            `Session auto-resumed: ${restoredCount} messages restored, ready to process`
+          )
+          console.log(
+            `[Lifecycle] Session ${session.id} transitioned from RECOVERING to IDLE (${restoredCount} messages restored)`
+          )
+        }
       }
 
       // Check for pending tasks and inject reminder
@@ -375,50 +457,58 @@ export function registerGracefulShutdown(): void {
   if (shutdownRegistered) return
   shutdownRegistered = true
 
-  const gracefulShutdown = async (signal: string) => {
+  const gracefulShutdown = (signal: string) => {
     console.log(`[Lifecycle] Received ${signal}, performing graceful shutdown...`)
 
-    try {
-      // Find all active sessions
-      const activeSessions = await prisma.swarmSession.findMany({
-        where: { status: 'ACTIVE' },
-        include: { agents: true },
-      })
+    // Use immediate execution to ensure synchronous cleanup starts
+    void (async () => {
+      try {
+        // Find all active sessions
+        const activeSessions = await prisma.swarmSession.findMany({
+          where: { status: 'ACTIVE' },
+          include: { agents: true },
+        })
 
-      for (const session of activeSessions) {
-        try {
-          // Persist inbox state for all agents
-          for (const agent of session.agents) {
-            const runtime = getCognitiveRuntime(session.id, agent.id)
-            if (runtime) {
-              await persistInboxState(runtime)
+        // First, immediately abort all running processors (synchronous)
+        for (const session of activeSessions) {
+          try {
+            if (session.leadAgentId) {
+              cleanupCognitiveLead(session.id, session.leadAgentId)
             }
-          }
-
-          // Cleanup processors (stops loops)
-          if (session.leadAgentId) {
-            cleanupCognitiveLead(session.id, session.leadAgentId)
-          }
-          for (const agent of session.agents) {
-            if (agent.id === session.leadAgentId) continue
-            const processor = getTeammateProcessor(session.id, agent.id)
-            if (processor) {
-              cleanupCognitiveTeammate(session.id, agent.id)
+            for (const agent of session.agents) {
+              if (agent.id === session.leadAgentId) continue
+              const processor = getTeammateProcessor(session.id, agent.id)
+              if (processor) {
+                cleanupCognitiveTeammate(session.id, agent.id)
+              }
             }
+          } catch (err) {
+            console.error(`[Lifecycle] Error aborting session ${session.id}:`, err)
           }
-
-          // Keep status as ACTIVE so auto-resume picks it up
-          console.log(`[Lifecycle] Gracefully stopped session ${session.id}`)
-        } catch (err) {
-          console.error(`[Lifecycle] Error shutting down session ${session.id}:`, err)
         }
-      }
-    } catch (err) {
-      console.error(`[Lifecycle] Error during graceful shutdown:`, err)
-    }
 
-    console.log(`[Lifecycle] Graceful shutdown complete`)
-    process.exit(0)
+        // Then persist inbox states and destroy runtimes
+        for (const session of activeSessions) {
+          try {
+            for (const agent of session.agents) {
+              const runtime = getCognitiveRuntime(session.id, agent.id)
+              if (runtime) {
+                await persistInboxState(runtime)
+              }
+              destroyRuntime(session.id, agent.id)
+            }
+            console.log(`[Lifecycle] Gracefully stopped session ${session.id}`)
+          } catch (err) {
+            console.error(`[Lifecycle] Error persisting session ${session.id}:`, err)
+          }
+        }
+      } catch (err) {
+        console.error(`[Lifecycle] Error during graceful shutdown:`, err)
+      }
+
+      console.log(`[Lifecycle] Graceful shutdown complete`)
+      process.exit(0)
+    })()
   }
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'))

@@ -24,6 +24,7 @@ export interface AgentLoopOptions {
   maxIterations?: number
   onThinking?: (text: string) => void
   stopOnSuccessfulTools?: string[]
+  abortSignal?: AbortSignal
   shouldStopAfterToolCall?: (input: {
     toolName: string
     result: string
@@ -52,7 +53,18 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     maxIterations = MAX_ITERATIONS,
     stopOnSuccessfulTools = [],
     shouldStopAfterToolCall,
+    abortSignal,
   } = options
+
+  // Check if aborted before starting
+  if (abortSignal?.aborted) {
+    return {
+      finalText: '任务已暂停',
+      toolCallsMade: 0,
+      iterationsUsed: 0,
+      contextEntriesAdded: [],
+    }
+  }
 
   const messages: LLMMessage[] = [...options.contextMessages]
   let totalToolCalls = 0
@@ -78,6 +90,42 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   )
 
   for (let iteration = 0; iteration < maxIterations; iteration++) {
+    // Check if aborted before each iteration
+    if (abortSignal?.aborted) {
+      // Record interruption marker if thinking content was persisted in a previous iteration
+      if (thinkingContent.length > 0) {
+        await appendAgentContextEntry({
+          swarmSessionId,
+          agentId,
+          sourceType: 'system',
+          entryType: 'error',
+          content: '[会话暂停] 上方的思考内容因会话暂停而未被执行。恢复后请重新评估当前状况。',
+        })
+      }
+
+      // Broadcast thinking end
+      publishRealtimeMessage(
+        {
+          type: 'agent_thinking',
+          payload: {
+            agent_id: agentId,
+            agent_name: agentName,
+            swarm_session_id: swarmSessionId,
+            status: 'end',
+            timestamp: new Date().toISOString(),
+          },
+        },
+        { sessionId: swarmSessionId }
+      )
+
+      return {
+        finalText: '任务已暂停',
+        toolCallsMade: totalToolCalls,
+        iterationsUsed: iteration,
+        contextEntriesAdded,
+      }
+    }
+
     // Broadcast thinking start
     publishRealtimeMessage(
       {
@@ -100,6 +148,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages,
         tools: tools.length > 0 ? tools : undefined,
         model,
+        abortSignal,
         usageContext: {
           swarmSessionId,
           agentId,
@@ -107,6 +156,32 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         },
       })
     } catch (error) {
+      // Handle abort gracefully — not an error, just a pause
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        console.log(`[AgentLoop][${agentName}] LLM call aborted (session paused)`)
+
+        publishRealtimeMessage(
+          {
+            type: 'agent_thinking',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              status: 'end',
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
+
+        return {
+          finalText: '任务已暂停',
+          toolCallsMade: totalToolCalls,
+          iterationsUsed: iteration,
+          contextEntriesAdded,
+        }
+      }
+
       const errMsg = error instanceof Error ? error.message : 'Unknown LLM error'
       console.error(`[AgentLoop][${agentName}] LLM call failed at iteration ${iteration}:`, errMsg)
 
@@ -188,6 +263,26 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       const toolResults: ToolResultBlock[] = []
 
       for (const toolUse of toolUseBlocks) {
+        // Check if aborted before each tool execution
+        if (abortSignal?.aborted) {
+          // Record interruption marker so resumed context knows tools were not executed
+          await appendAgentContextEntry({
+            swarmSessionId,
+            agentId,
+            sourceType: 'system',
+            entryType: 'error',
+            content: '[会话暂停] 工具调用因会话暂停而未被执行。恢复后请重新评估当前状况。',
+          })
+
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: '工具执行被中断：会话已暂停',
+            is_error: true,
+          })
+          break
+        }
+
         if (singleUseToolsPerRun.has(toolUse.name) && usedSingleUseTools.has(toolUse.name)) {
           console.warn(`[AgentLoop][${agentName}] Skipping repeated single-use tool: ${toolUse.name}`)
           toolCalls.push({

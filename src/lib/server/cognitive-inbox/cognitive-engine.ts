@@ -113,6 +113,56 @@ export function getCognitiveRuntime(
 }
 
 /**
+ * 销毁Agent的认知运行时（用于暂停/清理场景）
+ *
+ * 从内存中移除 runtime，使下次 initCognitiveEngine 创建全新实例。
+ * 调用前应先持久化 inbox 状态。
+ */
+export function destroyRuntime(
+  swarmSessionId: string,
+  agentId: string
+): void {
+  const key = `${swarmSessionId}:${agentId}`
+  runtimes.delete(key)
+}
+
+/**
+ * 重置 runtime 中卡死的 processing 消息为 pending 状态
+ *
+ * 用于恢复场景：暂停时正在处理的消息可能保持 processing 状态，
+ * 需要在恢复时重置为 pending 以便重新处理。
+ */
+export function resetProcessingMessages(
+  swarmSessionId: string,
+  agentId: string
+): number {
+  const runtime = getCognitiveRuntime(swarmSessionId, agentId)
+  if (!runtime) return 0
+
+  let resetCount = 0
+  for (const message of runtime.inbox.pending) {
+    if (message.status === 'processing') {
+      message.status = 'pending'
+      resetCount++
+    }
+  }
+
+  // 清除悬空的 processing 引用
+  runtime.inbox.processing = undefined
+
+  // 重置悬空的 currentExecution
+  if (runtime.currentExecution?.status === 'active') {
+    runtime.currentExecution.status = 'interrupted'
+    runtime.currentExecution.interruptedAt = new Date()
+    runtime.currentExecution.updatedAt = new Date()
+    runtime.currentExecution.lastInterruptReason = 'Session paused'
+    runtime.currentExecution.interruptionCount += 1
+  }
+
+  return resetCount
+}
+
+/**
  * 投递消息到Agent的收件箱
  * 
  * 这是所有消息进入Agent的唯一入口
