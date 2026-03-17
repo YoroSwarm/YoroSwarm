@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -18,6 +19,7 @@ import { useSessions } from '@/hooks/use-sessions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Switch } from '@/components/ui/switch';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -32,6 +34,7 @@ export function Sidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentSessionId = searchParams.get('sessionId');
+  const [showArchived, setShowArchived] = useState(false);
 
   const {
     sessions,
@@ -43,6 +46,32 @@ export function Sidebar() {
     pauseSession,
     resumeSession,
   } = useSessions();
+
+  // 分离已归档和未归档会话
+  const { activeSessions, archivedSessions } = useMemo(() => {
+    const active: typeof sessions = [];
+    const archived: typeof sessions = [];
+    for (const session of sessions) {
+      if (session.status === 'archived') {
+        archived.push(session);
+      } else {
+        active.push(session);
+      }
+    }
+    return { activeSessions: active, archivedSessions: archived };
+  }, [sessions]);
+
+  // 根据开关状态决定显示的会话
+  const displayedSessions = showArchived ? archivedSessions : activeSessions;
+
+  // 当当前打开的会话状态变化时，同步更新开关
+  useEffect(() => {
+    if (!currentSessionId) return;
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
+    if (currentSession) {
+      setShowArchived(currentSession.status === 'archived');
+    }
+  }, [currentSessionId, sessions]);
 
   const handleCreateSession = async () => {
     try {
@@ -118,16 +147,33 @@ export function Sidebar() {
           </Button>
         </div>
 
+        {/* 3. Archived Toggle Switch */}
+        <div className="px-3 py-2 shrink-0">
+          <div className="flex items-center justify-between px-3 py-2">
+            <span className="text-sm font-medium text-muted-foreground">
+              已归档会话
+            </span>
+            <Switch
+              size="sm"
+              checked={showArchived}
+              onCheckedChange={setShowArchived}
+            />
+          </div>
+        </div>
+
         {/* 4. Chat List */}
         <ScrollArea className="flex-1 [&>[data-slot=scroll-area-viewport]>div]:block!">
-          <div className="space-y-1 p-2">
-            {sessions.length === 0 && !isLoading && (
+          <div
+            key={showArchived ? 'archived' : 'active'}
+            className="space-y-1 p-2 animate-in fade-in slide-in-from-left-2 duration-300"
+          >
+            {displayedSessions.length === 0 && !isLoading && (
                <div className="text-center text-muted-foreground text-sm py-4">
-                 暂无会话
+                 {showArchived ? '暂无已归档会话' : '暂无会话'}
                </div>
             )}
-            
-            {sessions.map((session) => (
+
+            {displayedSessions.map((session) => (
               <div
                 key={session.id}
                 onClick={() => router.push(`/chat?sessionId=${session.id}`)}
@@ -171,11 +217,6 @@ export function Sidebar() {
                       <DropdownMenuItem onClick={(e) => handlePauseSession(e, session.id)}>
                         <Pause className="w-4 h-4 mr-2" />
                         暂停
-                      </DropdownMenuItem>
-                    ) : session.status === 'archived' ? (
-                      <DropdownMenuItem onClick={(e) => handleResumeSession(e, session.id)}>
-                        <Play className="w-4 h-4 mr-2" />
-                        恢复
                       </DropdownMenuItem>
                     ) : null}
                     {session.status === 'archived' ? (

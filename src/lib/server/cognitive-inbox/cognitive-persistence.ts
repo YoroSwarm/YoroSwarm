@@ -92,19 +92,28 @@ export async function persistExecutionEvent(
   execution: AgentExecution,
   extraMetadata?: Record<string, unknown>
 ): Promise<void> {
-  await appendAgentContextEntry({
-    swarmSessionId: runtime.swarmSessionId,
-    agentId: runtime.agentId,
-    sourceType: 'runtime',
-    sourceId: execution.id,
-    entryType: 'runtime_execution',
-    content: `execution:${lifecycle}:${execution.description}`,
-    metadata: {
-      lifecycle,
-      execution: serializeExecution(execution),
-      ...extraMetadata,
-    },
-  })
+  try {
+    await appendAgentContextEntry({
+      swarmSessionId: runtime.swarmSessionId,
+      agentId: runtime.agentId,
+      sourceType: 'runtime',
+      sourceId: execution.id,
+      entryType: 'runtime_execution',
+      content: `execution:${lifecycle}:${execution.description}`,
+      metadata: {
+        lifecycle,
+        execution: serializeExecution(execution),
+        ...extraMetadata,
+      },
+    })
+  } catch (error) {
+    // 忽略会话已删除的错误
+    if (error instanceof Error && error.message.includes('deleted session')) {
+      console.log(`[CognitiveEngine] Skipping execution event persistence for deleted session ${runtime.swarmSessionId}`)
+      return
+    }
+    throw error
+  }
 }
 
 export async function persistSnapshotEvent(
@@ -112,18 +121,27 @@ export async function persistSnapshotEvent(
   lifecycle: 'created' | 'resumed',
   snapshot: ContextSnapshot
 ): Promise<void> {
-  await appendAgentContextEntry({
-    swarmSessionId: runtime.swarmSessionId,
-    agentId: runtime.agentId,
-    sourceType: 'runtime',
-    sourceId: snapshot.id,
-    entryType: 'runtime_snapshot',
-    content: `snapshot:${lifecycle}:${snapshot.reason}`,
-    metadata: {
-      lifecycle,
-      snapshot: serializeSnapshot(snapshot),
-    },
-  })
+  try {
+    await appendAgentContextEntry({
+      swarmSessionId: runtime.swarmSessionId,
+      agentId: runtime.agentId,
+      sourceType: 'runtime',
+      sourceId: snapshot.id,
+      entryType: 'runtime_snapshot',
+      content: `snapshot:${lifecycle}:${snapshot.reason}`,
+      metadata: {
+        lifecycle,
+        snapshot: serializeSnapshot(snapshot),
+      },
+    })
+  } catch (error) {
+    // 忽略会话已删除的错误
+    if (error instanceof Error && error.message.includes('deleted session')) {
+      console.log(`[CognitiveEngine] Skipping snapshot event persistence for deleted session ${runtime.swarmSessionId}`)
+      return
+    }
+    throw error
+  }
 }
 
 // ---------------------------------------------------------------------------

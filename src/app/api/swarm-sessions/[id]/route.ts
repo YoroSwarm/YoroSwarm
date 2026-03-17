@@ -4,6 +4,15 @@ import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse 
 import { requireTokenPayload } from '@/lib/server/swarm';
 import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
 import { deleteSessionWorkspace } from '@/lib/server/session-workspace';
+import {
+  cleanupCognitiveLead,
+  getCognitiveLeadProcessor,
+} from '@/lib/server/cognitive-lead-runner';
+import {
+  getTeammateProcessor,
+  cleanupCognitiveTeammate,
+} from '@/lib/server/cognitive-teammate-runner';
+import { destroyRuntime } from '@/lib/server/cognitive-inbox';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -94,13 +103,41 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       return notFoundResponse('Swarm session not found');
     }
 
-    // 删除会话工作区文件
+    const leadAgentId = existing.leadAgentId;
+
+    // 1. 清理正在运行的 Lead 处理器（如果存在）
+    if (leadAgentId) {
+      const leadProcessor = getCognitiveLeadProcessor(id, leadAgentId);
+      if (leadProcessor) {
+        cleanupCognitiveLead(id, leadAgentId);
+        console.log(`[DeleteSession] Cleaned up lead processor for session ${id}`);
+      }
+    }
+
+    // 2. 清理所有 Teammate 处理器
+    for (const agent of existing.agents) {
+      if (agent.id === leadAgentId) continue;
+      const processor = getTeammateProcessor(id, agent.id);
+      if (processor) {
+        cleanupCognitiveTeammate(id, agent.id);
+        console.log(`[DeleteSession] Cleaned up teammate processor for agent ${agent.id}`);
+      }
+    }
+
+    // 3. 销毁所有运行时
+    for (const agent of existing.agents) {
+      destroyRuntime(id, agent.id);
+    }
+
+    // 4. 删除会话工作区文件
     await deleteSessionWorkspace(id);
 
+    // 5. 从数据库删除会话
     await prisma.swarmSession.delete({
       where: { id },
     });
 
+    console.log(`[DeleteSession] Session ${id} deleted successfully`);
     return successResponse({ deleted: true });
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

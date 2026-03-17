@@ -34,6 +34,17 @@ export async function appendAgentContextEntry(input: AppendAgentContextEntryInpu
 }
 
 async function appendAgentContextEntryInternal(input: AppendAgentContextEntryInput) {
+  // 检查会话是否存在（可能已被删除）
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: input.swarmSessionId },
+    select: { id: true },
+  })
+
+  if (!session) {
+    console.log(`[AgentContext] Skipping context entry for deleted session ${input.swarmSessionId}`)
+    return null
+  }
+
   const maxAttempts = 20
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {

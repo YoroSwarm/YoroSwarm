@@ -23,11 +23,17 @@ export async function recordLlmUsageEvent(input: {
     select: { userId: true },
   })
 
+  // 如果会话已被删除，跳过记录
+  if (!session) {
+    console.log(`[LLMUsage] Skipping usage recording for deleted session ${input.swarmSessionId}`)
+    return
+  }
+
   await prisma.llmUsageEvent.create({
     data: {
       swarmSessionId: input.swarmSessionId,
       agentId: input.agentId || null,
-      userId: session?.userId || null,
+      userId: session.userId,
       provider: input.provider,
       model: input.response.model,
       requestKind: input.requestKind || 'general',

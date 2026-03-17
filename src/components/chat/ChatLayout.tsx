@@ -343,20 +343,18 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               currentSession.status === 'paused' ? (
                 <button
                   onClick={() => resumeSession(resolvedSessionId)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 transition-all"
+                  className="flex items-center rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 transition-all"
                   title="恢复会话"
                 >
                   <Play className="h-4 w-4" />
-                  <span className="hidden sm:inline">恢复</span>
                 </button>
               ) : currentSession.status === 'active' ? (
                 <button
                   onClick={() => pauseSession(resolvedSessionId)}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950 border border-amber-200 dark:border-amber-800 transition-all"
+                  className="flex items-center rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950 border border-amber-200 dark:border-amber-800 transition-all"
                   title="暂停会话"
                 >
                   <Pause className="h-4 w-4" />
-                  <span className="hidden sm:inline">暂停</span>
                 </button>
               ) : null
             )}
