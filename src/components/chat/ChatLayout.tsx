@@ -15,6 +15,8 @@ import { useSidebar } from '@/stores';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
 import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play } from 'lucide-react';
+
+const RIGHT_PANEL_STORAGE_KEY = 'right_panel_open';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface ChatLayoutProps {
@@ -35,7 +37,9 @@ function formatPercent(value: number) {
 }
 
 export function ChatLayout({ className, initialSessionId = null }: ChatLayoutProps) {
-  const [isRightPanelOpen, setIsRightPanelOpen] = useState(true);
+  const [isRightPanelOpen, setIsRightPanelOpen] = useState(() =>
+    storage.get(RIGHT_PANEL_STORAGE_KEY, true)
+  );
   const [isCreatingSession, setIsCreatingSession] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSessionId);
@@ -54,6 +58,11 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     setSessions,
     updateSessionParticipant,
   } = useSessions();
+
+  // 保存右侧面板状态到 storage
+  useEffect(() => {
+    storage.set(RIGHT_PANEL_STORAGE_KEY, isRightPanelOpen);
+  }, [isRightPanelOpen]);
 
   useEffect(() => {
     if (initialSessionId) {

@@ -1,6 +1,8 @@
 'use client';
 
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
+import { storage } from '@/utils/storage';
 
 interface Notification {
   id: string;
@@ -64,17 +66,19 @@ const initialState: UIState = {
   breadcrumbs: [],
 };
 
-export const useUIStore = create<UIStore>()((set, get) => ({
-  ...initialState,
+export const useUIStore = create<UIStore>()(
+  persist(
+    (set, get) => ({
+      ...initialState,
 
-  // Sidebar actions
-  toggleSidebar: () => {
-    set((state) => ({ sidebarOpen: !state.sidebarOpen }));
-  },
+      // Sidebar actions
+      toggleSidebar: () => {
+        set((state) => ({ sidebarOpen: !state.sidebarOpen }));
+      },
 
-  setSidebarOpen: (open) => {
-    set({ sidebarOpen: open });
-  },
+      setSidebarOpen: (open) => {
+        set({ sidebarOpen: open });
+      },
 
   // Page title
   setPageTitle: (title) => {
@@ -149,7 +153,27 @@ export const useUIStore = create<UIStore>()((set, get) => ({
   setBreadcrumbs: (breadcrumbs) => {
     set({ breadcrumbs });
   },
-}));
+}),
+    {
+      name: 'swarm-ui-state',
+      storage: {
+        getItem: (name) => {
+          const value = storage.get(name);
+          return value ? { state: value } : null;
+        },
+        setItem: (name, value) => {
+          storage.set(name, value.state);
+        },
+        removeItem: (name) => {
+          storage.remove(name);
+        },
+      },
+      partialize: (state) => ({
+        sidebarOpen: state.sidebarOpen,
+      }),
+    }
+  )
+);
 
 // Convenience hooks
 export const useSidebar = () => {

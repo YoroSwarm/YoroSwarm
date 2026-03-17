@@ -26,15 +26,23 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { storage } from '@/utils/storage';
 
-
+const SHOW_ARCHIVED_STORAGE_KEY = 'show_archived';
 
 export function Sidebar() {
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentSessionId = searchParams.get('sessionId');
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(() =>
+    storage.get(SHOW_ARCHIVED_STORAGE_KEY, false)
+  );
+
+  // 保存归档状态到 storage
+  useEffect(() => {
+    storage.set(SHOW_ARCHIVED_STORAGE_KEY, showArchived);
+  }, [showArchived]);
 
   const {
     sessions,
