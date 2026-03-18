@@ -183,6 +183,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
 
   // 启动注意力循环
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
+    userId,
     llmConfig: {
       systemPrompt: LEAD_SYSTEM_PROMPT,
       agentName: 'Team Lead',
@@ -410,6 +411,7 @@ ${messageSummary}
     currentUserMessage,
     swarmSessionId,
     agentId: leadAgentId,
+    userId,
     preferences: preferences ? {
       agentsMd: preferences.agentsMd ?? undefined,
       soulMd: preferences.soulMd ?? undefined,

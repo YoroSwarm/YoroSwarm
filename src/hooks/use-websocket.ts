@@ -66,7 +66,9 @@ export type WebSocketMessageType =
   | 'subscribed'
   | 'unsubscribed'
   | 'message_received'
-  | 'ack';
+  | 'ack'
+  | 'tool_approval_request'
+  | 'tool_approval_update';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;

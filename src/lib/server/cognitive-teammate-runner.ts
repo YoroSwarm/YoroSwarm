@@ -104,6 +104,8 @@ interface TeammateProcessor {
   nudgeTaskExecution: () => Promise<void>
   sendMessageToTeammate: (senderId: string, content: string) => Promise<void>
   sendMessageFromLead: (content: string) => Promise<void>
+  setHeartbeat: (heartbeat: NodeJS.Timeout | null) => void
+  clearHeartbeat: () => void
 }
 
 // 存储每个Teammate的处理器
@@ -116,6 +118,8 @@ interface TeammateTaskRuntime {
   isLoopRunning: boolean
   activeTurnPromise: Promise<void> | null
   abortController: AbortController | null
+  heartbeat: NodeJS.Timeout | null
+  idleCheckInterval: NodeJS.Timeout | null
 }
 
 function isNonBlockingWorkMessage(message: InboxMessage): boolean {
@@ -133,10 +137,14 @@ async function ensureCognitiveTeammateProcessor(
     return existing
   }
 
-  const teammate = await prisma.agent.findUnique({ where: { id: teammateId } })
+  const [teammate, session] = await Promise.all([
+    prisma.agent.findUnique({ where: { id: teammateId } }),
+    prisma.swarmSession.findUnique({ where: { id: swarmSessionId }, select: { userId: true } }),
+  ])
   if (!teammate) {
     throw new Error(`Teammate not found: ${teammateId}`)
   }
+  const sessionUserId = session?.userId
 
   const taskRuntime: TeammateTaskRuntime = {
     currentTaskId: null,
@@ -145,6 +153,8 @@ async function ensureCognitiveTeammateProcessor(
     isLoopRunning: false,
     activeTurnPromise: null,
     abortController: null,
+    heartbeat: null,
+    idleCheckInterval: null,
   }
 
   await initCognitiveEngine({
@@ -156,6 +166,65 @@ async function ensureCognitiveTeammateProcessor(
       batchMaxCount: 2,
     },
   })
+
+  // 空闲检查机制：当 Teammate 处于空闲状态时，周期性检查是否有分配给自己的 ASSIGNED 任务
+  const startIdleCheck = () => {
+    // 清除已有的空闲检查
+    if (taskRuntime.idleCheckInterval) {
+      clearInterval(taskRuntime.idleCheckInterval)
+    }
+
+    const IDLE_CHECK_INTERVAL_MS = 5000 // 每 5 秒检查一次
+
+    taskRuntime.idleCheckInterval = setInterval(async () => {
+      // 如果当前有任务在执行，不检查
+      if (taskRuntime.isTaskActive) {
+        return
+      }
+
+      try {
+        // 首先检查会话是否已暂停
+        const session = await prisma.swarmSession.findUnique({
+          where: { id: swarmSessionId },
+          select: { status: true },
+        })
+
+        if (!session || session.status === 'PAUSED') {
+          // 会话已暂停，不启动新任务
+          return
+        }
+
+        const nextTask = await prisma.teamLeadTask.findFirst({
+          where: {
+            swarmSessionId,
+            assigneeId: teammateId,
+            status: 'ASSIGNED',
+          },
+          orderBy: { createdAt: 'asc' },
+        })
+
+        if (nextTask) {
+          console.log(
+            `[CognitiveTeammateRunner] ${teammateId} is idle, found ASSIGNED task: ${nextTask.title}, auto-starting`
+          )
+          // 停止空闲检查，准备执行任务
+          if (taskRuntime.idleCheckInterval) {
+            clearInterval(taskRuntime.idleCheckInterval)
+            taskRuntime.idleCheckInterval = null
+          }
+          // 自动启动下一个任务
+          await runCognitiveTeammateLoop(swarmSessionId, teammateId, nextTask.id)
+        }
+      } catch (error) {
+        console.error(`[CognitiveTeammateRunner] Idle check error for ${teammateId}:`, error)
+      }
+    }, IDLE_CHECK_INTERVAL_MS)
+
+    console.log(`[CognitiveTeammateRunner] Started idle check for ${teammateId}`)
+  }
+
+  // 启动空闲检查（初始状态）
+  startIdleCheck()
 
   const runSerializedTaskTurn = async (messages: InboxMessage[], context: CurrentWorkContext) => {
     // Check if aborted before starting
@@ -198,6 +267,7 @@ async function ensureCognitiveTeammateProcessor(
   }
 
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, teammateId, {
+    userId: sessionUserId,
     llmConfig: {
       systemPrompt: buildTeammateSystemPrompt(teammate, null),
       agentName: teammate.name,
@@ -208,7 +278,7 @@ async function ensureCognitiveTeammateProcessor(
         () => taskRuntime.currentTaskId,
         leadAgentId,
         teammate,
-        { userId: '' },
+        { userId: sessionUserId || '' },
         { getTeammateProcessor }
       ),
     },
@@ -230,6 +300,16 @@ async function ensureCognitiveTeammateProcessor(
       if (taskRuntime.abortController) {
         taskRuntime.abortController.abort()
       }
+      // Clear heartbeat timer to prevent memory leaks
+      if (taskRuntime.heartbeat) {
+        clearInterval(taskRuntime.heartbeat)
+        taskRuntime.heartbeat = null
+      }
+      // Clear idle check interval
+      if (taskRuntime.idleCheckInterval) {
+        clearInterval(taskRuntime.idleCheckInterval)
+        taskRuntime.idleCheckInterval = null
+      }
       taskRuntime.isTaskActive = false
       taskRuntime.isTaskCompleted = true
       cleanupAttentionLoop()
@@ -242,6 +322,11 @@ async function ensureCognitiveTeammateProcessor(
       taskRuntime.isTaskActive = true
       // Create new abort controller for this task
       taskRuntime.abortController = new AbortController()
+      // Stop idle check when task is assigned
+      if (taskRuntime.idleCheckInterval) {
+        clearInterval(taskRuntime.idleCheckInterval)
+        taskRuntime.idleCheckInterval = null
+      }
     },
     markTaskCompleted: () => {
       taskRuntime.isTaskCompleted = true
@@ -250,6 +335,13 @@ async function ensureCognitiveTeammateProcessor(
       taskRuntime.activeTurnPromise = null
       taskRuntime.currentTaskId = null
       taskRuntime.abortController = null
+      // Clear heartbeat when task is completed
+      if (taskRuntime.heartbeat) {
+        clearInterval(taskRuntime.heartbeat)
+        taskRuntime.heartbeat = null
+      }
+      // Start idle check when task is completed
+      startIdleCheck()
     },
     nudgeTaskExecution: async () => {
       if (taskRuntime.activeTurnPromise || !taskRuntime.isTaskActive || !taskRuntime.currentTaskId) {
@@ -286,6 +378,19 @@ async function ensureCognitiveTeammateProcessor(
         swarmSessionId,
         agentId: teammateId,
       })
+    },
+    setHeartbeat: (heartbeat: NodeJS.Timeout | null) => {
+      // Clear existing heartbeat before setting new one
+      if (taskRuntime.heartbeat) {
+        clearInterval(taskRuntime.heartbeat)
+      }
+      taskRuntime.heartbeat = heartbeat
+    },
+    clearHeartbeat: () => {
+      if (taskRuntime.heartbeat) {
+        clearInterval(taskRuntime.heartbeat)
+        taskRuntime.heartbeat = null
+      }
     },
   }
 
@@ -351,6 +456,7 @@ export async function resumeTeammateTask(
   const heartbeat = setInterval(() => {
     if (!processor.isTaskActive()) {
       clearInterval(heartbeat)
+      processor.setHeartbeat(null)
       return
     }
     processor.nudgeTaskExecution().catch(error => {
@@ -358,10 +464,13 @@ export async function resumeTeammateTask(
     })
   }, 1500)
 
+  // Store heartbeat in processor for cleanup
+  processor.setHeartbeat(heartbeat)
+
   // Wait for task completion in the background (fire-and-forget)
   void (async () => {
     await waitForTaskCompletion(() => !processor.isTaskActive(), 100)
-    clearInterval(heartbeat)
+    processor.clearHeartbeat()
     console.log(`[CognitiveTeammateRunner] Resumed task completed for ${teammate.name}`)
   })()
 }
@@ -379,6 +488,17 @@ export async function runCognitiveTeammateLoop(
   teammateId: string,
   taskId: string
 ): Promise<void> {
+  // 检查会话状态，如果已暂停则不执行
+  const sessionCheck = await prisma.swarmSession.findUnique({
+    where: { id: swarmSessionId },
+    select: { status: true },
+  })
+
+  if (!sessionCheck || sessionCheck.status === 'PAUSED') {
+    console.log(`[CognitiveTeammateRunner] Session ${swarmSessionId} is paused, skipping task execution`)
+    return
+  }
+
   // 获取基本信息
   const [teammate, task, session, leadAgent] = await Promise.all([
     prisma.agent.findUnique({ where: { id: teammateId } }),
@@ -432,6 +552,7 @@ export async function runCognitiveTeammateLoop(
   const heartbeat = setInterval(() => {
     if (!processor.isTaskActive()) {
       clearInterval(heartbeat)
+      processor.setHeartbeat(null)
       return
     }
 
@@ -440,9 +561,12 @@ export async function runCognitiveTeammateLoop(
     })
   }, 1500)
 
+  // Store heartbeat in processor for cleanup
+  processor.setHeartbeat(heartbeat)
+
   // 等待任务完成（轮询检查）
   await waitForTaskCompletion(() => !processor.isTaskActive(), 100)
-  clearInterval(heartbeat)
+  processor.clearHeartbeat()
 
   console.log(`[CognitiveTeammateRunner] Task completed for ${teammate.name}`)
 }
@@ -518,7 +642,8 @@ async function processTeammateMessages(
     swarmSessionId,
     teammateId,
     taskId,
-    messageSummary
+    messageSummary,
+    userId
   )
 
   // 标记所有消息为处理中
@@ -606,7 +731,8 @@ async function buildTeammateContextMessages(
   swarmSessionId: string,
   teammateId: string,
   taskId: string | null,
-  newMessagesSummary: string
+  newMessagesSummary: string,
+  userId?: string | null
 ): Promise<LLMMessage[]> {
   const entries = await listAgentContextEntries(teammateId, 20)
 
@@ -659,6 +785,7 @@ async function buildTeammateContextMessages(
     newMessagesSummary,
     swarmSessionId,
     agentId: teammateId,
+    userId: userId ?? undefined,
   })
 }
 

@@ -213,4 +213,30 @@ export const teammateTools: ToolDefinition[] = [
       properties: {},
     },
   },
+  {
+    name: 'shell_exec',
+    description: '执行终端命令。此工具需要用户审批后才能执行。命令将在工作区目录中执行。适用于需要执行系统命令、运行脚本、操作文件等场景。执行前请向用户说明命令的用途和预期结果。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        command: {
+          type: 'string',
+          description: '要执行的命令（如 ls -la, npm install, git status 等）',
+        },
+        description: {
+          type: 'string',
+          description: '向用户说明该命令的用途和预期结果，帮助用户做出审批决定',
+        },
+        working_dir: {
+          type: 'string',
+          description: '可选。指定工作目录。默认为工作区根目录。可以使用相对路径或绝对路径。',
+        },
+        timeout: {
+          type: 'number',
+          description: '可选。超时时间（秒）。默认30秒，最长300秒（5分钟）。对于可能长时间运行的命令，请设置适当的超时时间。注意：超时时间从审批通过后开始计算。',
+        },
+      },
+      required: ['command', 'description'],
+    },
+  },
 ]

@@ -31,6 +31,7 @@ export interface LeadProcessorInput {
 export interface LeadToolExecutorOptions {
   replyKey?: string
   allowReply?: boolean
+  agentName?: string
 }
 
 /**
@@ -38,7 +39,7 @@ export interface LeadToolExecutorOptions {
  */
 export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadToolExecutorOptions = {}): ToolExecutor {
   const { swarmSessionId, userId, leadAgentId } = input
-  const { replyKey, allowReply = true } = options
+  const { replyKey, allowReply = true, agentName = 'Lead' } = options
   let replyIssuedInThisBatch = false
 
   return async (name: string, toolInput: Record<string, unknown>) => {

@@ -20,6 +20,11 @@ import {
   broadcastToTeam,
   createInternalThread,
 } from './internal-bus'
+import {
+  createToolApproval,
+  waitForApproval,
+  executeApprovedCommand,
+} from './tool-approval'
 import * as path from 'path'
 import { readFile, writeFile } from 'fs/promises'
 
@@ -149,6 +154,7 @@ export async function finalizeTaskCompletion(
     },
   })
 
+  // 设置为 IDLE 状态，让空闲检查机制决定是否处理下一个任务
   await prisma.agent.update({
     where: { id: input.teammateId },
     data: { status: 'IDLE' },
@@ -568,6 +574,66 @@ export function buildTeammateToolExecutor(
         return result
       }
 
+      case 'shell_exec': {
+        const command = input.command as string
+        const description = input.description as string
+        const workingDir = input.working_dir as string | undefined
+        const timeout = input.timeout as number | undefined
+
+        // 创建审批请求（timeout 存储在 inputParams 中，审批通过后再使用）
+        const approvalResult = await createToolApproval({
+          swarmSessionId,
+          agentId: teammateId,
+          agentName: teammate.name,
+          type: 'SHELL_EXEC',
+          toolName: 'shell_exec',
+          inputParams: { command, working_dir: workingDir, timeout },
+          description,
+          workingDir,
+        })
+
+        if (!approvalResult.success || !approvalResult.approvalId) {
+          return JSON.stringify({
+            success: false,
+            error: approvalResult.error || 'Failed to create approval request',
+          })
+        }
+
+        // 等待用户审批（等待时间不计入超时）
+        const waitResult = await waitForApproval(approvalResult.approvalId)
+
+        if (waitResult.success && waitResult.status === 'APPROVED') {
+          // 执行命令（超时时间从现在开始计算）
+          try {
+            const result = await executeApprovedCommand(
+              approvalResult.approvalId,
+              swarmSessionId,
+              teammateId,
+              teammate.name
+            )
+            return JSON.stringify({
+              success: true,
+              approval_id: approvalResult.approvalId,
+              output: result.slice(0, 10000), // 限制返回大小
+            })
+          } catch (execError) {
+            return JSON.stringify({
+              success: false,
+              approval_id: approvalResult.approvalId,
+              error: execError instanceof Error ? execError.message : 'Command execution failed',
+            })
+          }
+        } else {
+          // 用户拒绝或超时
+          return JSON.stringify({
+            success: false,
+            approval_id: approvalResult.approvalId,
+            status: waitResult.status,
+            error: waitResult.error || 'Command execution was not approved',
+          })
+        }
+      }
+
       case 'save_progress':
         return JSON.stringify({
           success: true,
@@ -665,4 +731,25 @@ export function inferMimeType(filename: string): string {
     '.zip': 'application/zip',
   }
   return mimeTypes[ext] || 'application/octet-stream'
+}
+
+/**
+ * 清理指定会话和 agent 的文件读取缓存
+ * 用于会话删除或 agent 清理时释放内存
+ */
+export function clearTeammateReadFileCache(swarmSessionId: string, teammateId: string): void {
+  const key = `${swarmSessionId}:${teammateId}`
+  teammateReadFileCache.delete(key)
+}
+
+/**
+ * 清理指定会话的所有文件读取缓存
+ * 用于会话删除时释放所有相关缓存
+ */
+export function clearSessionReadFileCache(swarmSessionId: string): void {
+  for (const key of teammateReadFileCache.keys()) {
+    if (key.startsWith(`${swarmSessionId}:`)) {
+      teammateReadFileCache.delete(key)
+    }
+  }
 }

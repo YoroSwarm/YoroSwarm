@@ -55,13 +55,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // 开发环境允许使用环境变量作为后备
-    const isDevelopment = process.env.NODE_ENV === 'development';
-    const hasEnvFallback = isDevelopment && (
-      !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
-    );
-
-    if (apiConfigCount === 0 && !hasEnvFallback) {
+    if (apiConfigCount === 0) {
       return errorResponse(
         '请先在设置中配置至少一个 LLM API 提供商',
         403

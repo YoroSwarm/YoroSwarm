@@ -7,7 +7,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock as MessageToolUseBlock,
 } from './types'
-import { getProviderConfig, callWithFallback } from './config'
+import { callWithFallback, getProviderConfig } from './config'
 import { callAnthropic } from './anthropic'
 import { callOpenAI } from './openai'
 import { recordLlmUsageEvent } from './usage'
@@ -177,32 +177,15 @@ function sleep(ms: number): Promise<void> {
  * 支持多配置回退、指数退避重试
  */
 export async function callLLM(options: LLMCallOptions): Promise<LLMResponse> {
+  if (!options.userId) {
+    throw new Error(
+      'userId is required for LLM API calls. All model configurations must be set up in user settings.'
+    )
+  }
+
   const sanitizedOptions: LLMCallOptions = {
     ...options,
     messages: sanitizeLLMMessages(options.messages),
-  }
-
-  // 如果没有 userId，使用环境变量后备（单次尝试，无回退）
-  if (!options.userId) {
-    const config = await getProviderConfig(undefined, options.agentType)
-
-    const response = await retryWithExponentialBackoff(async () => {
-      if (config.provider === 'openai') {
-        return await callOpenAI(sanitizedOptions, config)
-      } else {
-        return await callAnthropic(sanitizedOptions, config)
-      }
-    })
-
-    await recordLlmUsageEvent({
-      provider: config.provider,
-      response,
-      swarmSessionId: options.usageContext?.swarmSessionId,
-      agentId: options.usageContext?.agentId,
-      requestKind: options.usageContext?.requestKind,
-    })
-
-    return response
   }
 
   // 使用 callWithFallback 实现多配置回退

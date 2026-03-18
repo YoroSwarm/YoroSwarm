@@ -40,54 +40,6 @@ const DEFAULT_CONTEXT_SIZE = 128000;
 export type AgentType = 'lead' | 'teammate';
 
 /**
- * 检测 provider 类型（仅用于环境变量后备）
- * 优先级: LLM_PROVIDER env > 根据可用 API key 自动检测
- */
-function detectProviderFromEnv(): LLMProvider {
-  const explicit = process.env.LLM_PROVIDER?.toLowerCase();
-  if (explicit === 'openai') return 'openai';
-  if (explicit === 'anthropic') return 'anthropic';
-
-  // Auto-detect based on available API keys
-  if (process.env.OPENAI_API_KEY && !process.env.ANTHROPIC_API_KEY) return 'openai';
-  if (process.env.ANTHROPIC_API_KEY) return 'anthropic';
-
-  return 'anthropic'; // default
-}
-
-/**
- * 从环境变量获取 provider 配置（用于开发环境后备）
- */
-function getEnvConfig(): LLMProviderConfig | null {
-  const provider = detectProviderFromEnv();
-
-  const apiKey = provider === 'openai'
-    ? process.env.OPENAI_API_KEY
-    : process.env.ANTHROPIC_API_KEY;
-
-  if (!apiKey) return null;
-
-  const baseUrl = provider === 'openai'
-    ? process.env.OPENAI_BASE_URL
-    : process.env.ANTHROPIC_BASE_URL;
-
-  const defaultModel = process.env.DEFAULT_LLM_MODEL ||
-    (provider === 'openai' ? 'gpt-4o' : 'claude-sonnet-4-20250514');
-
-  return {
-    provider,
-    apiKey,
-    baseUrl,
-    defaultModel,
-    maxContextTokens: process.env.LLM_MAX_CONTEXT_TOKENS
-      ? parseInt(process.env.LLM_MAX_CONTEXT_TOKENS, 10)
-      : getModelContextSize(defaultModel),
-    maxOutputTokens: parseInt(process.env.LLM_MAX_TOKENS || '4096', 10),
-    temperature: parseFloat(process.env.LLM_TEMPERATURE || '0.7'),
-  };
-}
-
-/**
  * 获取所有可用的用户配置（按指定优先级排序）
  */
 export async function getAllProviderConfigs(
@@ -173,53 +125,44 @@ export async function callWithFallback<T>(
 
 /**
  * 获取完整的 provider 配置
- * 优先从数据库读取用户配置，开发环境可使用环境变量后备
+ * 从数据库读取用户配置
  */
 export async function getProviderConfig(
   userId?: string,
   agentType: AgentType = 'teammate'
 ): Promise<LLMProviderConfig & { configId?: string }> {
-  // 如果有 userId，尝试从数据库获取配置
-  if (userId) {
-    const orderByField = agentType === 'lead' ? 'leadPriority' : 'teammatePriority';
-
-    const config = await prisma.llmApiConfig.findFirst({
-      where: {
-        userId,
-        isEnabled: true,
-      },
-      orderBy: [{ [orderByField]: 'asc' }],
-    });
-
-    if (config) {
-      return {
-        configId: config.id,
-        provider: config.provider.toLowerCase() as LLMProvider,
-        apiKey: config.apiKey,
-        baseUrl: config.baseUrl || undefined,
-        defaultModel: config.defaultModel,
-        maxContextTokens: config.maxContextTokens,
-        maxOutputTokens: config.maxOutputTokens,
-        temperature: config.temperature,
-      };
-    }
+  if (!userId) {
+    throw new Error(
+      'userId is required for LLM API calls. All model configurations must be set up in user settings.'
+    );
   }
 
-  // 开发环境后备：使用环境变量
-  const isDevelopment = process.env.NODE_ENV === 'development';
-  if (isDevelopment) {
-    const envConfig = getEnvConfig();
-    if (envConfig) {
-      return envConfig;
-    }
+  const orderByField = agentType === 'lead' ? 'leadPriority' : 'teammatePriority';
+
+  const config = await prisma.llmApiConfig.findFirst({
+    where: {
+      userId,
+      isEnabled: true,
+    },
+    orderBy: [{ [orderByField]: 'asc' }],
+  });
+
+  if (!config) {
+    throw new Error(
+      'No LLM API configuration found. Please configure at least one LLM API in settings.'
+    );
   }
 
-  // 没有可用配置
-  throw new Error(
-    userId
-      ? 'No LLM API configuration found. Please configure at least one LLM API in settings.'
-      : 'No LLM API configuration available. Please set up API keys in environment variables or configure user settings.'
-  );
+  return {
+    configId: config.id,
+    provider: config.provider.toLowerCase() as LLMProvider,
+    apiKey: config.apiKey,
+    baseUrl: config.baseUrl || undefined,
+    defaultModel: config.defaultModel,
+    maxContextTokens: config.maxContextTokens,
+    maxOutputTokens: config.maxOutputTokens,
+    temperature: config.temperature,
+  };
 }
 
 /**
@@ -232,11 +175,6 @@ export function getModelContextSize(model: string): number {
   // Check prefix match (for versioned model names)
   for (const [key, size] of Object.entries(MODEL_CONTEXT_SIZES)) {
     if (model.startsWith(key)) return size;
-  }
-
-  // Check custom env override
-  if (process.env.LLM_MAX_CONTEXT_TOKENS) {
-    return parseInt(process.env.LLM_MAX_CONTEXT_TOKENS, 10);
   }
 
   return DEFAULT_CONTEXT_SIZE;

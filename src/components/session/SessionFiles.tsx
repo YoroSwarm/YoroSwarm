@@ -115,16 +115,18 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
     size?: number;
   } | null>(null);
 
-  const openPreview = (file: UploadedFileResponse | WorkspaceDirectoryEntry, fileEntry?: UploadedFileResponse) => {
-    const mimeType = fileEntry?.mimeType || (file as WorkspaceDirectoryEntry).mimeType;
-    const size = fileEntry?.size ?? (file as WorkspaceDirectoryEntry).size;
-    const name = fileEntry?.originalName || (file as WorkspaceDirectoryEntry).name;
-    const fileId = fileEntry?.id;
-    
-    if (!fileId) return;
-    
+  const openPreview = (entry: WorkspaceDirectoryEntry, file?: UploadedFileResponse) => {
+    const mimeType = file?.mimeType || entry.mimeType;
+    const size = file?.size ?? entry.size;
+    const name = file?.originalName || entry.name;
+    // 优先使用 file.id，否则尝试使用 path 构建 URL
+    const fileId = file?.id;
+    const fileUrl = fileId
+      ? `/api/files/${fileId}`
+      : filesApi.getPathDownloadUrl(sessionId, entry.path, false);
+
     setPreviewFile({
-      url: `/api/files/${fileId}`,
+      url: fileUrl,
       name: name || "",
       mimeType,
       size,
@@ -275,7 +277,7 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
                     </div>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    {canPreview && file && (
+                    {canPreview && (
                       <button
                         onClick={() => openPreview(entry, file)}
                         className="text-xs flex items-center gap-1 hover:underline text-primary"

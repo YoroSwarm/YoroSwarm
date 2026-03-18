@@ -27,8 +27,10 @@ export async function POST(request: NextRequest) {
       return unauthorizedResponse('Authentication required')
     }
 
+    let userId: string | undefined
     try {
-      verifyAccessToken(token)
+      const payload = verifyAccessToken(token)
+      userId = payload.userId
     } catch {
       return unauthorizedResponse('Invalid token')
     }
@@ -64,6 +66,7 @@ export async function POST(request: NextRequest) {
         model,
         maxTokens,
         temperature,
+        userId,
       })
 
       const text = extractTextContent(response)
@@ -101,6 +104,7 @@ export async function POST(request: NextRequest) {
       model,
       maxTokens,
       temperature,
+      userId,
     })
 
     const content = extractTextContent(response)

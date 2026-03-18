@@ -77,6 +77,7 @@ export async function startAttentionLoop(
   swarmSessionId: string,
   agentId: string,
   options: {
+    userId?: string
     llmConfig: {
       systemPrompt: string
       agentName: string
@@ -96,8 +97,6 @@ export async function startAttentionLoop(
     if (runtime.agentId !== agentId || runtime.swarmSessionId !== swarmSessionId) {
       return
     }
-    const { from, to, reason } = payload as { from: string; to: string; reason: string }
-    console.log(`[AttentionManager][${agentId}] State: ${from} -> ${to} (${reason})`)
   })
 
   // 处理锁，防止并发处理消息
@@ -123,6 +122,17 @@ export async function startAttentionLoop(
       const runtime = getCognitiveRuntime(swarmSessionId, agentId)
       if (!runtime) continue
 
+      // 检查会话是否已暂停
+      const session = await prisma.swarmSession.findUnique({
+        where: { id: swarmSessionId },
+        select: { status: true },
+      })
+
+      if (!session || session.status === 'PAUSED') {
+        // 会话已暂停，跳过本次循环（不处理消息）
+        continue
+      }
+
       pruneInvalidMessages(runtime)
 
       if (runtime.inbox.pending.length === 0 && runtime.inbox.deferred.length > 0) {
@@ -138,6 +148,18 @@ export async function startAttentionLoop(
           selfCheckPending = true
 
           try {
+            // 检查会话是否已暂停
+            const session = await prisma.swarmSession.findUnique({
+              where: { id: swarmSessionId },
+              select: { status: true },
+            })
+
+            if (!session || session.status === 'PAUSED') {
+              // 会话已暂停，不进行自检
+              selfCheckPending = false
+              continue
+            }
+
             // Only check for PENDING unassigned tasks — IN_PROGRESS tasks are already being worked on
             const unassignedTasks = await prisma.teamLeadTask.findMany({
               where: {
@@ -151,9 +173,9 @@ export async function startAttentionLoop(
             if (unassignedTasks.length > 0) {
               const alertContent = `[周期性任务自检] 你有 ${unassignedTasks.length} 个 PENDING 未分配任务需要处理。\n请检查任务列表并采取适当行动。`
 
-              console.log(
-                `[AttentionManager][${agentId}] Periodic self-check: ${unassignedTasks.length} unassigned tasks`
-              )
+              // console.log(
+              //   `[AttentionManager][${agentId}] Periodic self-check: ${unassignedTasks.length} unassigned tasks`
+              // )
 
               await deliverMessage(swarmSessionId, agentId, {
                 source: 'system',
@@ -194,9 +216,20 @@ export async function startAttentionLoop(
       }
 
       if (canEvaluateInbox(runtime.currentState)) {
+        // 检查会话是否已暂停
+        const session = await prisma.swarmSession.findUnique({
+          where: { id: swarmSessionId },
+          select: { status: true },
+        })
+
+        if (!session || session.status === 'PAUSED') {
+          // 会话已暂停，跳过消息处理
+          continue
+        }
+
         isProcessing = true
         try {
-          await checkAndDecide(runtime, currentWorkContext, llmConfig, onProcessMessages)
+          await checkAndDecide(runtime, currentWorkContext, llmConfig, onProcessMessages, options.userId)
         } catch (err) {
           console.error(`[AttentionManager][${agentId}] Error in checkLoop:`, err)
         } finally {
@@ -276,8 +309,20 @@ async function checkAndDecide(
     tools: unknown[]
     executeTool: ToolExecutor
   },
-  onProcessMessages: (messages: InboxMessage[], context: CurrentWorkContext) => Promise<unknown>
+  onProcessMessages: (messages: InboxMessage[], context: CurrentWorkContext) => Promise<unknown>,
+  userId?: string
 ): Promise<void> {
+  // Check session status before processing
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: runtime.swarmSessionId },
+    select: { status: true },
+  })
+
+  if (!session || session.status === 'PAUSED') {
+    console.log(`[AttentionManager][${runtime.agentId}] Session paused, skipping attention decision`)
+    return
+  }
+
   pruneInvalidMessages(runtime)
 
   // 过滤出待处理的消息
@@ -337,7 +382,7 @@ async function checkAndDecide(
       systemPrompt: '你协助 Agent 决定如何处理收件箱中的消息。根据当前工作状态和消息的重要程度，判断立即处理、稍后处理或忽略。',
       messages,
       tools: attentionDecisionTools,
-      model: process.env.ATTENTION_MANAGER_MODEL || undefined,
+      userId,
       usageContext: {
         swarmSessionId: runtime.swarmSessionId,
         agentId: runtime.agentId,
@@ -375,11 +420,11 @@ async function checkAndDecide(
       decision = parseAttentionDecision(text, pendingMessages)
     }
 
-    console.log(`[AttentionManager][${runtime.agentId}] LLM Decision:`, {
-      action: decision.shouldProcess ? (decision.shouldBatch ? 'batch' : 'process_now') : 'defer',
-      reasoning: decision.reasoning,
-      messageCount: decision.messagesToProcess.length,
-    })
+    // console.log(`[AttentionManager][${runtime.agentId}] LLM Decision:`, {
+    //   action: decision.shouldProcess ? (decision.shouldBatch ? 'batch' : 'process_now') : 'defer',
+    //   reasoning: decision.reasoning,
+    //   messageCount: decision.messagesToProcess.length,
+    // })
 
     // 如果决定处理消息，先筛选出要处理的消息对象（在执行决策前）
     if (decision.shouldProcess && decision.messagesToProcess.length > 0) {
@@ -388,7 +433,7 @@ async function checkAndDecide(
         decision.messagesToProcess.includes(m.id)
       )
 
-      console.log(`[AttentionManager][${runtime.agentId}] Processing ${messagesToProcess.length} messages (requested: ${decision.messagesToProcess.length})`)
+      // console.log(`[AttentionManager][${runtime.agentId}] Processing ${messagesToProcess.length} messages (requested: ${decision.messagesToProcess.length})`)
 
       if (messagesToProcess.length === 0) {
         console.warn(`[AttentionManager][${runtime.agentId}] No messages found to process, IDs:`, decision.messagesToProcess)
@@ -691,40 +736,6 @@ const attentionDecisionTools: ToolDefinition[] = [
   },
 ]
 
-/**
- * 构建注意力工具执行器
- * 
- * 当 LLM 决定使用 decide_attention 工具时，此执行器处理工具调用
- * 注：当前使用直接解析，此函数为未来需要复杂工具调用链时保留
- */
-function _buildAttentionToolExecutor(
-  runtime: CognitiveRuntime,
-  pendingMessages: InboxMessage[],
-  _currentContext: CurrentWorkContext
-): ToolExecutor {
-  return async (name: string, input: Record<string, unknown>) => {
-    switch (name) {
-      case 'decide_attention': {
-        const action = input.action as string
-        const messageIds = (input.messageIds as string[]) || []
-        const shouldSaveContext = (input.shouldSaveContext as boolean) || false
-
-        // 验证消息ID
-        const validMessages = pendingMessages.filter((m) => messageIds.includes(m.id))
-
-        return JSON.stringify({
-          action,
-          validMessageCount: validMessages.length,
-          shouldSaveContext,
-          pendingCount: pendingMessages.length,
-        })
-      }
-
-      default:
-        return JSON.stringify({ error: `Unknown tool: ${name}` })
-    }
-  }
-}
 
 /**
  * 解析注意力决策
@@ -851,6 +862,18 @@ async function handleProcessNow(
   },
   onProcessMessages: (messages: InboxMessage[], context: CurrentWorkContext) => Promise<unknown>
 ): Promise<void> {
+  // Check session status before processing messages
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: runtime.swarmSessionId },
+    select: { status: true },
+  })
+
+  if (!session || session.status === 'PAUSED') {
+    console.log(`[AttentionManager][${runtime.agentId}] Session paused, skipping message processing`)
+    // Don't mark messages as completed - they should remain pending for resume
+    return
+  }
+
   const initialState = runtime.currentState
   const wasInterrupted = initialState === 'INTERRUPTED'
 
@@ -890,7 +913,7 @@ async function handleProcessNow(
   } catch (error) {
     // If aborted (session paused), reset messages to pending so they can be re-processed on resume
     if (error instanceof Error && error.name === 'AbortError') {
-      console.log(`[AttentionManager][${runtime.agentId}] Processing aborted, resetting ${messages.length} messages to pending`)
+      // console.log(`[AttentionManager][${runtime.agentId}] Processing aborted, resetting ${messages.length} messages to pending`)
       for (const msg of messages) {
         const inboxMsg = runtime.inbox.pending.find(m => m.id === msg.id)
         if (inboxMsg) {
@@ -946,6 +969,18 @@ async function handleBatchProcess(
   },
   onProcessMessages: (messages: InboxMessage[], context: CurrentWorkContext) => Promise<unknown>
 ): Promise<void> {
+  // Check session status before batch processing
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: runtime.swarmSessionId },
+    select: { status: true },
+  })
+
+  if (!session || session.status === 'PAUSED') {
+    console.log(`[AttentionManager][${runtime.agentId}] Session paused, skipping batch processing`)
+    // Don't mark messages as completed - they should remain pending for resume
+    return
+  }
+
   // 只有在非 PROCESSING 状态时才切换到 BATCHING
   // 如果已经在 PROCESSING，直接处理消息而不改变状态
   if (runtime.currentState !== 'PROCESSING') {

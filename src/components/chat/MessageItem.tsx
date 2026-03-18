@@ -275,6 +275,17 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '获取团队',
           fields: [],
         };
+      case 'shell_exec':
+        return {
+          icon: '⚡',
+          title: '执行命令',
+          fields: [
+            { label: '命令', value: input.command as string, truncate: false },
+            { label: '说明', value: input.description as string, truncate: true },
+            ...(input.working_dir ? [{ label: '目录', value: input.working_dir as string, truncate: true }] : []),
+            ...(input.timeout ? [{ label: '超时', value: `${input.timeout}秒` }] : []),
+          ],
+        };
       default:
         return null;
     }
@@ -298,6 +309,7 @@ function getToolDisplayName(toolName: string | undefined): string {
     'create_workspace_file': '新建文件',
     'replace_workspace_file': '替换文件',
     'replace_in_file': '文件内替换',
+    'shell_exec': '执行命令',
     'read_workspace_file': '读取文件',
     'report_task_completion': '报告完成',
     'update_self_todo': '更新待办',

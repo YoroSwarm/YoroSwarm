@@ -47,12 +47,9 @@ class ThirdPartyAnthropicClient {
 
     // Request interceptor for logging
     this.axiosInstance.interceptors.request.use(
-      (request: any) => {
-        console.log(`[ThirdPartyAnthropic] ${request.method.toUpperCase()} ${request.baseURL}${request.url}`)
-        // request.data is already serialized by axios, parse it for logging
+      (request: any) => {// request.data is already serialized by axios, parse it for logging
         try {
           const data = typeof request.data === 'string' ? JSON.parse(request.data) : request.data
-          console.log(`[ThirdPartyAnthropic] Model: ${data.model}`)
         } catch (e) {
           console.log(`[ThirdPartyAnthropic] Request data: ${request.data?.toString().slice(0, 100)}`)
         }
@@ -67,7 +64,6 @@ class ThirdPartyAnthropicClient {
     // Response interceptor for logging
     this.axiosInstance.interceptors.response.use(
       (response: any) => {
-        console.log(`[ThirdPartyAnthropic] Response status: ${response.status}, id: ${response.data?.id}`)
         return response
       },
       (error: any) => {

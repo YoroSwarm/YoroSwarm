@@ -84,6 +84,7 @@ model SwarmSession {
   leadSelfTodos         LeadSelfTodo[]
   llmUsageEvents        LlmUsageEvent[]
   sharedKnowledgeEntries SharedKnowledgeEntry[]
+  toolApprovals         ToolApproval[]
 
   @@map("swarm_sessions")
 }
@@ -483,4 +484,47 @@ model LlmApiConfig {
   @@index([userId, teammatePriority])
   @@index([userId, isEnabled])
   @@map("llm_api_configs")
+}
+
+// ============================================
+// 工具审批模块 (Tool Approval)
+// ============================================
+
+enum ToolApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  EXPIRED
+}
+
+enum ToolApprovalType {
+  SHELL_EXEC
+  FILE_WRITE
+  NETWORK_REQUEST
+}
+
+model ToolApproval {
+  id             String             @id @default(uuid())
+  swarmSessionId String             @map("swarm_session_id")
+  agentId        String             @map("agent_id")
+  type           ToolApprovalType
+  status         ToolApprovalStatus @default(PENDING)
+  toolName       String             @map("tool_name")
+  inputParams    String             @map("input_params") // JSON string
+  description    String             // 用户友好的描述
+  workingDir     String?            @map("working_dir")
+  result         String?            // 执行结果（JSON string）
+  error          String?
+  executedAt     DateTime?          @map("executed_at")
+  expiresAt      DateTime           @map("expires_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+
+  @@index([swarmSessionId, status])
+  @@index([swarmSessionId, createdAt])
+  @@index([status, expiresAt])
+  @@map("tool_approvals")
 }

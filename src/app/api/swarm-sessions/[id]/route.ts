@@ -13,6 +13,7 @@ import {
   cleanupCognitiveTeammate,
 } from '@/lib/server/cognitive-teammate-runner';
 import { destroyRuntime } from '@/lib/server/cognitive-inbox';
+import { clearSessionReadFileCache } from '@/lib/server/teammate-tool-executor';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -105,34 +106,52 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
 
     const leadAgentId = existing.leadAgentId;
 
-    // 1. 清理正在运行的 Lead 处理器（如果存在）
+    // 1. 清理文件读取缓存（避免内存泄漏）
+    try {
+      clearSessionReadFileCache(id);
+      console.log(`[DeleteSession] Cleared file read cache for session ${id}`);
+    } catch (err) {
+      console.error(`[DeleteSession] Error clearing file read cache:`, err);
+    }
+
+    // 2. 清理正在运行的 Lead 处理器
     if (leadAgentId) {
-      const leadProcessor = getCognitiveLeadProcessor(id, leadAgentId);
-      if (leadProcessor) {
+      try {
         cleanupCognitiveLead(id, leadAgentId);
         console.log(`[DeleteSession] Cleaned up lead processor for session ${id}`);
+      } catch (err) {
+        console.error(`[DeleteSession] Error cleaning up lead processor:`, err);
       }
     }
 
-    // 2. 清理所有 Teammate 处理器
+    // 3. 清理所有 Teammate 处理器（即使 getTeammateProcessor 返回 undefined 也要调用 cleanup）
     for (const agent of existing.agents) {
       if (agent.id === leadAgentId) continue;
-      const processor = getTeammateProcessor(id, agent.id);
-      if (processor) {
+      try {
         cleanupCognitiveTeammate(id, agent.id);
         console.log(`[DeleteSession] Cleaned up teammate processor for agent ${agent.id}`);
+      } catch (err) {
+        console.error(`[DeleteSession] Error cleaning up teammate ${agent.id}:`, err);
       }
     }
 
-    // 3. 销毁所有运行时
+    // 4. 销毁所有运行时（清理内存状态）
     for (const agent of existing.agents) {
-      destroyRuntime(id, agent.id);
+      try {
+        destroyRuntime(id, agent.id);
+      } catch (err) {
+        console.error(`[DeleteSession] Error destroying runtime for agent ${agent.id}:`, err);
+      }
     }
 
     // 4. 删除会话工作区文件
-    await deleteSessionWorkspace(id);
+    try {
+      await deleteSessionWorkspace(id);
+    } catch (err) {
+      console.error(`[DeleteSession] Error deleting workspace for session ${id}:`, err);
+    }
 
-    // 5. 从数据库删除会话
+    // 5. 从数据库删除会话（包括级联删除关联数据）
     await prisma.swarmSession.delete({
       where: { id },
     });

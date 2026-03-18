@@ -81,7 +81,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       }
     }
 
-    const llmConfig = await getProviderConfig(undefined, 'teammate');
+    const llmConfig = await getProviderConfig(payload.userId, 'teammate');
 
     const metrics = {
       total_agents: session.agents.length,

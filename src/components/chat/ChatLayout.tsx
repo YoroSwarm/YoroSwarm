@@ -8,6 +8,8 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { SessionFiles } from '@/components/session/SessionFiles';
 import { SessionTasks } from '@/components/session/SessionTasks';
+import { ApprovalCards } from '@/components/tool-approval/ApprovalCards';
+import { useToolApprovals } from '@/hooks/use-tool-approvals';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -108,6 +110,9 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     storage.set(CURRENT_SESSION_STORAGE_KEY, nextSessionId);
   }, [resolvedSessionId, sessions]);
 
+  // 工具审批 hook - 需要在 resolvedSessionId 之后调用
+  const { approvals: toolApprovals, handleDecision: handleToolApprovalDecision, handleWSMessage: handleApprovalWSMessage } = useToolApprovals(resolvedSessionId);
+
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === resolvedSessionId) || null,
     [resolvedSessionId, sessions]
@@ -142,6 +147,12 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     url: wsUrl,
     autoConnect: Boolean(wsUrl),
     onMessage: (message) => {
+      // 处理工具审批相关消息
+      if (message.type === 'tool_approval_request' || message.type === 'tool_approval_update') {
+        handleApprovalWSMessage(message);
+        return;
+      }
+
       if (message.type === 'chat_message') {
         appendRealtimeMessage(message.payload as ChatMessagePayload);
         return;
@@ -435,6 +446,13 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         />
                     </div>
                     <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
+                        {/* 工具审批卡片堆叠区 */}
+                        <ApprovalCards
+                            approvals={toolApprovals}
+                            onDecision={(id, decision) => handleToolApprovalDecision(id, decision)}
+                            className="mb-3"
+                        />
+
                         <ChatInput
                             sessionId={resolvedSessionId}
                             disabled={isCreatingSession || currentSession?.status === 'paused'}

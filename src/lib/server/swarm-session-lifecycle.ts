@@ -25,6 +25,7 @@ import {
 } from './cognitive-teammate-runner'
 import { persistInboxState, restoreInboxState } from './cognitive-inbox/cognitive-persistence'
 import { transitionState } from './cognitive-inbox/cognitive-engine'
+import { clearSessionReadFileCache } from './teammate-tool-executor'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Pause
@@ -61,22 +62,39 @@ export async function pauseSwarmSession(swarmSessionId: string): Promise<{
 
   // 1.5. Destroy runtimes to prevent stale state on resume
   for (const agent of session.agents) {
-    destroyRuntime(swarmSessionId, agent.id)
+    try {
+      destroyRuntime(swarmSessionId, agent.id)
+    } catch (err) {
+      console.error(`[Lifecycle] Error destroying runtime for agent ${agent.id}:`, err)
+    }
+  }
+
+  // 1.6. Clear file read cache to avoid memory leaks
+  try {
+    clearSessionReadFileCache(swarmSessionId)
+    console.log(`[Lifecycle] Cleared file read cache for session ${swarmSessionId}`)
+  } catch (err) {
+    console.error(`[Lifecycle] Error clearing file read cache:`, err)
   }
 
   // 2. Cleanup Lead processor (stops attention loop)
   if (leadAgentId) {
-    cleanupCognitiveLead(swarmSessionId, leadAgentId)
-    pausedAgents++
+    try {
+      cleanupCognitiveLead(swarmSessionId, leadAgentId)
+      pausedAgents++
+    } catch (err) {
+      console.error(`[Lifecycle] Error cleaning up lead processor:`, err)
+    }
   }
 
-  // 3. Cleanup Teammate processors
+  // 3. Cleanup Teammate processors (also clears heartbeat timers)
   for (const agent of session.agents) {
     if (agent.id === leadAgentId) continue
-    const processor = getTeammateProcessor(swarmSessionId, agent.id)
-    if (processor) {
+    try {
       cleanupCognitiveTeammate(swarmSessionId, agent.id)
       pausedAgents++
+    } catch (err) {
+      console.error(`[Lifecycle] Error cleaning up teammate ${agent.id}:`, err)
     }
   }
 
@@ -212,34 +230,46 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
     if (agent.id === leadAgentId) continue
 
     try {
-      // Find IN_PROGRESS tasks assigned to this teammate
+      // Find IN_PROGRESS or ASSIGNED tasks for this teammate
       const activeTask = session.tasks.find(
-        t => t.assigneeId === agent.id && t.status === 'IN_PROGRESS'
+        t => t.assigneeId === agent.id && (t.status === 'IN_PROGRESS' || t.status === 'ASSIGNED')
       )
 
       if (activeTask) {
-        // resumeTeammateTask creates the processor (and runtime via initCognitiveEngine)
-        await resumeTeammateTask(swarmSessionId, agent.id, activeTask.id, leadAgentId)
-        resumedTeammateTaskIds.push(activeTask.id)
-        resumedAgents++
+        if (activeTask.status === 'IN_PROGRESS') {
+          // resumeTeammateTask creates the processor (and runtime via initCognitiveEngine)
+          await resumeTeammateTask(swarmSessionId, agent.id, activeTask.id, leadAgentId)
+          resumedTeammateTaskIds.push(activeTask.id)
+          resumedAgents++
 
-        // Restore teammate's inbox state now that runtime exists
-        const teammateRuntime = getCognitiveRuntime(swarmSessionId, agent.id)
-        if (teammateRuntime) {
-          await restoreInboxState(teammateRuntime)
-          if (teammateRuntime.currentState === 'RECOVERING') {
-            transitionState(
-              swarmSessionId,
-              agent.id,
-              'IDLE',
-              'Teammate resumed from pause'
-            )
+          // Restore teammate's inbox state now that runtime exists
+          const teammateRuntime = getCognitiveRuntime(swarmSessionId, agent.id)
+          if (teammateRuntime) {
+            await restoreInboxState(teammateRuntime)
+            if (teammateRuntime.currentState === 'RECOVERING') {
+              transitionState(
+                swarmSessionId,
+                agent.id,
+                'IDLE',
+                'Teammate resumed from pause'
+              )
+            }
           }
-        }
 
-        console.log(
-          `[Lifecycle] Resumed teammate ${agent.name} with task "${activeTask.title}"`
-        )
+          console.log(
+            `[Lifecycle] Resumed teammate ${agent.name} with IN_PROGRESS task "${activeTask.title}"`
+          )
+        } else if (activeTask.status === 'ASSIGNED') {
+          // For ASSIGNED tasks, just initialize the processor (which starts idle check)
+          // The idle check mechanism will automatically pick up the task
+          const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
+          await initCognitiveTeammate(swarmSessionId, agent.id, leadAgentId)
+          resumedAgents++
+
+          console.log(
+            `[Lifecycle] Initialized teammate ${agent.name} with ASSIGNED tasks (idle check will auto-start processing)`
+          )
+        }
       }
     } catch (err) {
       console.error(`[Lifecycle] Failed to resume teammate ${agent.id}:`, err)
@@ -427,50 +457,77 @@ export async function autoResumeActiveSessions(): Promise<{
       }
 
       // Resume teammate tasks that were IN_PROGRESS when server died
-      const inProgressTasks = await prisma.teamLeadTask.findMany({
+      // Also initialize teammates with ASSIGNED tasks (idle check will auto-start them)
+      const tasksToResume = await prisma.teamLeadTask.findMany({
         where: {
           swarmSessionId: session.id,
-          status: 'IN_PROGRESS',
+          status: { in: ['IN_PROGRESS', 'ASSIGNED'] },
           assigneeId: { not: null },
         },
-        select: { id: true, title: true, assigneeId: true },
+        select: { id: true, title: true, assigneeId: true, status: true },
+        orderBy: { createdAt: 'asc' },
       })
 
       const resumedTeammateTaskIds: string[] = []
-      for (const task of inProgressTasks) {
-        if (task.assigneeId && task.assigneeId !== session.leadAgentId) {
-          try {
-            await resumeTeammateTask(session.id, task.assigneeId, task.id, session.leadAgentId)
-            resumedTeammateTaskIds.push(task.id)
+      const initializedTeammates = new Set<string>()
 
-            // Restore teammate's inbox state
-            const teammateRuntime = getCognitiveRuntime(session.id, task.assigneeId)
-            if (teammateRuntime) {
-              await restoreInboxState(teammateRuntime)
-              if (teammateRuntime.currentState === 'RECOVERING') {
-                transitionState(
-                  session.id,
-                  task.assigneeId,
-                  'IDLE',
-                  'Teammate auto-resumed after server restart'
-                )
+      for (const task of tasksToResume) {
+        if (task.assigneeId && task.assigneeId !== session.leadAgentId) {
+          // Skip if we already initialized this teammate
+          if (initializedTeammates.has(task.assigneeId)) {
+            continue
+          }
+
+          try {
+            if (task.status === 'IN_PROGRESS') {
+              await resumeTeammateTask(session.id, task.assigneeId, task.id, session.leadAgentId)
+              resumedTeammateTaskIds.push(task.id)
+
+              // Restore teammate's inbox state
+              const teammateRuntime = getCognitiveRuntime(session.id, task.assigneeId)
+              if (teammateRuntime) {
+                await restoreInboxState(teammateRuntime)
+                if (teammateRuntime.currentState === 'RECOVERING') {
+                  transitionState(
+                    session.id,
+                    task.assigneeId,
+                    'IDLE',
+                    'Teammate auto-resumed after server restart'
+                  )
+                }
               }
+
+              console.log(
+                `[Lifecycle] Auto-resumed teammate task "${task.title}" for agent ${task.assigneeId}`
+              )
+            } else if (task.status === 'ASSIGNED') {
+              // For ASSIGNED tasks, just initialize the processor (which starts idle check)
+              const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
+              await initCognitiveTeammate(session.id, task.assigneeId, session.leadAgentId)
+
+              console.log(
+                `[Lifecycle] Initialized teammate ${task.assigneeId} with ASSIGNED tasks (idle check will auto-start processing)`
+              )
             }
 
-            console.log(
-              `[Lifecycle] Auto-resumed teammate task "${task.title}" for agent ${task.assigneeId}`
-            )
+            initializedTeammates.add(task.assigneeId)
           } catch (err) {
-            console.error(`[Lifecycle] Failed to auto-resume teammate task ${task.id}:`, err)
-            // If resume fails, reset task to PENDING so Lead can re-assign
-            await prisma.teamLeadTask.update({
-              where: { id: task.id },
-              data: {
-                status: 'PENDING',
-                assigneeId: null,
-                errorSummary: '服务器重启后自动恢复任务失败，已重置为待分配状态',
-              },
-            })
+            console.error(`[Lifecycle] Failed to initialize teammate ${task.assigneeId}:`, err)
+            // If initialization fails, reset ASSIGNED tasks to PENDING so Lead can re-assign
+            if (task.status === 'ASSIGNED') {
+              await prisma.teamLeadTask.updateMany({
+                where: {
+                  swarmSessionId: session.id,
+                  assigneeId: task.assigneeId,
+                  status: 'ASSIGNED',
+                },
+                data: {
+                  status: 'PENDING',
+                  assigneeId: null,
+                  errorSummary: '服务器重启后自动初始化失败，已重置为待分配状态',
+                },
+              })
+            }
           }
         }
       }
@@ -478,7 +535,7 @@ export async function autoResumeActiveSessions(): Promise<{
       if (pendingTasks > 0) {
         const { deliverMessage } = await import('./cognitive-inbox')
 
-        const autoResumedList = inProgressTasks
+        const autoResumedList = tasksToResume
           .filter(t => resumedTeammateTaskIds.includes(t.id))
           .map(t => `- [已自动恢复] ${t.title}`)
           .join('\n')
@@ -547,18 +604,17 @@ export function registerGracefulShutdown(): void {
           include: { agents: true },
         })
 
-        // First, immediately abort all running processors (synchronous)
+        // First, immediately abort all running processors (synchronous) - this stops attention loops and clears heartbeats
         for (const session of activeSessions) {
           try {
+            // Clear file read cache for this session
+            clearSessionReadFileCache(session.id)
             if (session.leadAgentId) {
               cleanupCognitiveLead(session.id, session.leadAgentId)
             }
             for (const agent of session.agents) {
               if (agent.id === session.leadAgentId) continue
-              const processor = getTeammateProcessor(session.id, agent.id)
-              if (processor) {
-                cleanupCognitiveTeammate(session.id, agent.id)
-              }
+              cleanupCognitiveTeammate(session.id, agent.id)
             }
           } catch (err) {
             console.error(`[Lifecycle] Error aborting session ${session.id}:`, err)
@@ -573,7 +629,11 @@ export function registerGracefulShutdown(): void {
               if (runtime) {
                 await persistInboxState(runtime)
               }
-              destroyRuntime(session.id, agent.id)
+              try {
+                destroyRuntime(session.id, agent.id)
+              } catch (destroyErr) {
+                console.error(`[Lifecycle] Error destroying runtime for ${agent.id}:`, destroyErr)
+              }
             }
             console.log(`[Lifecycle] Gracefully stopped session ${session.id}`)
           } catch (err) {

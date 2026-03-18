@@ -362,6 +362,42 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           { sessionId: swarmSessionId }
         )
 
+        // Check if aborted before executing tool
+        if (abortSignal?.aborted) {
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: toolUse.id,
+            content: '工具执行被中断：会话已暂停',
+            is_error: true,
+          })
+          break
+        }
+
+        // Check session status before executing tool
+        // This provides an additional check beyond abortSignal
+        // (useful for tools that don't respect abortSignal)
+        try {
+          const prisma = (await import('@/lib/db')).default
+          const session = await prisma.swarmSession.findUnique({
+            where: { id: swarmSessionId },
+            select: { status: true },
+          })
+
+          if (!session || session.status === 'PAUSED') {
+            console.log(`[AgentLoop][${agentName}] Session paused, stopping tool execution`)
+            toolResults.push({
+              type: 'tool_result',
+              tool_use_id: toolUse.id,
+              content: '工具执行被中断：会话已暂停',
+              is_error: true,
+            })
+            break
+          }
+        } catch (sessionCheckError) {
+          console.error(`[AgentLoop][${agentName}] Session status check failed:`, sessionCheckError)
+          // Continue anyway - this is just an optimization
+        }
+
         let result: string
         let isError = false
         try {

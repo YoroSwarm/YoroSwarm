@@ -123,6 +123,26 @@ export function destroyRuntime(
   agentId: string
 ): void {
   const key = `${swarmSessionId}:${agentId}`
+  const runtime = runtimes.get(key)
+  if (runtime) {
+    // Clear all message queues to prevent memory leaks
+    runtime.inbox.pending = []
+    runtime.inbox.deferred = []
+    runtime.inbox.completed = []
+    runtime.contextStack = []
+    runtime.executionHistory = []
+
+    // Reset state to idle before deletion
+    runtime.currentState = 'IDLE'
+    runtime.currentExecution = undefined
+    runtime.currentWorkContext = {
+      type: 'idle',
+      description: 'Agent is idle',
+      progress: 0,
+      canBeInterrupted: true,
+      estimatedTimeToComplete: 'seconds',
+    }
+  }
   runtimes.delete(key)
 }
 

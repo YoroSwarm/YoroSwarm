@@ -22,7 +22,9 @@ export type WebSocketMessageType =
   | 'error'
   | 'subscribed'
   | 'unsubscribed'
-  | 'message_received';
+  | 'message_received'
+  | 'tool_approval_request'
+  | 'tool_approval_update';
 
 export interface WebSocketMessage {
   type: WebSocketMessageType;
@@ -152,5 +154,33 @@ export interface SessionStatusUpdate {
   paused_agents?: number;
   resumed_agents?: number;
   pending_tasks?: number;
+  timestamp: string;
+}
+
+export type ToolApprovalType = 'SHELL_EXEC' | 'FILE_WRITE' | 'NETWORK_REQUEST';
+export type ToolApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
+
+export interface ToolApprovalRequestPayload {
+  approval_id: string;
+  swarm_session_id: string;
+  agent_id: string;
+  agent_name: string;
+  type: ToolApprovalType;
+  tool_name: string;
+  input_params: Record<string, unknown>;
+  description: string;
+  working_dir?: string;
+  created_at: string;
+  expires_at: string;
+}
+
+export interface ToolApprovalUpdatePayload {
+  approval_id: string;
+  swarm_session_id: string;
+  agent_id: string;
+  status: ToolApprovalStatus;
+  result?: string;
+  error?: string;
+  executed_at?: string;
   timestamp: string;
 }

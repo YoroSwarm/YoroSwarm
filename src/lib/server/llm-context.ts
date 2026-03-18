@@ -24,12 +24,14 @@ export async function compressContextMessages(
   options?: {
     swarmSessionId?: string
     agentId?: string
+    userId?: string
     model?: string
   }
 ): Promise<LLMMessage[]> {
   return compressContext(messages, {
     swarmSessionId: options?.swarmSessionId,
     agentId: options?.agentId,
+    userId: options?.userId,
     model: options?.model,
   })
 }
@@ -334,6 +336,7 @@ export async function buildLeadContextMessages(input: {
   currentAttachments?: Array<{ fileName: string; mimeType: string }>
   swarmSessionId?: string
   agentId?: string
+  userId?: string
   preferences?: {
     agentsMd?: string | null
     soulMd?: string | null
@@ -379,6 +382,7 @@ export async function buildLeadContextMessages(input: {
   return compressContextMessages(messages, {
     swarmSessionId: input.swarmSessionId,
     agentId: input.agentId,
+    userId: input.userId,
   })
 }
 
@@ -425,6 +429,7 @@ export async function buildTeammateContextMessages(input: {
   newMessagesSummary: string
   swarmSessionId?: string
   agentId?: string
+  userId?: string
 }): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
   const chronologicalEntries = [...input.contextEntries].reverse()
@@ -487,5 +492,6 @@ ${input.newMessagesSummary}
   return compressContextMessages(messages, {
     swarmSessionId: input.swarmSessionId,
     agentId: input.agentId,
+    userId: input.userId,
   })
 }

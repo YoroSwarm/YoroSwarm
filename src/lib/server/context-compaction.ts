@@ -239,7 +239,8 @@ export async function readTranscript(filepath: string): Promise<LLMMessage[]> {
 async function generateContextSummary(
   messages: LLMMessage[],
   swarmSessionId: string,
-  agentId: string
+  agentId: string,
+  userId?: string
 ): Promise<CompactSummary> {
   // 将消息序列转为可读文本供 LLM 摘要
   const conversationText = messages.map(msg => {
@@ -265,6 +266,7 @@ async function generateContextSummary(
       messages: [{ role: 'user', content: `请总结以下对话：\n\n${truncated}` }],
       maxTokens: 1500,
       temperature: 0.3,
+      userId,
       usageContext: {
         swarmSessionId,
         agentId,
@@ -355,10 +357,11 @@ export async function autoCompact(
   options: {
     swarmSessionId: string
     agentId: string
+    userId?: string
     keepRecentTurns?: number
   }
 ): Promise<LLMMessage[]> {
-  const { swarmSessionId, agentId, keepRecentTurns = 6 } = options
+  const { swarmSessionId, agentId, userId, keepRecentTurns = 6 } = options
 
   if (messages.length <= keepRecentTurns + 2) {
     return messages // 太少，不压缩
@@ -374,7 +377,7 @@ export async function autoCompact(
   const middleMessages = messages.slice(2, -keepRecentTurns)
 
   // 3. 对中间部分生成 LLM 摘要
-  const summary = await generateContextSummary(middleMessages, swarmSessionId, agentId)
+  const summary = await generateContextSummary(middleMessages, swarmSessionId, agentId, userId)
   const summaryText = formatSummaryAsMessage(summary, transcriptPath)
 
   // 4. 构建压缩后的消息序列
@@ -401,6 +404,7 @@ export interface CompressOptions {
   model?: string
   swarmSessionId?: string
   agentId?: string
+  userId?: string
   microCompactKeepRecent?: number
   autoCompactKeepRecentTurns?: number
 }
@@ -415,7 +419,7 @@ export async function compressContext(
   messages: LLMMessage[],
   options: CompressOptions = {}
 ): Promise<LLMMessage[]> {
-  const model = options.model || process.env.DEFAULT_LLM_MODEL || 'claude-sonnet-4-20250514'
+  const model = options.model || 'claude-sonnet-4-20250514'
   const maxTokens = options.maxTokens || getModelContextSize(model)
   const microCompactThreshold = 0.6  // 60% 时触发 micro-compact
   const autoCompactThreshold = 0.8   // 80% 时触发 auto-compact
@@ -440,6 +444,7 @@ export async function compressContext(
     currentMessages = await autoCompact(currentMessages, {
       swarmSessionId: options.swarmSessionId,
       agentId: options.agentId,
+      userId: options.userId,
       keepRecentTurns,
     })
   }

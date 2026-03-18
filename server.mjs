@@ -324,7 +324,9 @@ function initializeWebSocketServer(server) {
 }
 
 // ============ 导出供 API 路由使用 ============
-export function publishRealtimeMessage(message, scope) {
+// 发布到全局，确保 route.ts 能访问同一个实例
+// 注意：必须在 initializeWebSocketServer 之后执行
+globalThis.__publishRealtimeMessage = function(message, scope) {
   broadcast(message, { scope })
 }
 

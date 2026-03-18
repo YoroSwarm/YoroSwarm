@@ -301,7 +301,7 @@ export async function maybeAutoRenameSession(swarmSessionId: string) {
 
     const session = await prisma.swarmSession.findUnique({
       where: { id: swarmSessionId },
-      select: { title: true },
+      select: { title: true, userId: true },
     })
     if (!session) {
       console.log(`[AutoRename] Session ${swarmSessionId} not found`)
@@ -349,6 +349,7 @@ export async function maybeAutoRenameSession(swarmSessionId: string) {
         },
       ],
       maxTokens: 4096,
+      userId: session.userId,
       usageContext: { swarmSessionId, requestKind: 'auto_rename' },
     })
 
