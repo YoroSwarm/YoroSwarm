@@ -25,6 +25,7 @@ interface MessageListProps {
 export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
+  const isUserScrolling = useRef(false);
 
   // Find Lead agent ID from participants or streaming states
   const leadAgentIdFromParticipants = participants.find(p => p.role === 'lead')?.id;
@@ -33,25 +34,41 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
 
   useEffect(() => {
     isFirstLoad.current = true;
+    isUserScrolling.current = false;
   }, [sessionId]);
 
   useEffect(() => {
-    if (containerRef.current && isFirstLoad.current && !isLoading) {
+    // 当有消息加载完成且是首次加载时，滚动到底部
+    if (containerRef.current && isFirstLoad.current && messages.length > 0 && !isLoading) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
       isFirstLoad.current = false;
     }
-  }, [messages, isLoading]);
+  }, [messages, isLoading, messages.length]);
 
-  // Auto-scroll when any agent is streaming
+  // 智能自动滚动：只在用户未向上滚动时才自动滚动到底部
   useEffect(() => {
-    if (containerRef.current && activeStreamingStates.some(s => s.isThinking)) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+    if (!containerRef.current || !activeStreamingStates.some(s => s.isThinking)) {
+      return;
+    }
+
+    const container = containerRef.current;
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+
+    // 只有在用户已经在底部附近时才自动滚动
+    if (isNearBottom) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [activeStreamingStates]);
 
   const handleScroll = useCallback(() => {
     if (!containerRef.current) return;
-    const { scrollTop } = containerRef.current;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+
+    // 检测用户是否主动向上滚动（距离底部超过150px）
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    isUserScrolling.current = distanceFromBottom > 150;
+
+    // 加载更多历史消息
     if (scrollTop === 0 && hasMore && !isLoading) {
       onLoadMore();
     }
