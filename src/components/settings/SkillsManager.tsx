@@ -1,0 +1,292 @@
+"use client";
+
+import { useState, useEffect, useCallback } from "react";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import {
+  Download,
+  Trash2,
+  ChevronDown,
+  ChevronRight,
+  FileCode,
+  Package,
+} from "lucide-react";
+
+interface SkillSummary {
+  name: string;
+  description: string;
+  source: "registry" | "custom";
+  hasScripts: boolean;
+  isEnabled: boolean;
+}
+
+interface SkillDetail {
+  name: string;
+  description: string;
+  license?: string;
+  allowedTools?: string[];
+  compatibility?: string | string[];
+  metadata?: Record<string, unknown>;
+  instructions: string;
+  hasScripts: boolean;
+  scriptFiles: string[];
+}
+
+export function SkillsManager() {
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
+  const [skillDetail, setSkillDetail] = useState<SkillDetail | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const fetchSkills = useCallback(async () => {
+    try {
+      const res = await fetch("/api/skills");
+      const data = await res.json();
+      if (data.success) {
+        setSkills(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch skills:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSkills();
+  }, [fetchSkills]);
+
+  const handleInstall = async (skillName: string) => {
+    setActionLoading(skillName);
+    try {
+      const res = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "install-from-registry",
+          skillName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchSkills();
+      }
+    } catch (err) {
+      console.error("Failed to install skill:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggle = async (skillName: string, enabled: boolean) => {
+    setActionLoading(skillName);
+    try {
+      const res = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "toggle",
+          skillName,
+          enabled,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSkills((prev) =>
+          prev.map((s) => (s.name === skillName ? { ...s, isEnabled: enabled } : s))
+        );
+      }
+    } catch (err) {
+      console.error("Failed to toggle skill:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleUninstall = async (skillName: string) => {
+    setActionLoading(skillName);
+    try {
+      const res = await fetch("/api/skills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "uninstall",
+          skillName,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchSkills();
+      }
+    } catch (err) {
+      console.error("Failed to uninstall skill:", err);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleExpand = async (skillName: string) => {
+    if (expandedSkill === skillName) {
+      setExpandedSkill(null);
+      setSkillDetail(null);
+      return;
+    }
+
+    setExpandedSkill(skillName);
+    try {
+      const res = await fetch(`/api/skills/${skillName}`);
+      const data = await res.json();
+      if (data.success) {
+        setSkillDetail(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch skill detail:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8 text-muted-foreground">
+        加载中...
+      </div>
+    );
+  }
+
+  const registrySkills = skills.filter((s) => s.source === "registry");
+  const installedSkills = skills.filter((s) => s.isEnabled || s.source === "custom");
+  const uninstalledRegistry = registrySkills.filter((s) => !s.isEnabled);
+
+  return (
+    <div className="space-y-6 overflow-hidden">
+      {/* 已安装/启用的 Skills */}
+      <div className="min-w-0">
+        <h3 className="text-sm font-medium mb-3">已启用的 Skills</h3>
+        {installedSkills.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-4">
+            暂无已启用的 Skills。从下方的预置库中安装。
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {installedSkills.map((skill) => (
+              <div key={skill.name} className="border rounded-lg overflow-hidden">
+                <div className="flex items-center justify-between p-3 gap-2">
+                  <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
+                    <button
+                      onClick={() => handleExpand(skill.name)}
+                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    >
+                      {expandedSkill === skill.name ? (
+                        <ChevronDown className="h-4 w-4" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4" />
+                      )}
+                    </button>
+                    <Package className="h-4 w-4 text-primary shrink-0" />
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="font-medium text-sm truncate">{skill.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {skill.description}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {skill.source === "registry" ? "预置" : "自定义"}
+                    </span>
+                    <Switch
+                      checked={skill.isEnabled}
+                      onCheckedChange={(checked) => handleToggle(skill.name, checked)}
+                      disabled={actionLoading === skill.name}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => handleUninstall(skill.name)}
+                      disabled={actionLoading === skill.name}
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* 展开详情 */}
+                {expandedSkill === skill.name && skillDetail && (
+                  <div className="border-t px-3 py-3 bg-muted/30 overflow-hidden">
+                    {skillDetail.license && (
+                      <p className="text-xs text-muted-foreground mb-2">
+                        许可证: {skillDetail.license}
+                      </p>
+                    )}
+                    {skillDetail.scriptFiles.length > 0 && (
+                      <div className="mb-2">
+                        <p className="text-xs font-medium mb-1">脚本文件:</p>
+                        {skillDetail.scriptFiles.map((f) => (
+                          <div
+                            key={f}
+                            className="flex items-center gap-1.5 text-xs text-muted-foreground overflow-hidden"
+                          >
+                            <FileCode className="h-3 w-3 shrink-0" />
+                            <span className="truncate">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <details className="mt-2">
+                      <summary className="text-xs font-medium cursor-pointer">
+                        完整指令
+                      </summary>
+                      <pre className="mt-2 text-xs whitespace-pre-wrap break-words bg-muted p-2 rounded max-h-60 overflow-y-auto overflow-x-hidden">
+                        {skillDetail.instructions}
+                      </pre>
+                    </details>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 预置库 */}
+      {uninstalledRegistry.length > 0 && (
+        <>
+          <Separator />
+          <div className="min-w-0">
+            <h3 className="text-sm font-medium mb-3">预置 Skills 库</h3>
+            <div className="space-y-2">
+              {uninstalledRegistry.map((skill) => (
+                <div
+                  key={skill.name}
+                  className="flex items-center justify-between border rounded-lg p-3 gap-2"
+                >
+                  <div className="flex items-center gap-3 min-w-0 overflow-hidden">
+                    <Package className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="font-medium text-sm truncate">{skill.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {skill.description}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => handleInstall(skill.name)}
+                    disabled={actionLoading === skill.name}
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    {actionLoading === skill.name ? "安装中..." : "安装"}
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

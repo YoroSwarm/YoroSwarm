@@ -12,6 +12,8 @@ import { Download, FileText, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface FilePreviewDialogProps {
   open: boolean;
@@ -41,6 +43,11 @@ const TEXT_PREVIEW_LIMIT = 512 * 1024; // 512KB
 function getLanguageFromFilename(filename: string): string | null {
   const ext = filename.split('.').pop()?.toLowerCase() || '';
   return EXTENSION_LANG_MAP[ext] || null;
+}
+
+function isMarkdownFile(fileName: string): boolean {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  return ext === 'md' || ext === 'mdx';
 }
 
 function isPreviewableText(mimeType?: string, fileName?: string): boolean {
@@ -202,6 +209,54 @@ export function FilePreviewDialog({
         );
       }
       if (textContent !== null) {
+        // Markdown 文件渲染为 HTML
+        if (isMarkdownFile(fileName)) {
+          return (
+            <div className="max-h-[70vh] overflow-auto rounded border border-border bg-background p-6 markdown-content text-sm">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={{
+                  // 代码块使用语法高亮
+                  pre: ({ node, children, ...props }) => (
+                    <pre className="bg-muted p-4 rounded-lg overflow-x-auto" {...props}>
+                      {children}
+                    </pre>
+                  ),
+                  code: ({ node, inline, className, children, ...props }) => {
+                    const match = /language-(\w+)/.exec(className || '');
+                    const lang = match ? match[1] : '';
+                    if (!inline && lang) {
+                      return (
+                        <SyntaxHighlighter
+                          language={lang}
+                          style={vscDarkPlus}
+                          customStyle={{
+                            margin: 0,
+                            borderRadius: '0.375rem',
+                            fontSize: '0.8125rem',
+                            background: 'transparent',
+                          }}
+                          PreTag="div"
+                          {...props}
+                        >
+                          {String(children).replace(/\n$/, '')}
+                        </SyntaxHighlighter>
+                      );
+                    }
+                    return (
+                      <code className="bg-muted px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                        {children}
+                      </code>
+                    );
+                  },
+                }}
+              >
+                {textContent}
+              </ReactMarkdown>
+            </div>
+          );
+        }
+        // 其他代码文件使用语法高亮
         if (language) {
           return (
             <div className="max-h-[70vh] overflow-auto rounded border border-border text-sm">
@@ -220,6 +275,7 @@ export function FilePreviewDialog({
             </div>
           );
         }
+        // 普通文本文件
         return (
           <pre className="max-h-[70vh] overflow-auto rounded border border-border bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap wrap-break-word">
             {textContent}

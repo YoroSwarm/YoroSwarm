@@ -275,6 +275,15 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '获取团队',
           fields: [],
         };
+      case 'assign_skill_to_teammate':
+        return {
+          icon: '🧩',
+          title: '分配技能',
+          fields: [
+            { label: '队友', value: input.teammate_id as string },
+            { label: '技能', value: input.skill_name as string },
+          ],
+        };
       case 'shell_exec':
         return {
           icon: '⚡',
@@ -318,6 +327,7 @@ function getToolDisplayName(toolName: string | undefined): string {
     'resume_work': '恢复工作',
     'broadcast_to_team': '团队广播',
     'get_team_roster': '获取团队',
+    'assign_skill_to_teammate': '分配技能',
   };
   return nameMap[toolName] || toolName;
 }
@@ -432,6 +442,17 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
     case 'send_message_to_teammate':
     case 'send_message_to_lead':
       return { type: 'text', content: output };
+
+    case 'assign_skill_to_teammate':
+      if (parsedOutput) {
+        const fields: ToolOutputField[] = [
+          { label: '队友', value: String(parsedOutput.teammate_id || parsedOutput.agentId || '-') },
+          { label: '技能', value: String(parsedOutput.skill_name || parsedOutput.skillName || '-') },
+          { label: '状态', value: String(parsedOutput.status || '已分配') },
+        ];
+        return { type: 'fields', content: output, fields };
+      }
+      return { type: 'success', content: output };
       
     case 'report_task_completion':
       return { type: 'success', content: output };

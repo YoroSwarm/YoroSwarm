@@ -231,6 +231,7 @@ function buildLeadSystemStateMessage(input: {
     agentsMd?: string | null
     soulMd?: string | null
   }
+  skillsSection?: string | null
 }): string | null {
   const parts: string[] = []
 
@@ -269,6 +270,12 @@ function buildLeadSystemStateMessage(input: {
   parts.push(soulMd)
 
   parts.push('') // 空行分隔
+
+  // 1.5 注入 Skills 目录（如果存在）
+  if (input.skillsSection) {
+    parts.push(input.skillsSection)
+    parts.push('')
+  }
 
   // 2. 原有的 selfTodos 逻辑
   const selfTodoBoard = renderLeadSelfTodoBoard(input.selfTodos)
@@ -341,6 +348,7 @@ export async function buildLeadContextMessages(input: {
     agentsMd?: string | null
     soulMd?: string | null
   }
+  skillsSection?: string | null
 }): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
 
@@ -350,6 +358,7 @@ export async function buildLeadContextMessages(input: {
     attachments: input.attachments,
     selfTodos: input.selfTodos,
     preferences: input.preferences,
+    skillsSection: input.skillsSection,
   })
   if (stateMessage) {
     pushMessage(messages, 'user', stateMessage)
@@ -396,6 +405,7 @@ export function buildLeadContextSummary(input: {
     agentsMd?: string | null
     soulMd?: string | null
   }
+  skillsSection?: string | null
 }): string {
   const parts: string[] = []
 
@@ -414,6 +424,7 @@ export function buildLeadContextSummary(input: {
     attachments: input.attachments,
     selfTodos: input.selfTodos,
     preferences: input.preferences,
+    skillsSection: input.skillsSection,
   })
   if (stateMessage) {
     parts.push(stateMessage)

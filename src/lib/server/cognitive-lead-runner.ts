@@ -19,6 +19,7 @@ import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { getLeadSelfTodoItems } from './lead-self-todo'
 import { getLeadPreferences } from './lead-preferences'
+import { buildLeadSkillsSection } from './skills/skill-injector'
 
 // 认知收件箱
 import {
@@ -308,8 +309,11 @@ async function processInboxMessages(
 ): Promise<void> {
   const { swarmSessionId, userId, leadAgentId } = input
 
-  // 从数据库获取用户 Lead 配置
-  const preferences = await getLeadPreferences(userId)
+  // 从数据库获取用户 Lead 配置和 Skills 目录
+  const [preferences, skillsSection] = await Promise.all([
+    getLeadPreferences(userId),
+    buildLeadSkillsSection(userId),
+  ])
 
   // 构建消息摘要
   const messageSummary = messages.map(m => {
@@ -416,6 +420,7 @@ ${messageSummary}
       agentsMd: preferences.agentsMd ?? undefined,
       soulMd: preferences.soulMd ?? undefined,
     } : undefined,
+    skillsSection,
   })
 
   // 动态计算 maxIterations：大任务集需要更多迭代空间

@@ -195,4 +195,22 @@ export const leadTools: ToolDefinition[] = [
       required: ['task_id', 'verification_type'],
     },
   },
+  {
+    name: 'assign_skill_to_teammate',
+    description: '为队友分配一个 Skill。分配后队友将获得该 Skill 的详细指令和脚本资源，通过现有工具（shell_exec、read_workspace_file 等）执行。使用前请查看上下文中的「可用 Skills」列表。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        teammate_id: {
+          type: 'string',
+          description: '队友 ID（从「当前团队成员」列表中获取）',
+        },
+        skill_name: {
+          type: 'string',
+          description: 'Skill 名称（从「可用 Skills」列表中选择）',
+        },
+      },
+      required: ['teammate_id', 'skill_name'],
+    },
+  },
 ]

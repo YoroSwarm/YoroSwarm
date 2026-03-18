@@ -21,6 +21,7 @@ import {
   getCognitiveRuntime,
   resumeSnapshot,
 } from './cognitive-inbox'
+import { assignSkillToAgent } from './skills/skill-registry'
 
 export interface LeadProcessorInput {
   swarmSessionId: string
@@ -381,6 +382,47 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           focus_areas: focusAreas,
           message: '请根据以上结果进行验证，若发现问题可创建修正任务。',
         })
+      }
+
+      case 'assign_skill_to_teammate': {
+        const teammateId = toolInput.teammate_id as string
+        const skillName = toolInput.skill_name as string
+
+        try {
+          const result = await assignSkillToAgent(
+            swarmSessionId,
+            userId,
+            teammateId,
+            skillName,
+            leadAgentId
+          )
+
+          // Deliver skill instructions to teammate via inbox
+          const { deliverMessage } = await import('./cognitive-inbox')
+          await deliverMessage(swarmSessionId, teammateId, {
+            source: 'system',
+            senderId: leadAgentId,
+            senderName: 'Lead',
+            type: 'system_alert',
+            content: `[Skill 已分配] 你已获得 Skill: ${skillName}\n\n${result.instructions}\n\n> 脚本目录: ${result.workspacePath}/scripts/\n> 使用 read_workspace_file 读取脚本，shell_exec 执行脚本。`,
+            metadata: { skillName, workspacePath: result.workspacePath },
+            swarmSessionId,
+            agentId: teammateId,
+          })
+
+          return JSON.stringify({
+            success: true,
+            skill_name: skillName,
+            teammate_id: teammateId,
+            workspace_path: result.workspacePath,
+            message: `已将 Skill "${skillName}" 分配给队友，脚本已挂载到 ${result.workspacePath}`,
+          })
+        } catch (err) {
+          return JSON.stringify({
+            success: false,
+            error: err instanceof Error ? err.message : 'Failed to assign skill',
+          })
+        }
       }
 
       default:

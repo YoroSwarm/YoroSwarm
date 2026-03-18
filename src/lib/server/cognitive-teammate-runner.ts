@@ -37,6 +37,9 @@ import {
 // 共享知识层
 import { getUpstreamKnowledge, formatUpstreamKnowledge } from './shared-knowledge'
 
+// Skills 注入
+import { buildTeammateSkillsPromptSection, ensureTeammateSkillsMounted } from './skills/skill-injector'
+
 const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}**。
 
 ## 你的角色
@@ -599,6 +602,17 @@ async function processTeammateMessages(
     ? await prisma.teamLeadTask.findUnique({ where: { id: taskId } })
     : null
 
+  // 加载 Teammate 的已分配 Skills（用于 system prompt 注入）
+  let skillsSection: string | null = null
+  if (userId) {
+    try {
+      await ensureTeammateSkillsMounted(teammateId, userId, swarmSessionId)
+      skillsSection = await buildTeammateSkillsPromptSection(teammateId, userId)
+    } catch (err) {
+      console.warn(`[CognitiveTeammateRunner] Failed to load skills for ${teammateId}:`, err)
+    }
+  }
+
   const activeTaskId = task && task.status === 'IN_PROGRESS' ? task.id : null
   const nonBlockingMessages = messages.filter(isNonBlockingWorkMessage)
   const actionableMessages = messages.filter((message) => {
@@ -665,7 +679,7 @@ async function processTeammateMessages(
 
   // 执行LLM循环
   const result = await runAgentLoop({
-    systemPrompt: buildTeammateSystemPrompt(teammate, task),
+    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection),
     agentId: teammateId,
     agentName: teammate.name,
     swarmSessionId,
@@ -711,13 +725,14 @@ async function processTeammateMessages(
  */
 function buildTeammateSystemPrompt(
   teammate: { name: string; role: string; description: string | null; capabilities: string | null },
-  task: { title: string; description: string | null } | null
+  task: { title: string; description: string | null } | null,
+  skillsSection?: string | null
 ): string {
   const caps = teammate.capabilities
     ? (() => { try { return JSON.parse(teammate.capabilities) } catch { return [] } })()
     : []
 
-  return TEAMMATE_SYSTEM_PROMPT_TEMPLATE
+  let prompt = TEAMMATE_SYSTEM_PROMPT_TEMPLATE
     .replace('{{name}}', teammate.name)
     .replace('{{role}}', teammate.role)
     .replace('{{description}}', teammate.description || '团队成员')
@@ -725,6 +740,12 @@ function buildTeammateSystemPrompt(
     .replace('{{currentTask}}', task
       ? `- 标题: ${task.title}\n- 描述: ${task.description || '无详细描述'}`
       : '- 当前没有活跃任务，请优先处理收件箱中的协调或澄清消息。')
+
+  if (skillsSection) {
+    prompt += '\n' + skillsSection
+  }
+
+  return prompt
 }
 
 async function buildTeammateContextMessages(

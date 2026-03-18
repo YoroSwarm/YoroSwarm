@@ -11,6 +11,8 @@ import {
   Monitor,
   Users,
   Key,
+  Puzzle,
+  Terminal,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,6 +20,8 @@ import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { LlmApiConfigList } from "@/components/settings/LlmApiConfigList";
+import { SkillsManager } from "@/components/settings/SkillsManager";
+import { EnvVarsManager } from "@/components/settings/EnvVarsManager";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function SettingsPage() {
@@ -70,6 +74,8 @@ export default function SettingsPage() {
     { id: "appearance", label: "外观", icon: Palette },
     { id: "notifications", label: "通知", icon: Bell },
     { id: "llm-api", label: "LLM API", icon: Key },
+    { id: "skills", label: "Skills", icon: Puzzle },
+    { id: "env-vars", label: "环境变量", icon: Terminal },
     { id: "lead-config", label: "Lead 配置", icon: Users },
   ];
 
@@ -82,7 +88,7 @@ export default function SettingsPage() {
         <p className="text-muted-foreground mt-1">管理您的系统偏好</p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col lg:flex-row gap-6 min-w-0">
         <div className="w-full lg:w-64 shrink-0">
           <div className="rounded-xl border bg-card p-2">
             {tabs.map((tab) => (
@@ -103,7 +109,7 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="flex-1">
+        <div className="flex-1 min-w-0">
           {activeTab === "appearance" && (
             <Card>
               <CardHeader>
@@ -193,6 +199,34 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent>
                 <LlmApiConfigList />
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "skills" && (
+            <Card className="overflow-hidden">
+              <CardHeader>
+                <CardTitle className="text-lg">Skills 管理</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  安装和管理 Agent Skills。Lead 可以将已启用的 Skills 分配给 Teammate，为其提供额外的工作流指令和脚本工具。
+                </p>
+              </CardHeader>
+              <CardContent>
+                <SkillsManager />
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "env-vars" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">环境变量</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  配置环境变量，在 Teammate 执行 shell_exec 时自动注入。适用于 API 密钥、配置参数等。
+                </p>
+              </CardHeader>
+              <CardContent>
+                <EnvVarsManager />
               </CardContent>
             </Card>
           )}

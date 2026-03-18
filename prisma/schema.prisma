@@ -24,6 +24,7 @@ model User {
   isSuperuser    Boolean   @default(false) @map("is_superuser")
   leadAgentsMd   String?   @map("lead_agents_md")
   leadSoulMd     String?   @map("lead_soul_md")
+  envVarsJson    String?   @map("env_vars_json")   // JSON: { "KEY": "value", ... }
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastLogin      DateTime? @map("last_login")
@@ -35,6 +36,7 @@ model User {
   files         File[]
   llmUsageEvents LlmUsageEvent[]
   llmApiConfigs LlmApiConfig[]
+  skills        UserSkill[]
 
   @@map("users")
 }
@@ -85,6 +87,7 @@ model SwarmSession {
   llmUsageEvents        LlmUsageEvent[]
   sharedKnowledgeEntries SharedKnowledgeEntry[]
   toolApprovals         ToolApproval[]
+  skillAssignments      AgentSkillAssignment[]
 
   @@map("swarm_sessions")
 }
@@ -194,6 +197,7 @@ model Agent {
   externalConversationsAsLead ExternalConversation[] @relation("ExternalConversationLead")
   leadSelfTodos        LeadSelfTodo[]
   llmUsageEvents       LlmUsageEvent[]
+  skillAssignments     AgentSkillAssignment[]
 
   @@index([swarmSessionId])
   @@map("agents")
@@ -527,4 +531,41 @@ model ToolApproval {
   @@index([swarmSessionId, createdAt])
   @@index([status, expiresAt])
   @@map("tool_approvals")
+}
+
+// ============================================
+// Skills 模块 (Agent Skills)
+// ============================================
+
+model UserSkill {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  skillName   String   @map("skill_name")
+  skillPath   String   @map("skill_path")
+  source      String   @default("custom") // "registry" | "custom"
+  isEnabled   Boolean  @default(true) @map("is_enabled")
+  installedAt DateTime @default(now()) @map("installed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, skillName])
+  @@index([userId, isEnabled])
+  @@map("user_skills")
+}
+
+model AgentSkillAssignment {
+  id             String   @id @default(uuid())
+  agentId        String   @map("agent_id")
+  skillName      String   @map("skill_name")
+  assignedBy     String   @map("assigned_by")
+  swarmSessionId String   @map("swarm_session_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillName])
+  @@index([swarmSessionId, agentId])
+  @@map("agent_skill_assignments")
 }

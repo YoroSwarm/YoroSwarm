@@ -206,6 +206,26 @@ export async function executeApprovedCommand(
     throw new Error(errorMsg)
   }
 
+  // 加载用户环境变量（如果有）
+  let userEnvVars: Record<string, string> = {}
+  try {
+    const session = await prisma.swarmSession.findUnique({
+      where: { id: swarmSessionId },
+      select: { userId: true },
+    })
+    if (session?.userId) {
+      const user = await prisma.user.findUnique({
+        where: { id: session.userId },
+        select: { envVarsJson: true },
+      })
+      if (user?.envVarsJson) {
+        userEnvVars = JSON.parse(user.envVarsJson)
+      }
+    }
+  } catch (envErr) {
+    console.warn('[ToolApproval] Failed to load user env vars:', envErr)
+  }
+
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
@@ -230,10 +250,9 @@ export async function executeApprovedCommand(
 
     const shellPath = detectShell()
 
-    // 使用 spawn 执行命令，直接通过 shell 运行
     const child = spawn(shellPath, ['-c', command], {
       cwd: workingDir,
-      env: { ...process.env, PATH: process.env.PATH },
+      env: { ...process.env, PATH: process.env.PATH, ...userEnvVars },
     })
 
     // 设置超时
