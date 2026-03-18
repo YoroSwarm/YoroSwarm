@@ -224,8 +224,55 @@ function buildLeadSystemStateMessage(input: {
   tasks: LeadTaskRecord[]
   attachments: LeadAttachmentRecord[]
   selfTodos?: LeadSelfTodoRecord[]
+  preferences?: {
+    agentsMd?: string
+    soulMd?: string
+  }
 }): string | null {
   const parts: string[] = []
+
+  // 1. 注入用户配置（如果存在）
+  console.log('[LeadPreferences] 原始 preferences:', {
+    preferences: input.preferences,
+    hasAgentsMd: !!input.preferences?.agentsMd,
+    hasSoulMd: !!input.preferences?.soulMd,
+    agentsMdType: typeof input.preferences?.agentsMd,
+    soulMdType: typeof input.preferences?.soulMd,
+    agentsMdValue: input.preferences?.agentsMd?.substring(0, 50),
+    soulMdValue: input.preferences?.soulMd?.substring(0, 50),
+  })
+
+  if (input.preferences?.agentsMd || input.preferences?.soulMd) {
+    console.log('[LeadPreferences] 注入用户配置', {
+      hasAgentsMd: !!input.preferences?.agentsMd,
+      hasSoulMd: !!input.preferences?.soulMd,
+      agentsMdLength: input.preferences?.agentsMd?.length || 0,
+      soulMdLength: input.preferences?.soulMd?.length || 0,
+    })
+    parts.push('[用户配置]')
+
+    if (input.preferences.agentsMd) {
+      console.log('[LeadPreferences] 注入 AGENTS.md，长度:', input.preferences.agentsMd.length)
+      parts.push('## AGENTS.md')
+      parts.push(input.preferences.agentsMd)
+    } else {
+      console.log('[LeadPreferences] 跳过 AGENTS.md (为空或 null)')
+    }
+
+    if (input.preferences.soulMd) {
+      console.log('[LeadPreferences] 注入 SOUL.md，长度:', input.preferences.soulMd.length)
+      parts.push('## SOUL.md')
+      parts.push(input.preferences.soulMd)
+    } else {
+      console.log('[LeadPreferences] 跳过 SOUL.md (为空或 null)')
+    }
+
+    parts.push('') // 空行分隔
+  } else {
+    console.log('[LeadPreferences] 无用户配置，跳过注入')
+  }
+
+  // 2. 原有的 selfTodos 逻辑
   const selfTodoBoard = renderLeadSelfTodoBoard(input.selfTodos)
   if (selfTodoBoard) {
     parts.push(selfTodoBoard)
@@ -271,7 +318,13 @@ function buildLeadSystemStateMessage(input: {
     }
   }
 
-  return parts.length > 0 ? `[系统状态更新]\n${parts.join('\n')}` : null
+  return parts.length > 0 ? (() => {
+    const result = `[系统状态更新]\n${parts.join('\n')}`
+    console.log('[LeadPreferences] 最终系统状态消息长度:', result.length)
+    // 打印前 500 个字符来验证
+    console.log('[LeadPreferences] 系统状态消息预览:', result.substring(0, 500))
+    return result
+  })() : null
 }
 
 export async function buildLeadContextMessages(input: {
@@ -285,6 +338,10 @@ export async function buildLeadContextMessages(input: {
   currentAttachments?: Array<{ fileName: string; mimeType: string }>
   swarmSessionId?: string
   agentId?: string
+  preferences?: {
+    agentsMd?: string
+    soulMd?: string
+  }
 }): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
 
@@ -293,6 +350,7 @@ export async function buildLeadContextMessages(input: {
     tasks: input.tasks,
     attachments: input.attachments,
     selfTodos: input.selfTodos,
+    preferences: input.preferences,
   })
   if (stateMessage) {
     pushMessage(messages, 'user', stateMessage)
@@ -334,6 +392,10 @@ export function buildLeadContextSummary(input: {
   tasks: LeadTaskRecord[]
   attachments: LeadAttachmentRecord[]
   selfTodos?: LeadSelfTodoRecord[]
+  preferences?: {
+    agentsMd?: string
+    soulMd?: string
+  }
 }): string {
   const parts: string[] = []
 
@@ -351,6 +413,7 @@ export function buildLeadContextSummary(input: {
     tasks: input.tasks,
     attachments: input.attachments,
     selfTodos: input.selfTodos,
+    preferences: input.preferences,
   })
   if (stateMessage) {
     parts.push(stateMessage)

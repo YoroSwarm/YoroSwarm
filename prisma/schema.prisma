@@ -22,6 +22,8 @@ model User {
   avatarUrl      String?   @map("avatar_url")
   isActive       Boolean   @default(true) @map("is_active")
   isSuperuser    Boolean   @default(false) @map("is_superuser")
+  leadAgentsMd   String?   @map("lead_agents_md")
+  leadSoulMd     String?   @map("lead_soul_md")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastLogin      DateTime? @map("last_login")

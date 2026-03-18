@@ -472,6 +472,8 @@ export function useMessages(options: UseMessagesOptions) {
               mimeType: f.mimeType,
             })),
           };
+        } else {
+          messagePayload.metadata = {};
         }
 
         const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);

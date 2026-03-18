@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useThemeStore } from "@/stores";
+import { useState, useEffect } from "react";
+import { useThemeStore, useLeadPreferencesStore } from "@/stores";
 import {
   Bell,
   Palette,
@@ -9,18 +9,54 @@ import {
   Moon,
   Sun,
   Monitor,
+  Users,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
+  const {
+    isCustomized,
+    lastUpdated,
+    isLoading,
+    loadPreferences,
+    savePreferences,
+    setAgentsMd,
+    setSoulMd,
+    resetToDefaults,
+    getDisplayAgentsMd,
+    getDisplaySoulMd,
+  } = useLeadPreferencesStore();
   const [activeTab, setActiveTab] = useState("appearance");
+
+  // 加载配置
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
+
+  const handleSave = async () => {
+    try {
+      await savePreferences();
+    } catch (error) {
+      console.error("Failed to save preferences:", error);
+    }
+  };
+
+  const handleResetToDefaults = async () => {
+    if (confirm("确定要恢复默认配置吗？所有自定义内容将丢失。")) {
+      resetToDefaults();
+      await savePreferences();
+    }
+  };
 
   const tabs = [
     { id: "appearance", label: "外观", icon: Palette },
     { id: "notifications", label: "通知", icon: Bell },
+    { id: "lead-config", label: "Lead 配置", icon: Users },
   ];
 
   return (
@@ -130,6 +166,100 @@ export default function SettingsPage() {
                     {index < arr.length - 1 && <Separator className="mt-4" />}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "lead-config" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Team Lead 配置</CardTitle>
+                  <div className="flex items-center gap-2">
+                    {isCustomized && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleSave}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? "保存中..." : "保存"}
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResetToDefaults}
+                      disabled={isLoading}
+                    >
+                      恢复默认
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  自定义 Team Lead 的行为方式和团队配置
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* AGENTS.md 编辑器 */}
+                <div>
+                  <label className="text-sm font-medium">
+                    AGENTS.md
+                    <span className="text-muted-foreground font-normal ml-2">
+                      - 团队成员配置指南
+                    </span>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    决定 Lead 如何组织团队、分配任务、协调工作
+                  </p>
+                  <Textarea
+                    value={getDisplayAgentsMd()}
+                    onChange={(e) => setAgentsMd(e.target.value)}
+                    className="min-h-50 font-mono text-sm"
+                    rows={12}
+                  />
+                </div>
+
+                <Separator />
+
+                {/* SOUL.md 编辑器 */}
+                <div>
+                  <label className="text-sm font-medium">
+                    SOUL.md
+                    <span className="text-muted-foreground font-normal ml-2">
+                      - Team Lead 性格特征
+                    </span>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    决定 Lead 的沟通风格、价值观、工作方式
+                  </p>
+                  <Textarea
+                    value={getDisplaySoulMd()}
+                    onChange={(e) => setSoulMd(e.target.value)}
+                    className="min-h-50 font-mono text-sm"
+                    rows={12}
+                  />
+                </div>
+
+                <Separator />
+
+                {/* 状态提示 */}
+                <div className="text-sm text-muted-foreground">
+                  {isCustomized ? (
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-green-500" />
+                      已自定义
+                      {lastUpdated && (
+                        <span>(最后更新: {new Date(lastUpdated).toLocaleString()})</span>
+                      )}
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-2">
+                      <span className="h-2 w-2 rounded-full bg-gray-400" />
+                      使用默认配置
+                    </span>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}

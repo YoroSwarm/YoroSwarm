@@ -283,11 +283,9 @@ h1, h2, h3, h4, h5, h6 {
   background: var(--foreground);
 }
 
-/* Smooth theme transitions */
-* {
-  transition-property: background-color, border-color, color;
-  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-  transition-duration: 150ms;
+/* Smooth theme transitions - only apply to specific properties */
+body {
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 /* Disable transitions for theme changes to prevent flash */

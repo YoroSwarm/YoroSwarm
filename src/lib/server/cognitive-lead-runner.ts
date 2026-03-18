@@ -18,6 +18,7 @@ import { buildLeadToolExecutor } from './lead-tool-executor'
 import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { getLeadSelfTodoItems } from './lead-self-todo'
+import { getLeadPreferences } from './lead-preferences'
 
 // 认知收件箱
 import {
@@ -189,6 +190,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
       executeTool: buildLeadToolExecutor(input),
     },
     onProcessMessages: async (messages, context) => {
+      // Note: preferences 在消息处理时动态获取（见 processInboxMessages）
       await processInboxMessages(input, messages, context, abortController.signal)
       // If abort happened during processing, throw so messages aren't marked completed
       if (abortController.signal.aborted) {
@@ -294,7 +296,7 @@ export function cleanupCognitiveLead(swarmSessionId: string, leadAgentId: string
 
 /**
  * 处理收件箱中的消息
- * 
+ *
  * 这是核心处理逻辑：Lead看到消息，决定如何响应
  */
 async function processInboxMessages(
@@ -304,6 +306,9 @@ async function processInboxMessages(
   abortSignal?: AbortSignal
 ): Promise<void> {
   const { swarmSessionId, userId, leadAgentId } = input
+
+  // 从数据库获取用户 Lead 配置
+  const preferences = await getLeadPreferences(userId)
 
   // 构建消息摘要
   const messageSummary = messages.map(m => {
@@ -405,6 +410,7 @@ ${messageSummary}
     currentUserMessage,
     swarmSessionId,
     agentId: leadAgentId,
+    preferences,
   })
 
   // 动态计算 maxIterations：大任务集需要更多迭代空间
