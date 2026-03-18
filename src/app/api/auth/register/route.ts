@@ -3,6 +3,7 @@ import prisma from '@/lib/db'
 import { hashPassword, validatePassword } from '@/lib/auth/password'
 import { verifyAccessCode } from '@/lib/auth/access-code'
 import { successResponse, errorResponse } from '@/lib/api/response'
+import { DEFAULT_LEAD_AGENTS_MD, DEFAULT_LEAD_SOUL_MD } from '@/lib/constants/lead-preferences'
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await hashPassword(password)
 
-    // Create user
+    // Create user with default Lead preferences
     const user = await prisma.user.create({
       data: {
         username,
@@ -63,6 +64,8 @@ export async function POST(request: NextRequest) {
         hashedPassword,
         isActive: true,
         isSuperuser: false,
+        leadAgentsMd: DEFAULT_LEAD_AGENTS_MD,
+        leadSoulMd: DEFAULT_LEAD_SOUL_MD,
       },
     })
 

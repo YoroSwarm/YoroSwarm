@@ -7,7 +7,7 @@ import type {
   ToolResultBlock,
   ToolUseBlock as MessageToolUseBlock,
 } from './types'
-import { detectProvider, getProviderConfig } from './config'
+import { getProviderConfig, callWithFallback } from './config'
 import { callAnthropic } from './anthropic'
 import { callOpenAI } from './openai'
 import { recordLlmUsageEvent } from './usage'
@@ -88,38 +88,149 @@ function sanitizeLLMMessages(messages: LLMMessage[]): LLMMessage[] {
 }
 
 /**
+ * 指数退避重试
+ * @param fn - 要执行的异步函数
+ * @param maxRetries - 最大重试次数
+ * @param baseDelayMs - 基础延迟时间（毫秒）
+ */
+async function retryWithExponentialBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelayMs: number = 1000
+): Promise<T> {
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn()
+    } catch (error) {
+      lastError = error
+
+      // 检查是否是可重试的错误
+      const isRetryable = isRetryableError(error)
+
+      if (!isRetryable || attempt === maxRetries) {
+        throw error
+      }
+
+      // 计算延迟时间：baseDelayMs * 2^attempt + 随机抖动
+      const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 1000
+      console.warn(`LLM request failed, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1}/${maxRetries})...`, error)
+
+      await sleep(delay)
+    }
+  }
+
+  throw lastError
+}
+
+/**
+ * 判断错误是否可重试
+ */
+function isRetryableError(error: unknown): boolean {
+  if (error instanceof Error) {
+    const errorMessage = error.message.toLowerCase()
+    const errorName = error.name.toLowerCase()
+
+    // 网络错误
+    if (
+      errorName.includes('network') ||
+      errorName.includes('fetch') ||
+      errorMessage.includes('network') ||
+      errorMessage.includes('fetch') ||
+      errorMessage.includes('econnrefused') ||
+      errorMessage.includes('enotfound') ||
+      errorMessage.includes('etimedout') ||
+      errorMessage.includes('econnreset')
+    ) {
+      return true
+    }
+
+    // HTTP 429 Too Many Requests
+    if (errorMessage.includes('429') || errorMessage.includes('too many requests') || errorMessage.includes('rate limit')) {
+      return true
+    }
+
+    // HTTP 5xx 服务器错误
+    if (errorMessage.includes('500') || errorMessage.includes('502') || errorMessage.includes('503') || errorMessage.includes('504')) {
+      return true
+    }
+
+    // 超时错误
+    if (errorMessage.includes('timeout') || errorMessage.includes('timed out')) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * 延迟函数
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
+/**
  * 统一 LLM 调用入口
- * 根据 LLM_PROVIDER 环境变量（或自动检测）路由到对应 provider
+ * 支持多配置回退、指数退避重试
  */
 export async function callLLM(options: LLMCallOptions): Promise<LLMResponse> {
-  const provider = detectProvider()
   const sanitizedOptions: LLMCallOptions = {
     ...options,
     messages: sanitizeLLMMessages(options.messages),
   }
 
-  let response: LLMResponse
-  try {
-    response = provider === 'openai'
-      ? await callOpenAI(sanitizedOptions)
-      : await callAnthropic(sanitizedOptions)
-  } catch (error) {
-    // Re-throw abort errors without wrapping
-    if (options.abortSignal?.aborted) {
-      throw new DOMException('LLM call aborted', 'AbortError')
-    }
-    throw error
+  // 如果没有 userId，使用环境变量后备（单次尝试，无回退）
+  if (!options.userId) {
+    const config = await getProviderConfig(undefined, options.agentType)
+
+    const response = await retryWithExponentialBackoff(async () => {
+      if (config.provider === 'openai') {
+        return await callOpenAI(sanitizedOptions, config)
+      } else {
+        return await callAnthropic(sanitizedOptions, config)
+      }
+    })
+
+    await recordLlmUsageEvent({
+      provider: config.provider,
+      response,
+      swarmSessionId: options.usageContext?.swarmSessionId,
+      agentId: options.usageContext?.agentId,
+      requestKind: options.usageContext?.requestKind,
+    })
+
+    return response
   }
 
-  await recordLlmUsageEvent({
-    provider,
-    response,
-    swarmSessionId: options.usageContext?.swarmSessionId,
-    agentId: options.usageContext?.agentId,
-    requestKind: options.usageContext?.requestKind,
-  })
+  // 使用 callWithFallback 实现多配置回退
+  return callWithFallback(
+    options.userId,
+    async (config) => {
+      // 对每个配置进行指数退避重试
+      const response = await retryWithExponentialBackoff(async () => {
+        if (config.provider === 'openai') {
+          return await callOpenAI(sanitizedOptions, config)
+        } else {
+          return await callAnthropic(sanitizedOptions, config)
+        }
+      })
 
-  return response
+      // 记录使用事件
+      await recordLlmUsageEvent({
+        provider: config.provider,
+        response,
+        swarmSessionId: options.usageContext?.swarmSessionId,
+        agentId: options.usageContext?.agentId,
+        requestKind: options.usageContext?.requestKind,
+      })
+
+      return response
+    },
+    options.agentType || 'teammate'
+  )
 }
 
 /**
@@ -133,7 +244,7 @@ function stripProxyEmptyResponse(text: string): string {
   if (trimmed.startsWith('(Empty response:') && trimmed.endsWith(')')) {
     return ''
   }
-  return text
+  return trimmed
 }
 
 /**
@@ -159,8 +270,8 @@ export function extractToolUseBlocks(response: LLMResponse): ToolUseBlock[] {
 /**
  * 获取当前 LLM 配置信息（用于调试/监控）
  */
-export function getLLMInfo() {
-  const config = getProviderConfig()
+export async function getLLMInfo(userId?: string, agentType: 'lead' | 'teammate' = 'teammate') {
+  const config = await getProviderConfig(userId, agentType)
   return {
     provider: config.provider,
     model: config.defaultModel,

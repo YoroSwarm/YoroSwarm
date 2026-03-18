@@ -6,6 +6,7 @@ import {
   ensureToolPairIntegrity,
   microCompactToolResults,
 } from './context-compaction'
+import { DEFAULT_LEAD_AGENTS_MD, DEFAULT_LEAD_SOUL_MD } from '@/lib/constants/lead-preferences'
 
 // Re-export for backward compatibility
 export { estimateTokens, estimateMessagesTokens }
@@ -225,13 +226,13 @@ function buildLeadSystemStateMessage(input: {
   attachments: LeadAttachmentRecord[]
   selfTodos?: LeadSelfTodoRecord[]
   preferences?: {
-    agentsMd?: string
-    soulMd?: string
+    agentsMd?: string | null
+    soulMd?: string | null
   }
 }): string | null {
   const parts: string[] = []
 
-  // 1. 注入用户配置（如果存在）
+  // 1. 注入用户配置（如果存在），否则使用默认配置
   console.log('[LeadPreferences] 原始 preferences:', {
     preferences: input.preferences,
     hasAgentsMd: !!input.preferences?.agentsMd,
@@ -242,35 +243,30 @@ function buildLeadSystemStateMessage(input: {
     soulMdValue: input.preferences?.soulMd?.substring(0, 50),
   })
 
-  if (input.preferences?.agentsMd || input.preferences?.soulMd) {
-    console.log('[LeadPreferences] 注入用户配置', {
-      hasAgentsMd: !!input.preferences?.agentsMd,
-      hasSoulMd: !!input.preferences?.soulMd,
-      agentsMdLength: input.preferences?.agentsMd?.length || 0,
-      soulMdLength: input.preferences?.soulMd?.length || 0,
-    })
-    parts.push('[用户配置]')
+  // 使用用户配置或默认配置
+  const agentsMd = input.preferences?.agentsMd || DEFAULT_LEAD_AGENTS_MD
+  const soulMd = input.preferences?.soulMd || DEFAULT_LEAD_SOUL_MD
 
-    if (input.preferences.agentsMd) {
-      console.log('[LeadPreferences] 注入 AGENTS.md，长度:', input.preferences.agentsMd.length)
-      parts.push('## AGENTS.md')
-      parts.push(input.preferences.agentsMd)
-    } else {
-      console.log('[LeadPreferences] 跳过 AGENTS.md (为空或 null)')
-    }
+  console.log('[LeadPreferences] 注入配置', {
+    hasAgentsMd: !!input.preferences?.agentsMd,
+    hasSoulMd: !!input.preferences?.soulMd,
+    usingDefaultAgents: !input.preferences?.agentsMd,
+    usingDefaultSoul: !input.preferences?.soulMd,
+    agentsMdLength: agentsMd.length,
+    soulMdLength: soulMd.length,
+  })
 
-    if (input.preferences.soulMd) {
-      console.log('[LeadPreferences] 注入 SOUL.md，长度:', input.preferences.soulMd.length)
-      parts.push('## SOUL.md')
-      parts.push(input.preferences.soulMd)
-    } else {
-      console.log('[LeadPreferences] 跳过 SOUL.md (为空或 null)')
-    }
+  parts.push('[用户配置]')
 
-    parts.push('') // 空行分隔
-  } else {
-    console.log('[LeadPreferences] 无用户配置，跳过注入')
-  }
+  console.log('[LeadPreferences] 注入 AGENTS.md，长度:', agentsMd.length)
+  parts.push('## AGENTS.md')
+  parts.push(agentsMd)
+
+  console.log('[LeadPreferences] 注入 SOUL.md，长度:', soulMd.length)
+  parts.push('## SOUL.md')
+  parts.push(soulMd)
+
+  parts.push('') // 空行分隔
 
   // 2. 原有的 selfTodos 逻辑
   const selfTodoBoard = renderLeadSelfTodoBoard(input.selfTodos)
@@ -339,8 +335,8 @@ export async function buildLeadContextMessages(input: {
   swarmSessionId?: string
   agentId?: string
   preferences?: {
-    agentsMd?: string
-    soulMd?: string
+    agentsMd?: string | null
+    soulMd?: string | null
   }
 }): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
@@ -393,8 +389,8 @@ export function buildLeadContextSummary(input: {
   attachments: LeadAttachmentRecord[]
   selfTodos?: LeadSelfTodoRecord[]
   preferences?: {
-    agentsMd?: string
-    soulMd?: string
+    agentsMd?: string | null
+    soulMd?: string | null
   }
 }): string {
   const parts: string[] = []

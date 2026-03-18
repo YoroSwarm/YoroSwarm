@@ -410,7 +410,10 @@ ${messageSummary}
     currentUserMessage,
     swarmSessionId,
     agentId: leadAgentId,
-    preferences,
+    preferences: preferences ? {
+      agentsMd: preferences.agentsMd ?? undefined,
+      soulMd: preferences.soulMd ?? undefined,
+    } : undefined,
   })
 
   // 动态计算 maxIterations：大任务集需要更多迭代空间
@@ -429,6 +432,8 @@ ${messageSummary}
     contextMessages: llmMessages,
     maxIterations: dynamicMaxIterations,
     abortSignal,
+    userId,
+    agentType: 'lead',
     shouldStopAfterToolCall: ({ toolName, isError }) => {
       if (isError) return false
       // Track repeated communication tool calls to the same peer
@@ -456,11 +461,26 @@ ${messageSummary}
 /**
  * Post-loop 自检：检查是否有 PENDING 未分配的任务
  * 如果有，自动向 Lead 收件箱注入提醒消息
+ * 
+ * 防止堆叠：如果收件箱已有自检消息，则跳过注入
  */
 async function checkAndNotifyPendingTasks(
   swarmSessionId: string,
   leadAgentId: string
 ): Promise<void> {
+  // Check if there's already a self-check message pending in the inbox
+  const runtime = getCognitiveRuntime(swarmSessionId, leadAgentId)
+  if (runtime) {
+    const hasPendingSelfCheck = runtime.inbox.pending.some(
+      m => m.metadata && typeof m.metadata === 'object' &&
+        ((m.metadata as Record<string, unknown>).periodicSelfCheck === true ||
+         (m.metadata as Record<string, unknown>).pendingTaskCount !== undefined)
+    )
+    if (hasPendingSelfCheck) {
+      return // Already has a self-check message queued, skip to avoid stacking
+    }
+  }
+
   const pendingUnassigned = await prisma.teamLeadTask.findMany({
     where: {
       swarmSessionId,

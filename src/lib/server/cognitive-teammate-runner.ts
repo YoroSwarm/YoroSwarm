@@ -460,6 +460,12 @@ async function processTeammateMessages(
   taskRuntime: TeammateTaskRuntime,
   onTaskCompleted: (completed: boolean) => void
 ): Promise<void> {
+  // 获取 userId（用于 LLM API 配置）
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: swarmSessionId },
+    select: { userId: true },
+  })
+  const userId = session?.userId
   if (taskRuntime.isTaskCompleted || !taskRuntime.isTaskActive) {
     return
   }
@@ -545,13 +551,15 @@ async function processTeammateMessages(
       () => taskRuntime.currentTaskId,
       leadAgentId,
       teammate,
-      { userId: '' },
+      { userId: userId ?? '' },
       { getTeammateProcessor }
     ),
     contextMessages,
     maxIterations: 20,
     stopOnSuccessfulTools: ['report_task_completion'],
     abortSignal: taskRuntime.abortController?.signal,
+    userId,
+    agentType: 'teammate',
   })
 
   console.log(

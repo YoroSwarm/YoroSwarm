@@ -40,3 +40,10 @@ export function notFoundResponse(message: string = 'Not found'): NextResponse<Ap
 export function internalErrorResponse(message: string = 'Internal server error'): NextResponse<ApiResponse> {
   return errorResponse(message, 500)
 }
+
+export function validationErrorResponse(errors: string[] | string): NextResponse<ApiResponse> {
+  return errorResponse(
+    Array.isArray(errors) ? errors.join(', ') : errors,
+    422
+  )
+}

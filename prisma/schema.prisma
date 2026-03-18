@@ -34,6 +34,7 @@ model User {
   externalConversations ExternalConversation[]
   files         File[]
   llmUsageEvents LlmUsageEvent[]
+  llmApiConfigs LlmApiConfig[]
 
   @@map("users")
 }
@@ -273,26 +274,29 @@ model LeadSelfTodo {
 }
 
 model LlmUsageEvent {
-  id                  String   @id @default(uuid())
-  swarmSessionId      String?  @map("swarm_session_id")
-  agentId             String?  @map("agent_id")
-  userId              String?  @map("user_id")
+  id                  String        @id @default(uuid())
+  swarmSessionId      String?       @map("swarm_session_id")
+  agentId             String?       @map("agent_id")
+  userId              String?       @map("user_id")
+  llmApiConfigId      String?       @map("llm_api_config_id")
   provider            String
   model               String
-  requestKind         String   @default("general") @map("request_kind")
-  inputTokens         Int      @default(0) @map("input_tokens")
-  outputTokens        Int      @default(0) @map("output_tokens")
-  cacheCreationTokens Int      @default(0) @map("cache_creation_tokens")
-  cacheReadTokens     Int      @default(0) @map("cache_read_tokens")
-  createdAt           DateTime @default(now()) @map("created_at")
+  requestKind         String        @default("general") @map("request_kind")
+  inputTokens         Int           @default(0) @map("input_tokens")
+  outputTokens        Int           @default(0) @map("output_tokens")
+  cacheCreationTokens Int           @default(0) @map("cache_creation_tokens")
+  cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
+  createdAt           DateTime      @default(now()) @map("created_at")
 
-  swarmSession SwarmSession? @relation(fields: [swarmSessionId], references: [id], onDelete: SetNull)
-  agent        Agent?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  user         User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  swarmSession SwarmSession?  @relation(fields: [swarmSessionId], references: [id], onDelete: SetNull)
+  agent        Agent?         @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  user         User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  llmApiConfig LlmApiConfig?  @relation(fields: [llmApiConfigId], references: [id], onDelete: SetNull)
 
   @@index([swarmSessionId, createdAt])
   @@index([swarmSessionId, agentId, createdAt])
   @@index([userId, createdAt])
+  @@index([llmApiConfigId, createdAt])
   @@map("llm_usage_events")
 }
 
@@ -443,4 +447,40 @@ model SharedTask {
   subtasks SharedTask[] @relation("SharedTaskDependencies")
 
   @@map("shared_tasks")
+}
+
+// ============================================
+// LLM API 配置模块
+// ============================================
+
+enum LlmProvider {
+  ANTHROPIC
+  OPENAI
+}
+
+model LlmApiConfig {
+  id                String      @id @default(uuid())
+  userId            String      @map("user_id")
+  provider          LlmProvider
+  name              String
+  apiKey            String      @map("api_key")
+  baseUrl           String      @map("base_url")
+  defaultModel      String      @map("default_model")
+  maxContextTokens  Int         @default(128000) @map("max_context_tokens")
+  maxOutputTokens   Int         @default(4096) @map("max_output_tokens")
+  temperature       Float       @default(0.7)
+  leadPriority      Int         @default(999) @map("lead_priority")
+  teammatePriority  Int         @default(999) @map("teammate_priority")
+  isEnabled         Boolean     @default(true) @map("is_enabled")
+  lastUsedAt        DateTime?   @map("last_used_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  llmUsageEvents    LlmUsageEvent[]
+
+  @@index([userId, leadPriority])
+  @@index([userId, teammatePriority])
+  @@index([userId, isEnabled])
+  @@map("llm_api_configs")
 }

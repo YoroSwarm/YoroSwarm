@@ -24,6 +24,9 @@ const hostname = process.env.HOSTNAME || 'localhost'
 const port = parseInt(process.env.PORT || '3000', 10)
 const accessCode = process.env.ACCESS_CODE || randomBytes(4).toString('hex').toUpperCase()
 
+// Set as environment variable so Next.js API routes can access it
+process.env.ACCESS_CODE = accessCode
+
 console.log(`🔧 Mode: ${dev ? 'development' : 'production'}`)
 console.log(`🔑 Access Code: ${accessCode}\n`)
 

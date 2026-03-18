@@ -47,6 +47,27 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const title = typeof body.title === 'string' ? body.title.trim() : null;
 
+    // 检查用户是否有可用的 LLM API 配置
+    const apiConfigCount = await prisma.llmApiConfig.count({
+      where: {
+        userId: payload.userId,
+        isEnabled: true,
+      },
+    });
+
+    // 开发环境允许使用环境变量作为后备
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const hasEnvFallback = isDevelopment && (
+      !!(process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)
+    );
+
+    if (apiConfigCount === 0 && !hasEnvFallback) {
+      return errorResponse(
+        '请先在设置中配置至少一个 LLM API 提供商',
+        403
+      );
+    }
+
     const created = await createSwarmSession({
       userId: payload.userId,
       title,

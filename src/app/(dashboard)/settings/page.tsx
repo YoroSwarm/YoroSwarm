@@ -10,12 +10,15 @@ import {
   Sun,
   Monitor,
   Users,
+  Key,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { LlmApiConfigList } from "@/components/settings/LlmApiConfigList";
+import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
@@ -33,6 +36,9 @@ export default function SettingsPage() {
   } = useLeadPreferencesStore();
   const [activeTab, setActiveTab] = useState("appearance");
 
+  // 确认对话框
+  const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
+
   // 加载配置
   useEffect(() => {
     loadPreferences();
@@ -47,7 +53,14 @@ export default function SettingsPage() {
   };
 
   const handleResetToDefaults = async () => {
-    if (confirm("确定要恢复默认配置吗？所有自定义内容将丢失。")) {
+    const confirmed = await confirm({
+      title: "恢复默认配置",
+      description: "确定要恢复默认配置吗？所有自定义内容将丢失。",
+      confirmLabel: "确认恢复",
+      cancelLabel: "取消",
+      variant: "destructive",
+    });
+    if (confirmed) {
       resetToDefaults();
       await savePreferences();
     }
@@ -56,11 +69,14 @@ export default function SettingsPage() {
   const tabs = [
     { id: "appearance", label: "外观", icon: Palette },
     { id: "notifications", label: "通知", icon: Bell },
+    { id: "llm-api", label: "LLM API", icon: Key },
     { id: "lead-config", label: "Lead 配置", icon: Users },
   ];
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <>
+      <ConfirmDialogComponent />
+      <div className="flex flex-col gap-6 p-6">
       <div>
         <h1 className="text-3xl font-bold">设置</h1>
         <p className="text-muted-foreground mt-1">管理您的系统偏好</p>
@@ -76,7 +92,7 @@ export default function SettingsPage() {
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   activeTab === tab.id
                     ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-accent"
+                    : "text-muted-foreground hover:bg-accent/30"
                 }`}
               >
                 <tab.icon className="h-4 w-4" />
@@ -107,7 +123,7 @@ export default function SettingsPage() {
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "light"
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
                     >
                       <Sun className="h-4 w-4" />
@@ -118,7 +134,7 @@ export default function SettingsPage() {
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "dark"
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
                     >
                       <Moon className="h-4 w-4" />
@@ -129,7 +145,7 @@ export default function SettingsPage() {
                       className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "system"
                           ? "border-primary bg-primary/10 text-primary"
-                          : "border-border text-muted-foreground hover:bg-accent"
+                          : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
                     >
                       <Monitor className="h-4 w-4" />
@@ -166,6 +182,17 @@ export default function SettingsPage() {
                     {index < arr.length - 1 && <Separator className="mt-4" />}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "llm-api" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">LLM API 配置</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <LlmApiConfigList />
               </CardContent>
             </Card>
           )}
@@ -266,5 +293,6 @@ export default function SettingsPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

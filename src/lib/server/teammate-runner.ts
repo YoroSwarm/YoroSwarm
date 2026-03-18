@@ -322,6 +322,8 @@ export async function runTeammateLoop(
       contextMessages,
       maxIterations: 20,
       stopOnSuccessfulTools: ['report_task_completion'],
+      userId: session.userId,
+      agentType: 'teammate',
     })
 
     console.log(

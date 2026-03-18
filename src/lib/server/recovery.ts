@@ -90,7 +90,7 @@ export async function recoverStuckState(): Promise<{
     }
   }
 
-  // 2. Find tasks stuck in IN_PROGRESS or ASSIGNED (were being processed when server died)
+  // 2. Handle tasks stuck in IN_PROGRESS or ASSIGNED
   // Only recover tasks from ACTIVE sessions, keep PAUSED sessions as-is
   const stuckTasks = await prisma.teamLeadTask.findMany({
     where: {
@@ -101,13 +101,20 @@ export async function recoverStuckState(): Promise<{
   })
 
   for (const task of stuckTasks) {
-    // Reset to PENDING so they can be reassigned
+    if (task.status === 'IN_PROGRESS') {
+      // IN_PROGRESS tasks have execution progress persisted in AgentContextEntry.
+      // Preserve them for autoResumeActiveSessions() to restore teammate processors.
+      continue
+    }
+
+    // ASSIGNED tasks haven't started execution yet — no checkpoint to resume from.
+    // Reset to PENDING so Lead can re-assign.
     await prisma.teamLeadTask.update({
       where: { id: task.id },
       data: {
         status: 'PENDING',
         assigneeId: null,
-        errorSummary: `任务在执行中因服务器重启被中断，已重置为待分配状态`,
+        errorSummary: '任务在分配后因服务器重启被中断，已重置为待分配状态',
       },
     })
     recoveredTasks++
@@ -120,7 +127,7 @@ export async function recoverStuckState(): Promise<{
           title: task.title,
           status: 'pending',
           swarm_session_id: task.swarmSessionId,
-          message: '服务器重启，任务已重置为待分配',
+          message: '服务器重启，未开始的任务已重置为待分配',
           timestamp: new Date().toISOString(),
         },
       },
@@ -158,15 +165,19 @@ export async function getSessionRecoveryStatus(swarmSessionId: string): Promise<
 
   const pendingTasks = tasks.filter(t => t.status === 'PENDING').length
   const failedTasks = tasks.filter(t => t.status === 'FAILED').length
+  const inProgressTasks = tasks.filter(t => t.status === 'IN_PROGRESS').length
   const interruptedTasks = tasks.filter(t =>
     t.errorSummary?.includes('服务器重启')
   ).length
 
-  const hasStuckWork = interruptedTasks > 0 || pendingTasks > 0 || interruptedExecutions > 0
+  const hasStuckWork = interruptedTasks > 0 || pendingTasks > 0 || inProgressTasks > 0 || interruptedExecutions > 0
 
   let summary = ''
   if (interruptedExecutions > 0) {
     summary += `${interruptedExecutions} 个 agent execution 可恢复。`
+  }
+  if (inProgressTasks > 0) {
+    summary += `${inProgressTasks} 个任务正在从断点恢复执行。`
   }
   if (interruptedTasks > 0) {
     summary += `${interruptedTasks} 个任务因服务器重启被中断并重置。`

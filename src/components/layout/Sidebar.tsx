@@ -12,20 +12,23 @@ import {
   PanelLeftClose,
   Pause,
   Play,
+  AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useUIStore } from '@/stores';
+import { useUIStore, useLlmConfigsStore } from '@/stores';
 import { useSessions } from '@/hooks/use-sessions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Switch } from '@/components/ui/switch';
+import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu';
+import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { storage } from '@/utils/storage';
 
 const SHOW_ARCHIVED_STORAGE_KEY = 'show_archived';
@@ -35,14 +38,25 @@ export function Sidebar() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentSessionId = searchParams.get('sessionId');
-  const [showArchived, setShowArchived] = useState(() =>
+  const [showArchivedUserPreference, setShowArchivedUserPreference] = useState(() =>
     storage.get(SHOW_ARCHIVED_STORAGE_KEY, false)
   );
 
+  // 确认对话框
+  const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
+
+  // LLM API 配置检查
+  const { hasConfig, loadHasConfig } = useLlmConfigsStore();
+
+  // 加载配置状态
+  useEffect(() => {
+    loadHasConfig();
+  }, [loadHasConfig]);
+
   // 保存归档状态到 storage
   useEffect(() => {
-    storage.set(SHOW_ARCHIVED_STORAGE_KEY, showArchived);
-  }, [showArchived]);
+    storage.set(SHOW_ARCHIVED_STORAGE_KEY, showArchivedUserPreference);
+  }, [showArchivedUserPreference]);
 
   const {
     sessions,
@@ -69,24 +83,51 @@ export function Sidebar() {
     return { activeSessions: active, archivedSessions: archived };
   }, [sessions]);
 
+  // 派生 showArchived 状态：优先使用当前会话的状态，否则使用用户偏好
+  const showArchived = useMemo(() => {
+    if (!currentSessionId) return showArchivedUserPreference;
+    const currentSession = sessions.find((s) => s.id === currentSessionId);
+    if (currentSession) {
+      return currentSession.status === 'archived';
+    }
+    return showArchivedUserPreference;
+  }, [currentSessionId, sessions, showArchivedUserPreference]);
+
   // 根据开关状态决定显示的会话
   const displayedSessions = showArchived ? archivedSessions : activeSessions;
 
-  // 当当前打开的会话状态变化时，同步更新开关
-  useEffect(() => {
-    if (!currentSessionId) return;
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    if (currentSession) {
-      setShowArchived(currentSession.status === 'archived');
-    }
-  }, [currentSessionId, sessions]);
-
   const handleCreateSession = async () => {
+    // 检查是否有 LLM API 配置
+    if (!hasConfig) {
+      const confirmed = await confirm({
+        title: '需要配置 LLM API',
+        description: '您需要先配置 LLM API 才能创建会话。是否前往设置？',
+        confirmLabel: '前往设置',
+        cancelLabel: '取消',
+      });
+      if (confirmed) {
+        router.push('/settings?tab=llm-api');
+      }
+      return;
+    }
+
     try {
       const created = await createSession();
       router.push(`/chat?sessionId=${created.id}`);
     } catch (err) {
       console.error('Failed to create session:', err);
+      // 如果是 403 错误，提示用户配置 API
+      if (err && typeof err === 'object' && 'code' in err && err.code === 'FORBIDDEN') {
+        const confirmed = await confirm({
+          title: '需要配置 LLM API',
+          description: '请先配置 LLM API。是否前往设置？',
+          confirmLabel: '前往设置',
+          cancelLabel: '取消',
+        });
+        if (confirmed) {
+          router.push('/settings?tab=llm-api');
+        }
+      }
     }
   };
 
@@ -119,12 +160,14 @@ export function Sidebar() {
   };
 
   return (
-    <aside
-      className={cn(
-        'h-screen bg-card border-r border-border flex flex-col transition-all duration-300 relative z-20 shrink-0',
-        'w-72 transition-colors duration-200'
-      )}
-    >
+    <>
+      <ConfirmDialogComponent />
+      <aside
+        className={cn(
+          'h-screen bg-card border-r border-border flex flex-col transition-all duration-300 relative z-20 shrink-0',
+          'w-72 transition-colors duration-200'
+        )}
+      >
       {/* 1. Logo (Return to Dashboard) + Close Button */}
       <div className="h-16 flex items-center justify-between border-b border-border px-4 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
@@ -149,10 +192,24 @@ export function Sidebar() {
           <Button
             onClick={handleCreateSession}
             className="w-full btn-hand gap-2"
+            disabled={!hasConfig}
           >
             <Plus className="w-5 h-5" />
             <span>新建会话</span>
           </Button>
+
+          {/* 无配置提示 */}
+          {!hasConfig && (
+            <Alert className="mt-2 py-2 px-3">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="text-xs">
+                请先配置{' '}
+                <Link href="/settings?tab=llm-api" className="underline font-medium">
+                  LLM API
+                </Link>
+              </AlertDescription>
+            </Alert>
+          )}
         </div>
 
         {/* 3. Archived Toggle Switch */}
@@ -164,7 +221,7 @@ export function Sidebar() {
             <Switch
               size="sm"
               checked={showArchived}
-              onCheckedChange={setShowArchived}
+              onCheckedChange={setShowArchivedUserPreference}
             />
           </div>
         </div>
@@ -253,6 +310,7 @@ export function Sidebar() {
         </ScrollArea>
       </div>
     </aside>
+    </>
   );
 }
 

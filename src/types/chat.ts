@@ -61,6 +61,7 @@ export interface Message {
     toolName?: string;
     toolCallId?: string;
     hasResult?: boolean;
+    orphaned?: boolean;
     seq?: number;
   };
   toolCalls?: ToolCall[];

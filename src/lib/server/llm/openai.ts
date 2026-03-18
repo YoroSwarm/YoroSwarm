@@ -7,27 +7,43 @@ import type {
   ToolDefinition,
   StopReason,
 } from './types'
+import type { LLMProviderConfig } from './config'
 
-let client: OpenAI | null = null
+// Cache clients by API key and base URL
+const clientCache = new Map<string, OpenAI>()
 
 function getClient(apiKey: string, baseUrl?: string): OpenAI {
-  if (!client) {
-    client = new OpenAI({
-      apiKey,
-      baseURL: baseUrl || undefined,
-    })
+  // Validate API key
+  if (!apiKey || apiKey.trim().length === 0) {
+    throw new Error('API key is missing or empty')
   }
-  return client
+
+  const key = `${apiKey}:${baseUrl || 'default'}`
+  if (!clientCache.has(key)) {
+    // Normalize baseUrl - ensure it doesn't end with /v1 since SDK adds it
+    let normalizedBaseUrl = baseUrl
+    if (normalizedBaseUrl && normalizedBaseUrl.endsWith('/v1')) {
+      normalizedBaseUrl = normalizedBaseUrl.slice(0, -3)
+    }
+
+    console.log(`[OpenAI] Creating new client with baseUrl=${normalizedBaseUrl || 'default'}`)
+    clientCache.set(key, new OpenAI({
+      apiKey,
+      ...(normalizedBaseUrl ? { baseURL: normalizedBaseUrl } : {}),
+      // Add default headers for third-party APIs
+      defaultHeaders: {
+        'HTTP-Referer': typeof window !== 'undefined' ? window.location.href : undefined,
+      } as any,
+    }))
+  }
+  return clientCache.get(key)!
 }
 
-export async function callOpenAI(options: LLMCallOptions): Promise<LLMResponse> {
-  const apiKey = process.env.OPENAI_API_KEY
-  if (!apiKey) throw new Error('OPENAI_API_KEY is not set')
-
-  const openai = getClient(apiKey, process.env.OPENAI_BASE_URL)
-  const model = options.model || process.env.DEFAULT_LLM_MODEL || 'gpt-4o'
-  const maxTokens = options.maxTokens || parseInt(process.env.LLM_MAX_TOKENS || '4096', 10)
-  const temperature = options.temperature ?? parseFloat(process.env.LLM_TEMPERATURE || '0.7')
+export async function callOpenAI(options: LLMCallOptions, config: LLMProviderConfig): Promise<LLMResponse> {
+  const openai = getClient(config.apiKey, config.baseUrl)
+  const model = options.model || config.defaultModel
+  const maxTokens = options.maxTokens ?? config.maxOutputTokens
+  const temperature = options.temperature ?? config.temperature
 
   const messages = convertToOpenAIMessages(options.messages, options.systemPrompt)
   const tools = options.tools ? convertToOpenAITools(options.tools) : undefined

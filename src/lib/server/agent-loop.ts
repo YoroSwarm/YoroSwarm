@@ -25,6 +25,8 @@ export interface AgentLoopOptions {
   onThinking?: (text: string) => void
   stopOnSuccessfulTools?: string[]
   abortSignal?: AbortSignal
+  userId?: string
+  agentType?: 'lead' | 'teammate'
   shouldStopAfterToolCall?: (input: {
     toolName: string
     result: string
@@ -149,6 +151,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         tools: tools.length > 0 ? tools : undefined,
         model,
         abortSignal,
+        userId: options.userId,
+        agentType: options.agentType || 'teammate',
         usageContext: {
           swarmSessionId,
           agentId,
@@ -246,7 +250,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             swarm_session_id: swarmSessionId,
             status: 'thinking',
             content: textContent,
-            entry_id: thinkingEntry.id,
+            entry_id: thinkingEntry?.id,
             timestamp: new Date().toISOString(),
             seq: messageSeq++,
           },
@@ -500,7 +504,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               swarm_session_id: swarmSessionId,
               status: 'response',
               content: textContent,
-              entry_id: entry.id,
+              entry_id: entry?.id,
               timestamp: new Date().toISOString(),
             },
           },
