@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk'
-import axios from 'axios'
 import type {
   LLMCallOptions,
   LLMResponse,
@@ -10,173 +9,76 @@ import type {
 } from './types'
 import type { LLMProviderConfig } from './config'
 
-// Cache clients by API key and base URL
+// Cache clients by API key, base URL, and auth mode
 const clientCache = new Map<string, Anthropic>()
-const thirdPartyCache = new Map<string, ThirdPartyAnthropicClient>()
 
-interface ThirdPartyClientConfig {
-  apiKey: string
-  baseUrl: string
-}
-
-class ThirdPartyAnthropicClient {
-  private config: ThirdPartyClientConfig
-  private axiosInstance: any
-
-  constructor(config: ThirdPartyClientConfig) {
-    this.config = config
-
-    // Construct base URL
-    let baseUrl = config.baseUrl
-    if (!baseUrl.endsWith('/v1') && !baseUrl.endsWith('/anthropic') && !baseUrl.includes('/messages')) {
-      baseUrl = baseUrl.endsWith('/') ? baseUrl + 'v1' : baseUrl + '/v1'
-    }
-
-    // Create axios instance with configuration
-    this.axiosInstance = axios.create({
-      baseURL: baseUrl,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-        'x-api-key': config.apiKey,
-      },
-      timeout: 120000, // 2 minutes
-      maxBodyLength: Infinity,
-      maxContentLength: Infinity,
-    })
-
-    // Request interceptor for logging
-    this.axiosInstance.interceptors.request.use(
-      (request: any) => {// request.data is already serialized by axios, parse it for logging
-        try {
-          const data = typeof request.data === 'string' ? JSON.parse(request.data) : request.data
-        } catch (e) {
-          console.log(`[ThirdPartyAnthropic] Request data: ${request.data?.toString().slice(0, 100)}`)
-        }
-        return request
-      },
-      (error: any) => {
-        console.error('[ThirdPartyAnthropic] Request error:', error)
-        return Promise.reject(error)
-      }
-    )
-
-    // Response interceptor for logging
-    this.axiosInstance.interceptors.response.use(
-      (response: any) => {
-        return response
-      },
-      (error: any) => {
-        console.error('[ThirdPartyAnthropic] Response error:', {
-          status: error.response?.status,
-          statusText: error.response?.statusText,
-          data: error.response?.data,
-          message: error.message,
-          code: error.code,
-        })
-        return Promise.reject(error)
-      }
-    )
-  }
-
-  async createMessage(params: any, options?: any): Promise<any> {
-    try {
-      const response = await this.axiosInstance.post('/messages', params, {
-        signal: options?.signal,
-      })
-      return response.data
-    } catch (error: any) {
-      if (axios.isCancel(error)) {
-        throw new DOMException('Request cancelled', 'AbortError')
-      }
-      if (error.response) {
-        throw new Error(`HTTP ${error.response.status}: ${JSON.stringify(error.response.data)}`)
-      }
-      if (error.code === 'ECONNRESET' || error.code === 'ETIMEDOUT' || error.code === 'ENOTFOUND') {
-        throw new Error(`Network error (${error.code}): ${error.message}`)
-      }
-      throw error
-    }
-  }
-}
-
-function getClient(apiKey: string, baseUrl?: string): Anthropic | ThirdPartyAnthropicClient {
+function getClient(
+  apiKey: string,
+  baseUrl?: string,
+  authMode?: 'bearer_token' | 'x_api_key',
+  customHeaders?: Record<string, string>
+): Anthropic {
   // Validate API key
   if (!apiKey || apiKey.trim().length === 0) {
     throw new Error('API key is missing or empty')
   }
 
-  // Check if using third-party proxy
-  const isThirdParty = baseUrl && !baseUrl.includes('api.anthropic.com')
-
-  if (isThirdParty) {
-    const key = `thirdparty:${apiKey}:${baseUrl}`
-    if (!thirdPartyCache.has(key)) {
-      console.log(`[Anthropic] Creating new third-party client with baseUrl=${baseUrl}`)
-      thirdPartyCache.set(key, new ThirdPartyAnthropicClient({ apiKey, baseUrl }))
-    }
-    return thirdPartyCache.get(key)!
-  }
-
-  // Use official SDK for official API
-  const key = `${apiKey}:${baseUrl || 'default'}`
+  // Use official SDK for everything - it supports custom headers via defaultHeaders
+  const key = `${apiKey}:${baseUrl || 'default'}:${authMode || 'bearer_token'}:${JSON.stringify(customHeaders || {})}`
   if (!clientCache.has(key)) {
-    console.log(`[Anthropic] Creating new official SDK client with baseUrl=${baseUrl || 'default'}`)
-    clientCache.set(key, new Anthropic({
+    // Normalize baseUrl - SDK expects base URL without /v1 suffix
+    let normalizedBaseUrl = baseUrl
+    if (normalizedBaseUrl && normalizedBaseUrl.endsWith('/v1')) {
+      normalizedBaseUrl = normalizedBaseUrl.slice(0, -3)
+    }
+
+    console.log(`[Anthropic] Creating SDK client with baseUrl=${normalizedBaseUrl || 'default'}, authMode=${authMode || 'bearer_token'}, hasCustomHeaders=${!!customHeaders}`)
+
+    const clientOptions: any = {
       apiKey,
-      ...(baseUrl ? { baseURL: baseUrl } : {}),
-    }))
+      ...(normalizedBaseUrl ? { baseURL: normalizedBaseUrl } : {}),
+    }
+
+    // Build headers based on authMode and customHeaders
+    const headers: Record<string, string> = {}
+
+    // If custom headers are provided, use them
+    if (customHeaders && Object.keys(customHeaders).length > 0) {
+      Object.assign(headers, customHeaders)
+    } else {
+      // Otherwise use authMode to determine auth header
+      const mode = authMode || 'bearer_token'
+      if (mode === 'x_api_key') {
+        headers['x-api-key'] = apiKey
+      } else {
+        // For bearer_token, SDK handles it automatically via apiKey parameter
+        // Don't set Authorization header manually
+      }
+    }
+
+    // Add headers to client options if we have any
+    if (Object.keys(headers).length > 0) {
+      clientOptions.defaultHeaders = headers
+    }
+
+    clientCache.set(key, new Anthropic(clientOptions))
   }
   return clientCache.get(key)!
 }
 
 export async function callAnthropic(options: LLMCallOptions, config: LLMProviderConfig): Promise<LLMResponse> {
-  const client = getClient(config.apiKey, config.baseUrl)
+  const client = getClient(config.apiKey, config.baseUrl, config.authMode, config.customHeaders)
   const model = options.model || config.defaultModel
   const maxTokens = options.maxTokens ?? config.maxOutputTokens
   const temperature = options.temperature ?? config.temperature
 
-  const messages = convertToAnthropicMessages(options.messages)
-  const tools = options.tools ? convertToAnthropicTools(options.tools) : undefined
-
-  const params: any = {
-    model,
-    max_tokens: maxTokens,
-    temperature,
-    system: options.systemPrompt,
-    messages,
-  }
-
-  if (tools && tools.length > 0) {
-    params.tools = tools
-  }
-
-  const requestOptions: any = {}
-  if (options.abortSignal) {
-    requestOptions.signal = options.abortSignal
-  }
-
-  let response: any
-  if (client instanceof ThirdPartyAnthropicClient) {
-    response = await client.createMessage(params, requestOptions)
-  } else {
-    response = await (client as Anthropic).messages.create(params, requestOptions)
-  }
-
-  return convertFromAnthropicResponse(response)
-}
-
-// ============================================
-// Converters
-// ============================================
-
-function convertToAnthropicMessages(messages: LLMMessage[]): Anthropic.MessageParam[] {
-  return messages.map(msg => {
+  // Build native Anthropic messages from LLMMessage format
+  const messages: Anthropic.MessageParam[] = options.messages.map(msg => {
     if (typeof msg.content === 'string') {
       return { role: msg.role, content: msg.content }
     }
 
-    // Convert ContentBlock[] to Anthropic content blocks
+    // ContentBlock[] format - convert to Anthropic native format
     const blocks: Anthropic.ContentBlockParam[] = msg.content.map(block => {
       switch (block.type) {
         case 'text':
@@ -200,18 +102,43 @@ function convertToAnthropicMessages(messages: LLMMessage[]): Anthropic.MessagePa
 
     return { role: msg.role, content: blocks }
   })
-}
 
-function convertToAnthropicTools(tools: ToolDefinition[]): Anthropic.Tool[] {
-  return tools.map(tool => ({
+  // Build native Anthropic tools from ToolDefinition format
+  const tools = options.tools ? options.tools.map(tool => ({
     name: tool.name,
     description: tool.description,
     input_schema: tool.input_schema as Anthropic.Tool.InputSchema,
-  }))
+  })) : undefined
+
+  const params: any = {
+    model,
+    max_tokens: maxTokens,
+    temperature,
+    system: options.systemPrompt,
+    messages,
+  }
+
+  if (tools && tools.length > 0) {
+    params.tools = tools
+  }
+
+  const requestOptions: any = {}
+  if (options.abortSignal) {
+    requestOptions.signal = options.abortSignal
+  }
+
+  const response = await client.messages.create(params, requestOptions)
+  return convertFromAnthropicResponse(response)
 }
+
+// ============================================
+// Response Converter (SDK -> Internal Format)
+// ============================================
 
 function convertFromAnthropicResponse(response: Anthropic.Message): LLMResponse {
   const content: ContentBlock[] = []
+  const thinkingParts: string[] = []
+
   for (const block of response.content) {
     if (block.type === 'text') {
       content.push({ type: 'text' as const, text: block.text })
@@ -223,9 +150,10 @@ function convertFromAnthropicResponse(response: Anthropic.Message): LLMResponse 
         input: block.input as Record<string, unknown>,
       })
     } else if (block.type === 'thinking') {
-      // Extended thinking blocks are internal reasoning — skip from content output
-      // They should not appear in user-facing responses
-      continue
+      // Capture thinking content instead of dropping it
+      if (block.thinking) {
+        thinkingParts.push(block.thinking)
+      }
     } else {
       // Unknown block types — skip silently to avoid leaking internal data
       console.warn('Unknown Anthropic content block type:', (block as { type: string }).type)
@@ -241,6 +169,7 @@ function convertFromAnthropicResponse(response: Anthropic.Message): LLMResponse 
     stopReason,
     model: response.model,
     provider: 'anthropic',
+    reasoningContent: thinkingParts.length > 0 ? thinkingParts.join('\n') : undefined,
     usage: {
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,

@@ -1,6 +1,127 @@
 import type { ToolDefinition } from '../llm/types'
 
+// Lead的workspace工具
+export const leadWorkspaceTools: ToolDefinition[] = [
+  {
+    name: 'list_workspace_files',
+    description: '列出当前会话工作区中的文件和目录。可按目录查看，也可递归列出整个工作区。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        directory_path: {
+          type: 'string',
+          description: '要查看的目录，相对工作区根目录；留空表示根目录',
+        },
+        recursive: {
+          type: 'boolean',
+          description: '是否递归列出子目录中的全部文件',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'read_workspace_file',
+    description: '读取当前会话工作区中的文件内容，使用相对路径而不是文件ID。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '文件相对路径，例如 "reports/analysis.md"',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'create_workspace_directory',
+    description: '在当前会话工作区中创建真实目录。目录将直接创建在文件系统中，后续可供文件写入和 shell 使用。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '要创建的目录相对路径，例如 "reports/week1"',
+        },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'create_workspace_file',
+    description: '在当前会话工作区中新建文件；如目录不存在会自动创建。若文件已存在则报错。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '新文件的相对路径，例如 "notes/outline.md"',
+        },
+        content: {
+          type: 'string',
+          description: '文件完整内容',
+        },
+        mime_type: {
+          type: 'string',
+          description: 'MIME 类型；不传则根据扩展名推断',
+        },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'replace_workspace_file',
+    description: '替换当前会话工作区中已有文件的内容。目标文件必须已存在。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        path: {
+          type: 'string',
+          description: '要替换的文件相对路径',
+        },
+        content: {
+          type: 'string',
+          description: '新的完整文件内容',
+        },
+        mime_type: {
+          type: 'string',
+          description: 'MIME 类型；不传则沿用现有类型或根据扩展名推断',
+        },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'shell_exec',
+    description: '执行终端命令。此工具需要用户审批后才能执行。命令将在工作区目录中执行。适用于需要执行系统命令、运行脚本、操作文件等场景。执行前请向用户说明命令的用途和预期结果。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        command: {
+          type: 'string',
+          description: '要执行的命令（如 ls -la, npm install, git status 等）',
+        },
+        description: {
+          type: 'string',
+          description: '向用户说明该命令的用途和预期结果，帮助用户做出审批决定',
+        },
+        working_dir: {
+          type: 'string',
+          description: '可选。指定工作目录。默认为工作区根目录。可以使用相对路径或绝对路径。',
+        },
+        timeout: {
+          type: 'number',
+          description: '可选。超时时间（秒）。默认30秒，最长300秒（5分钟）。对于可能长时间运行的命令，请设置适当的超时时间。注意：超时时间从审批通过后开始计算。',
+        },
+      },
+      required: ['command', 'description'],
+    },
+  },
+]
+
 export const leadTools: ToolDefinition[] = [
+  ...leadWorkspaceTools,
   {
     name: 'reply_to_user',
     description: '回复用户消息。当你准备好回应用户时使用此工具。这是你与用户沟通的唯一方式。可以附带文件引用，让用户看到相关文件的下载链接。',

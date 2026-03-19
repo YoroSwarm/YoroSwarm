@@ -19,11 +19,11 @@ export async function GET(_request: NextRequest) {
       return errorResponse('User not found', 404);
     }
 
-    console.log('[API/LeadPreferences] GET 返回:', {
-      userId: payload.userId,
-      leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
-      leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
-    })
+    // console.log('[API/LeadPreferences] GET 返回:', {
+    //   userId: payload.userId,
+    //   leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
+    //   leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
+    // })
 
     return successResponse({
       agentsMd: user.leadAgentsMd || null,

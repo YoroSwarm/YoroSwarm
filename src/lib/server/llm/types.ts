@@ -81,6 +81,8 @@ export interface LLMResponse {
     cacheCreationTokens: number
     cacheReadTokens: number
   }
+  /** Provider reasoning/thinking content (e.g., Anthropic thinking blocks) */
+  reasoningContent?: string
 }
 
 export interface AgentLoopResult {
@@ -108,7 +110,8 @@ export interface PersistedToolCallRecord {
 // Provider Configuration
 // ============================================
 
-export type LLMProvider = 'anthropic' | 'openai'
+export type LLMProvider = 'anthropic'
+export type LLMAuthMode = 'bearer_token' | 'x_api_key'
 
 export interface LLMProviderConfig {
   provider: LLMProvider
@@ -118,4 +121,6 @@ export interface LLMProviderConfig {
   maxContextTokens: number
   maxOutputTokens: number
   temperature: number
+  authMode?: LLMAuthMode
+  customHeaders?: Record<string, string>
 }

@@ -297,7 +297,7 @@ export async function provisionTeammate(
  */
 export async function maybeAutoRenameSession(swarmSessionId: string) {
   try {
-    console.log(`[AutoRename] Starting auto-rename for session ${swarmSessionId}`)
+    // console.log(`[AutoRename] Starting auto-rename for session ${swarmSessionId}`)
 
     const session = await prisma.swarmSession.findUnique({
       where: { id: swarmSessionId },
@@ -333,7 +333,7 @@ export async function maybeAutoRenameSession(swarmSessionId: string) {
       return
     }
 
-    console.log(`[AutoRename] Found ${messages.length} messages for title generation`)
+    // console.log(`[AutoRename] Found ${messages.length} messages for title generation`)
 
     const transcript = messages
       .map((m) => `${m.senderType === 'user' ? 'User' : 'Assistant'}: ${m.content.slice(0, 200)}`)
@@ -353,7 +353,7 @@ export async function maybeAutoRenameSession(swarmSessionId: string) {
       usageContext: { swarmSessionId, requestKind: 'auto_rename' },
     })
 
-    console.log(`[AutoRename] LLM response content:`, JSON.stringify(response.content))
+    // console.log(`[AutoRename] LLM response content:`, JSON.stringify(response.content))
 
     const title = extractTextContent(response).trim().replace(/^["\'""]+|["\'""]+$/g, '')
     if (!title) {
@@ -361,18 +361,18 @@ export async function maybeAutoRenameSession(swarmSessionId: string) {
       return
     }
     if (title.length > 50) {
-      console.log(`[AutoRename] Generated title "${title}" is too long (${title.length} chars), skipping`)
+      // console.log(`[AutoRename] Generated title "${title}" is too long (${title.length} chars), skipping`)
       return
     }
 
-    console.log(`[AutoRename] Generated title: "${title}"`)
+    // console.log(`[AutoRename] Generated title: "${title}"`)
 
     await prisma.swarmSession.update({
       where: { id: swarmSessionId },
       data: { title },
     })
 
-    console.log(`[AutoRename] Updated session ${swarmSessionId} title to "${title}"`)
+    // console.log(`[AutoRename] Updated session ${swarmSessionId} title to "${title}"`)
 
     publishRealtimeMessage(
       {

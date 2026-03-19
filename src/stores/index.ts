@@ -6,4 +6,4 @@ export { useUIStore, useSidebar, useNotifications, useModal } from './uiStore';
 export { useSessionsStore } from './sessionsStore';
 export { useLeadPreferencesStore } from './leadPreferencesStore';
 export { useLlmConfigsStore } from './llmConfigsStore';
-export type { LlmApiConfig, LlmProvider } from './llmConfigsStore';
+export type { LlmApiConfig, LlmProvider, LlmAuthMode } from './llmConfigsStore';

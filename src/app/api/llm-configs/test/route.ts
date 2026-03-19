@@ -2,9 +2,7 @@ import { NextRequest } from 'next/server';
 import prisma from '@/lib/db';
 import { errorResponse, successResponse, unauthorizedResponse, validationErrorResponse } from '@/lib/api/response';
 import { requireTokenPayload } from '@/lib/server/swarm';
-import { getAllProviderConfigs } from '@/lib/server/llm/config';
 import { callAnthropic } from '@/lib/server/llm/anthropic';
-import { callOpenAI } from '@/lib/server/llm/openai';
 
 // POST /api/llm-configs/test - 测试 API 配置是否有效
 export async function POST(request: NextRequest) {
@@ -40,7 +38,7 @@ export async function POST(request: NextRequest) {
 
     const providerConfig = {
       configId: config.id,
-      provider: config.provider.toLowerCase() as 'anthropic' | 'openai',
+      provider: 'anthropic' as const,
       apiKey: config.apiKey,
       baseUrl: config.baseUrl && config.baseUrl.trim().length > 0 ? config.baseUrl : undefined,
       defaultModel: config.defaultModel,
@@ -59,11 +57,7 @@ export async function POST(request: NextRequest) {
 
     let response;
     try {
-      if (providerConfig.provider === 'openai') {
-        response = await callOpenAI(testRequest, providerConfig);
-      } else {
-        response = await callAnthropic(testRequest, providerConfig);
-      }
+      response = await callAnthropic(testRequest, providerConfig);
 
       const textContent = response.content
         .filter((block): block is { type: 'text'; text: string } => block.type === 'text')

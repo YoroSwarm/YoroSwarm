@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { type LlmApiConfig, type LlmProvider } from '@/stores';
+import { type LlmApiConfig, type LlmProvider, type LlmAuthMode } from '@/stores';
 
 interface LlmApiConfigDialogProps {
   open: boolean;
@@ -38,11 +39,13 @@ interface LlmApiConfigInput {
   maxContextTokens?: number;
   maxOutputTokens?: number;
   temperature?: number;
+  authMode?: LlmAuthMode;
+  customHeaders?: string;
+  customHeaders?: string;
 }
 
 const PROVIDER_OPTIONS: Array<{ value: LlmProvider; label: string; defaultModel: string; defaultBaseUrl: string }> = [
   { value: 'ANTHROPIC', label: 'Anthropic', defaultModel: 'claude-sonnet-4-20250514', defaultBaseUrl: 'https://api.anthropic.com' },
-  { value: 'OPENAI', label: 'OpenAI', defaultModel: 'gpt-4o', defaultBaseUrl: 'https://api.openai.com/v1' },
 ];
 
 const RECENT_MODELS_KEY = 'llm_recent_models';
@@ -75,6 +78,8 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
   const [apiKey, setApiKey] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
   const [defaultModel, setDefaultModel] = useState('');
+  const [authMode, setAuthMode] = useState<LlmAuthMode>('BEARER_TOKEN');
+  const [customHeaders, setCustomHeaders] = useState('');
   const [maxContextTokens, setMaxContextTokens] = useState('128000');
   const [maxOutputTokens, setMaxOutputTokens] = useState('4096');
   const [temperature, setTemperature] = useState('0.7');
@@ -94,6 +99,8 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
         setApiKey(config.apiKey);
         setBaseUrl(config.baseUrl || '');
         setDefaultModel(config.defaultModel);
+        setAuthMode(config.authMode || 'BEARER_TOKEN');
+        setCustomHeaders(config.customHeaders || '');
         setMaxContextTokens(config.maxContextTokens.toString());
         setMaxOutputTokens(config.maxOutputTokens.toString());
         setTemperature(config.temperature.toString());
@@ -104,6 +111,8 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
         setApiKey('');
         setBaseUrl(defaultProvider.defaultBaseUrl);
         setDefaultModel(defaultProvider.defaultModel);
+        setAuthMode('BEARER_TOKEN');
+        setCustomHeaders('');
         setMaxContextTokens('128000');
         setMaxOutputTokens('4096');
         setTemperature('0.7');
@@ -132,7 +141,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
       newErrors.name = '请输入配置名称';
     }
 
-    if (!apiKey.trim()) {
+    if (!isEditing && !apiKey.trim()) {
       newErrors.apiKey = '请输入 API Key';
     }
 
@@ -159,6 +168,15 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
       newErrors.temperature = '温度必须在 0-2 之间';
     }
 
+    // Validate custom headers JSON if provided
+    if (customHeaders.trim()) {
+      try {
+        JSON.parse(customHeaders.trim());
+      } catch (e) {
+        newErrors.customHeaders = '自定义请求头必须是有效的 JSON 格式';
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -168,16 +186,26 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
 
     setIsSaving(true);
     try {
-      await onSave({
+      // Don't send masked apiKey back — only send if user typed a new one
+      const trimmedKey = apiKey.trim();
+      const isMaskedKey = /\*{4,}/.test(trimmedKey);
+      const saveData: LlmApiConfigInput = {
         provider,
         name: name.trim(),
-        apiKey: apiKey.trim(),
+        apiKey: trimmedKey,
         baseUrl: baseUrl.trim() || undefined,
         defaultModel: defaultModel.trim(),
+        authMode,
+        customHeaders: customHeaders.trim() || undefined,
         maxContextTokens: parseInt(maxContextTokens, 10),
         maxOutputTokens: parseInt(maxOutputTokens, 10),
         temperature: parseFloat(temperature),
-      });
+      };
+      // If editing and key is masked (unchanged), omit it from the payload
+      if (isEditing && isMaskedKey) {
+        delete (saveData as Record<string, unknown>).apiKey;
+      }
+      await onSave(saveData);
 
       // Add to recent models
       addRecentModel(defaultModel.trim());
@@ -198,14 +226,14 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>
             {isEditing ? '编辑 LLM API 配置' : '添加 LLM API 配置'}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-x-hidden">
           {errors.form && (
             <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-md">
               {errors.form}
@@ -284,6 +312,47 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
             {errors.baseUrl && <p className="text-sm text-destructive">{errors.baseUrl}</p>}
           </div>
 
+          {/* Auth Mode */}
+          <div className="space-y-2">
+            <Label htmlFor="authMode">鉴权模式</Label>
+            <Select value={authMode} onValueChange={(value: LlmAuthMode) => setAuthMode(value)}>
+              <SelectTrigger id="authMode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="BEARER_TOKEN">
+                  Bearer Token (Authorization: Bearer)
+                </SelectItem>
+                <SelectItem value="X_API_KEY">
+                  x-api-key Header (Anthropic)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              大多数第三方平台使用 Bearer Token，Anthropic 官方 API 使用 x-api-key
+            </p>
+          </div>
+
+          {/* Custom Headers */}
+          <div className="space-y-2">
+            <Label htmlFor="customHeaders">自定义请求头 (可选)</Label>
+            <Textarea
+              id="customHeaders"
+              value={customHeaders}
+              onChange={(e) => {
+                setCustomHeaders(e.target.value);
+                setErrors((prev) => ({ ...prev, customHeaders: '' }));
+              }}
+              placeholder='{"Authorization": "Bearer YOUR_TOKEN", "X-Custom-Header": "value"}'
+              rows={3}
+              className="font-mono text-sm w-full resize-x min-w-0 break-all"
+            />
+            <p className="text-xs text-muted-foreground">
+              JSON 格式的自定义请求头，如需特殊鉴权可使用此项。留空则使用上方鉴权模式。
+            </p>
+            {errors.customHeaders && <p className="text-sm text-destructive">{errors.customHeaders}</p>}
+          </div>
+
           {/* Default Model */}
           <div className="space-y-2">
             <Label htmlFor="defaultModel">
@@ -303,7 +372,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
                 ))}
               </datalist>
               <p className="text-xs text-muted-foreground">
-                常用模型: claude-sonnet-4-20250514, claude-opus-4-20250514, gpt-4o, gpt-4o-mini, deepseek-chat
+                常用模型: claude-sonnet-4-20250514, claude-opus-4-20250514, deepseek-chat
               </p>
             </div>
             {errors.defaultModel && <p className="text-sm text-destructive">{errors.defaultModel}</p>}

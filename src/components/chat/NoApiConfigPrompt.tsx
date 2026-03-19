@@ -39,7 +39,6 @@ export function NoApiConfigPrompt({ onNavigateToSettings }: NoApiConfigPromptPro
             <p className="font-medium">支持的提供商：</p>
             <ul className="space-y-1 text-muted-foreground ml-4">
               <li>• Anthropic Claude (推荐)</li>
-              <li>• OpenAI GPT</li>
               <li>• DeepSeek</li>
               <li>• 自定义 API</li>
             </ul>

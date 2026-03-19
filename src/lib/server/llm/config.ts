@@ -16,17 +16,6 @@ const MODEL_CONTEXT_SIZES: Record<string, number> = {
   'claude-3-5-sonnet-20241022': 200000,
   'claude-3-5-haiku-20241022': 200000,
   'claude-3-opus-20240229': 200000,
-  // OpenAI
-  'gpt-4o': 128000,
-  'gpt-4o-mini': 128000,
-  'gpt-4-turbo': 128000,
-  'gpt-4': 8192,
-  'gpt-3.5-turbo': 16385,
-  'o1': 200000,
-  'o1-mini': 128000,
-  'o3': 200000,
-  'o3-mini': 200000,
-  'o4-mini': 200000,
   // DeepSeek
   'deepseek-chat': 64000,
   'deepseek-reasoner': 64000,
@@ -56,9 +45,19 @@ export async function getAllProviderConfigs(
     orderBy: [{ [orderByField]: 'asc' }],
   });
 
-  console.log(`[LLM Config] Found ${configs.length} enabled configs for ${agentType}`);
+  // console.log(`[LLM Config] Found ${configs.length} enabled configs for ${agentType}`);
 
   return configs.map((config) => {
+    // Parse custom headers from JSON string
+    let customHeaders: Record<string, string> | undefined
+    if (config.customHeaders) {
+      try {
+        customHeaders = JSON.parse(config.customHeaders)
+      } catch (e) {
+        console.warn(`[LLM Config] Failed to parse customHeaders for config "${config.name}":`, e)
+      }
+    }
+
     const result = {
       configId: config.id,
       provider: config.provider.toLowerCase() as LLMProvider,
@@ -68,8 +67,10 @@ export async function getAllProviderConfigs(
       maxContextTokens: config.maxContextTokens,
       maxOutputTokens: config.maxOutputTokens,
       temperature: config.temperature,
+      authMode: config.authMode === 'X_API_KEY' ? 'x_api_key' as const : 'bearer_token' as const,
+      customHeaders,
     };
-    console.log(`[LLM Config] Config "${config.name}": provider=${result.provider}, hasApiKey=${!!result.apiKey && result.apiKey.length > 0}, baseUrl=${result.baseUrl || 'default'}, model=${result.defaultModel}`);
+    // console.log(`[LLM Config] Config "${config.name}": provider=${result.provider}, hasApiKey=${!!result.apiKey && result.apiKey.length > 0}, baseUrl=${result.baseUrl || 'default'}, model=${result.defaultModel}, authMode=${result.authMode}, hasCustomHeaders=${!!customHeaders}`);
     return result;
   });
 }
@@ -153,6 +154,16 @@ export async function getProviderConfig(
     );
   }
 
+  // Parse custom headers from JSON string
+  let customHeaders: Record<string, string> | undefined
+  if (config.customHeaders) {
+    try {
+      customHeaders = JSON.parse(config.customHeaders)
+    } catch (e) {
+      console.warn(`[LLM Config] Failed to parse customHeaders for config "${config.name}":`, e)
+    }
+  }
+
   return {
     configId: config.id,
     provider: config.provider.toLowerCase() as LLMProvider,
@@ -162,6 +173,8 @@ export async function getProviderConfig(
     maxContextTokens: config.maxContextTokens,
     maxOutputTokens: config.maxOutputTokens,
     temperature: config.temperature,
+    authMode: config.authMode === 'X_API_KEY' ? 'x_api_key' as const : 'bearer_token' as const,
+    customHeaders,
   };
 }
 

@@ -9,7 +9,6 @@ import type {
 } from './types'
 import { callWithFallback, getProviderConfig } from './config'
 import { callAnthropic } from './anthropic'
-import { callOpenAI } from './openai'
 import { recordLlmUsageEvent } from './usage'
 
 function isToolUseBlock(block: ContentBlock): block is MessageToolUseBlock {
@@ -194,11 +193,7 @@ export async function callLLM(options: LLMCallOptions): Promise<LLMResponse> {
     async (config) => {
       // 对每个配置进行指数退避重试
       const response = await retryWithExponentialBackoff(async () => {
-        if (config.provider === 'openai') {
-          return await callOpenAI(sanitizedOptions, config)
-        } else {
-          return await callAnthropic(sanitizedOptions, config)
-        }
+        return await callAnthropic(sanitizedOptions, config)
       })
 
       // 记录使用事件

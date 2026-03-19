@@ -3,7 +3,8 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api/client';
 
-export type LlmProvider = 'ANTHROPIC' | 'OPENAI';
+export type LlmProvider = 'ANTHROPIC';
+export type LlmAuthMode = 'BEARER_TOKEN' | 'X_API_KEY';
 
 export type LlmConfigUsage = 'LEAD' | 'TEAMMATE' | 'BOTH';
 
@@ -18,6 +19,8 @@ export interface LlmApiConfig {
   maxContextTokens: number;
   maxOutputTokens: number;
   temperature: number;
+  authMode: LlmAuthMode;
+  customHeaders?: string; // JSON string
   leadPriority: number;
   teammatePriority: number;
   isEnabled: boolean;
@@ -35,6 +38,8 @@ interface CreateLlmApiConfigInput {
   maxContextTokens?: number;
   maxOutputTokens?: number;
   temperature?: number;
+  authMode?: LlmAuthMode;
+  customHeaders?: string;
 }
 
 interface UpdateLlmApiConfigInput {
@@ -45,6 +50,8 @@ interface UpdateLlmApiConfigInput {
   maxContextTokens?: number;
   maxOutputTokens?: number;
   temperature?: number;
+  authMode?: LlmAuthMode;
+  customHeaders?: string;
   isEnabled?: boolean;
 }
 
@@ -65,7 +72,6 @@ interface LlmConfigsState {
 
 const DEFAULT_MODEL_MAP: Record<LlmProvider, string> = {
   ANTHROPIC: 'claude-sonnet-4-20250514',
-  OPENAI: 'gpt-4o',
 };
 
 export const useLlmConfigsStore = create<LlmConfigsState>()((set, get) => ({

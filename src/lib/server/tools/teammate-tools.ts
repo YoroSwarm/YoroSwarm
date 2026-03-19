@@ -128,7 +128,7 @@ export const teammateTools: ToolDefinition[] = [
   },
   {
     name: 'report_task_completion',
-    description: '向 Lead 汇报任务完成情况。只有在任务目标已经真正达成时才能调用；未调用该工具，系统会视为任务仍未完成。',
+    description: '⚠️ **仅当任务真正完成时调用** — 任务进行中、只完成部分、产出草稿均不得调用。调用前请确认：所有要求的步骤都已完成，产出了完整可用的交付物，内容充实具体符合标准。调用后将结束当前任务，无法继续工作。',
     input_schema: {
       type: 'object' as const,
       properties: {

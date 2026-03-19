@@ -22,6 +22,18 @@ import {
   resumeSnapshot,
 } from './cognitive-inbox'
 import { assignSkillToAgent } from './skills/skill-registry'
+import {
+  listWorkspaceDirectory,
+  createWorkspaceDirectory,
+  readWorkspaceFile,
+  saveWorkspaceFile,
+} from './session-workspace'
+import {
+  createToolApproval,
+  waitForApproval,
+  executeApprovedCommand,
+} from './tool-approval'
+import * as path from 'path'
 
 export interface LeadProcessorInput {
   swarmSessionId: string
@@ -40,7 +52,7 @@ export interface LeadToolExecutorOptions {
  */
 export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadToolExecutorOptions = {}): ToolExecutor {
   const { swarmSessionId, userId, leadAgentId } = input
-  const { replyKey, allowReply = true, agentName = 'Lead' } = options
+  const { replyKey, allowReply = true } = options
   let replyIssuedInThisBatch = false
 
   return async (name: string, toolInput: Record<string, unknown>) => {
@@ -62,50 +74,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           })
         }
 
-        // Safety net: 检查是否还有 PENDING 未分配的任务
-        const pendingUnassigned = await prisma.teamLeadTask.findMany({
-          where: {
-            swarmSessionId,
-            status: 'PENDING',
-            assigneeId: null,
-          },
-          select: { id: true, title: true },
-        })
-
-        if (pendingUnassigned.length > 0) {
-          const taskList = pendingUnassigned
-            .map(t => `- ${t.title} (ID: ${t.id})`)
-            .join('\n')
-          return JSON.stringify({
-            success: false,
-            blocked: true,
-            reason: `还有 ${pendingUnassigned.length} 个任务处于 PENDING 状态且未分配。你必须先为这些任务分配队友，然后等待所有任务完成后再回复用户。`,
-            pending_tasks: taskList,
-          })
-        }
-
-        // 检查是否还有进行中的任务
-        const inProgressTasks = await prisma.teamLeadTask.findMany({
-          where: {
-            swarmSessionId,
-            status: { in: ['ASSIGNED', 'IN_PROGRESS'] },
-          },
-          select: { id: true, title: true, status: true, assignee: { select: { name: true } } },
-        })
-
-        if (inProgressTasks.length > 0) {
-          const taskList = inProgressTasks
-            .map(t => `- [${t.status}] ${t.title} → ${t.assignee?.name || '未知'}`)
-            .join('\n')
-          return JSON.stringify({
-            success: false,
-            blocked: true,
-            reason: `还有 ${inProgressTasks.length} 个任务正在执行中。请等待所有任务完成后再回复用户。如需通知用户中间进度，请在 content 中说明这是中间进度报告而非最终汇总。`,
-            in_progress_tasks: taskList,
-          })
-        }
-
-        // Resolve file references into attachment metadata
         const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
         let attachments: Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
         if (fileRefs.length > 0) {
@@ -163,7 +131,8 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       }
 
       case 'decompose_task': {
-        const tasks = toolInput.tasks as Array<{
+        // 处理tasks参数，可能是JSON字符串或已解析的数组
+        let tasks: Array<{
           title: string
           description?: string
           priority?: number
@@ -172,6 +141,27 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           dependsOnTaskIds?: string[]
           dependsOnTaskTitles?: string[]
         }>
+
+        const tasksInput = toolInput.tasks
+        if (typeof tasksInput === 'string') {
+          try {
+            tasks = JSON.parse(tasksInput)
+          } catch (e) {
+            return JSON.stringify({
+              success: false,
+              error: 'Failed to parse tasks JSON',
+              details: e instanceof Error ? e.message : 'Unknown error',
+            })
+          }
+        } else if (Array.isArray(tasksInput)) {
+          tasks = tasksInput as typeof tasks
+        } else {
+          return JSON.stringify({
+            success: false,
+            error: 'tasks must be an array or JSON string',
+          })
+        }
+
         const result = await decomposeTask(swarmSessionId, leadAgentId, tasks)
         return JSON.stringify({
           success: true,
@@ -188,7 +178,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       case 'assign_task': {
         const taskId = toolInput.task_id as string
         const teammateId = toolInput.teammate_id as string
-        // assignTaskToTeammate 已经处理了任务触发逻辑（包括依赖检查和triggerTaskExecution）
         const result = await assignTaskToTeammate(swarmSessionId, leadAgentId, taskId, teammateId)
 
         return JSON.stringify({
@@ -210,6 +199,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         )
         return JSON.stringify({ success: !result.skipped, message_id: result.id, skipped: result.skipped, reason: result.reason })
       }
+
       case 'update_self_todo': {
         const operation = toolInput.operation as 'clear' | 'add' | 'insert' | 'delete' | 'update'
         const now = new Date().toISOString()
@@ -283,7 +273,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       }
 
       case 'save_progress': {
-        // 保存当前工作进度
         const snapshotDescription = (toolInput.description as string) || ''
         const snapshotReason = (toolInput.reason as string) || ''
         const snapshotProgress = (toolInput.progress as number) || 50
@@ -318,7 +307,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       }
 
       case 'resume_work': {
-        // 恢复之前的工作
         const snapshot = await resumeSnapshot(swarmSessionId, leadAgentId)
         return JSON.stringify({
           success: !!snapshot,
@@ -397,7 +385,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
             leadAgentId
           )
 
-          // Deliver skill instructions to teammate via inbox
           const { deliverMessage } = await import('./cognitive-inbox')
           await deliverMessage(swarmSessionId, teammateId, {
             source: 'system',
@@ -425,8 +412,202 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         }
       }
 
+      // Workspace tools for Lead
+      case 'list_workspace_files': {
+        const directoryPath = (toolInput.directory_path as string) || ''
+        const recursive = Boolean(toolInput.recursive)
+        return JSON.stringify({ success: true, ...(await listWorkspaceDirectory(swarmSessionId, directoryPath, recursive)) })
+      }
+
+      case 'read_workspace_file': {
+        const filePath = toolInput.path as string
+        try {
+          const { file, extracted } = await readWorkspaceFile(swarmSessionId, filePath)
+          if (!extracted.success) {
+            return JSON.stringify({
+              success: false,
+              path: filePath,
+              mime_type: file.mimeType,
+              error: extracted.error || '无法读取文件内容',
+            })
+          }
+          return JSON.stringify({
+            success: true,
+            path: filePath,
+            mime_type: file.mimeType,
+            extraction_method: extracted.extractionMethod,
+            content: (extracted.text || '').slice(0, 10000),
+          })
+        } catch (error) {
+          return JSON.stringify({
+            success: false,
+            path: filePath,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          })
+        }
+      }
+
+      case 'create_workspace_directory': {
+        const relativePath = toolInput.path as string
+        const result = await createWorkspaceDirectory(swarmSessionId, relativePath)
+        return JSON.stringify({ success: true, path: result.relativePath, kind: 'directory' })
+      }
+
+      case 'create_workspace_file': {
+        const relativePath = toolInput.path as string
+        const content = toolInput.content as string
+        const mimeType = (toolInput.mime_type as string) || inferMimeType(relativePath)
+        const fileRecord = await saveWorkspaceFile({
+          swarmSessionId,
+          relativePath,
+          content,
+          mimeType,
+          mode: 'create',
+          metadata: {
+            sourceAgentId: leadAgentId,
+            kind: 'agent_output',
+          },
+        })
+        return JSON.stringify({
+          success: true,
+          file_id: fileRecord.id,
+          path: relativePath,
+          mime_type: mimeType,
+          size: fileRecord.size,
+          operation: 'create',
+        })
+      }
+
+      case 'replace_workspace_file': {
+        const relativePath = toolInput.path as string
+        const content = toolInput.content as string
+        const mimeType = (toolInput.mime_type as string) || inferMimeType(relativePath)
+        const fileRecord = await saveWorkspaceFile({
+          swarmSessionId,
+          relativePath,
+          content,
+          mimeType,
+          mode: 'replace',
+          metadata: {
+            sourceAgentId: leadAgentId,
+            kind: 'agent_output',
+          },
+        })
+        return JSON.stringify({
+          success: true,
+          file_id: fileRecord.id,
+          path: relativePath,
+          mime_type: mimeType,
+          size: fileRecord.size,
+          operation: 'replace',
+        })
+      }
+
+      case 'shell_exec': {
+        const command = toolInput.command as string
+        const description = toolInput.description as string
+        const workingDir = toolInput.working_dir as string | undefined
+        const timeout = toolInput.timeout as number | undefined
+
+        const leadAgent = await prisma.agent.findUnique({ where: { id: leadAgentId } })
+        if (!leadAgent) {
+          return JSON.stringify({ success: false, error: 'Lead agent not found' })
+        }
+
+        const approvalResult = await createToolApproval({
+          swarmSessionId,
+          agentId: leadAgentId,
+          agentName: leadAgent.name,
+          type: 'SHELL_EXEC',
+          toolName: 'shell_exec',
+          inputParams: { command, working_dir: workingDir, timeout },
+          description,
+          workingDir,
+        })
+
+        if (!approvalResult.success || !approvalResult.approvalId) {
+          return JSON.stringify({
+            success: false,
+            error: approvalResult.error || 'Failed to create approval request',
+          })
+        }
+
+        const waitResult = await waitForApproval(approvalResult.approvalId)
+
+        if (waitResult.success && waitResult.status === 'APPROVED') {
+          try {
+            const result = await executeApprovedCommand(
+              approvalResult.approvalId,
+              swarmSessionId,
+              leadAgentId,
+              leadAgent.name
+            )
+            return JSON.stringify({
+              success: true,
+              approval_id: approvalResult.approvalId,
+              output: result.slice(0, 10000),
+            })
+          } catch (execError) {
+            return JSON.stringify({
+              success: false,
+              approval_id: approvalResult.approvalId,
+              error: execError instanceof Error ? execError.message : 'Command execution failed',
+            })
+          }
+        } else {
+          return JSON.stringify({
+            success: false,
+            approval_id: approvalResult.approvalId,
+            status: waitResult.status,
+            error: waitResult.error || 'Command execution was not approved',
+          })
+        }
+      }
+
       default:
         return JSON.stringify({ error: `Unknown tool: ${name}` })
     }
   }
+}
+
+function inferMimeType(filename: string): string {
+  const ext = path.extname(filename).toLowerCase()
+  const mimeTypes: Record<string, string> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.js': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.json': 'application/json',
+    '.xml': 'application/xml',
+    '.csv': 'text/csv',
+    '.py': 'text/x-python',
+    '.java': 'text/x-java',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-c++',
+    '.go': 'text/x-go',
+    '.rs': 'text/x-rust',
+    '.rb': 'text/x-ruby',
+    '.php': 'text/x-php',
+    '.sh': 'text/x-shellscript',
+    '.yaml': 'text/yaml',
+    '.yml': 'text/yaml',
+    '.sql': 'text/x-sql',
+    '.r': 'text/x-r',
+    '.swift': 'text/x-swift',
+    '.kt': 'text/x-kotlin',
+    '.tex': 'text/x-latex',
+    '.log': 'text/plain',
+    '.svg': 'image/svg+xml',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.zip': 'application/zip',
+  }
+  return mimeTypes[ext] || 'application/octet-stream'
 }

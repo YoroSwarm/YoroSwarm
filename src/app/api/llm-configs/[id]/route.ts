@@ -68,6 +68,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       if (typeof body.apiKey !== 'string' || body.apiKey.trim().length === 0) {
         return validationErrorResponse(['API Key is required']);
       }
+      // Reject masked API keys (e.g., "sk-a****8a3c") to prevent overwriting real keys
+      if (/\*{4,}/.test(body.apiKey)) {
+        return validationErrorResponse(['Cannot update with masked API key. Please enter the full key.']);
+      }
       updateData.apiKey = body.apiKey.trim();
     }
 
@@ -105,6 +109,24 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (body.isEnabled !== undefined) {
       updateData.isEnabled = Boolean(body.isEnabled);
+    }
+
+    if (body.authMode !== undefined) {
+      if (!['BEARER_TOKEN', 'X_API_KEY'].includes(body.authMode)) {
+        return validationErrorResponse(['Invalid auth mode']);
+      }
+      updateData.authMode = body.authMode;
+    }
+
+    if (body.customHeaders !== undefined) {
+      if (body.customHeaders && typeof body.customHeaders === 'string') {
+        try {
+          JSON.parse(body.customHeaders);
+        } catch {
+          return validationErrorResponse(['Custom headers must be valid JSON']);
+        }
+      }
+      updateData.customHeaders = body.customHeaders || null;
     }
 
     if (Object.keys(updateData).length === 0) {

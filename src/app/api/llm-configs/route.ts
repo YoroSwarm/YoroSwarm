@@ -66,6 +66,9 @@ export async function POST(request: NextRequest) {
         maxContextTokens: body.maxContextTokens ?? 128000,
         maxOutputTokens: body.maxOutputTokens ?? 4096,
         temperature: body.temperature ?? 0.7,
+        authMode: body.authMode || 'BEARER_TOKEN',
+        customHeaders: body.customHeaders || null,
+        openaiApiMode: null,
         leadPriority: newLeadPriority,
         teammatePriority: newTeammatePriority,
         isEnabled: true,
@@ -113,9 +116,9 @@ function validateLlmApiConfig(data: unknown): ValidationResult {
   const body = data as Record<string, unknown>;
 
   // Provider
-  const validProviders = ['ANTHROPIC', 'OPENAI'];
+  const validProviders = ['ANTHROPIC'];
   if (!body.provider || typeof body.provider !== 'string' || !validProviders.includes(body.provider)) {
-    errors.push('Invalid provider. Must be one of: ANTHROPIC, OPENAI');
+    errors.push('Invalid provider. Must be: ANTHROPIC');
   }
 
   // Name

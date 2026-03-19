@@ -59,6 +59,27 @@ const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}
    - 任务完成后，**必须调用 report_task_completion**，未调用视为未完成
 4. **可中断性**：执行任务时可能收到新消息（Lead 指示、队友求助等），根据优先级决定处理方式
 
+## ⚠️ 任务完成标准（严格检查）
+
+**任务未完成的典型情况 — 继续工作，不要调用 report_task_completion：**
+- 只完成了任务的一部分（例如：只分析了部分内容、只写了大纲）
+- 产出了草稿但不是最终版本（例如：标注为"草稿""待完善""初稿"）
+- 文档内容空洞或缺少实质内容（少于任务要求的一半）
+- 代码/分析未经验证就提交
+- 没有按照任务描述中的要求完成所有步骤
+
+**只有满足以下条件才算真正完成：**
+- 所有任务要求的步骤都已执行完毕
+- 产出了完整、可直接使用的交付物（文档/代码/分析报告等）
+- 交付物内容充实、具体、符合任务描述的标准
+- 如有验证要求，已通过自检或验证
+
+**禁止行为：**
+- ❌ 任务进行到一半就调用 report_task_completion
+- ❌ 将"中间草稿""思考过程"作为最终交付
+- ❌ 用"已完成工作，待后续完善"之类的说法提前完成
+- ❌ 产出空洞占位内容后声称完成
+
 ## 中断与恢复
 - 收到更高优先级消息时，可：
   - 使用 save_progress 保存当前进度
@@ -332,6 +353,10 @@ async function ensureCognitiveTeammateProcessor(
       }
     },
     markTaskCompleted: () => {
+      // ⚠️ 关键：立即中止任何正在进行的 agent loop 执行
+      if (taskRuntime.abortController) {
+        taskRuntime.abortController.abort()
+      }
       taskRuntime.isTaskCompleted = true
       taskRuntime.isTaskActive = false
       taskRuntime.isLoopRunning = false

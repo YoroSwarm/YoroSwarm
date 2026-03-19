@@ -236,36 +236,36 @@ function buildLeadSystemStateMessage(input: {
   const parts: string[] = []
 
   // 1. 注入用户配置（如果存在），否则使用默认配置
-  console.log('[LeadPreferences] 原始 preferences:', {
-    preferences: input.preferences,
-    hasAgentsMd: !!input.preferences?.agentsMd,
-    hasSoulMd: !!input.preferences?.soulMd,
-    agentsMdType: typeof input.preferences?.agentsMd,
-    soulMdType: typeof input.preferences?.soulMd,
-    agentsMdValue: input.preferences?.agentsMd?.substring(0, 50),
-    soulMdValue: input.preferences?.soulMd?.substring(0, 50),
-  })
+  // console.log('[LeadPreferences] 原始 preferences:', {
+  //   preferences: input.preferences,
+  //   hasAgentsMd: !!input.preferences?.agentsMd,
+  //   hasSoulMd: !!input.preferences?.soulMd,
+  //   agentsMdType: typeof input.preferences?.agentsMd,
+  //   soulMdType: typeof input.preferences?.soulMd,
+  //   agentsMdValue: input.preferences?.agentsMd?.substring(0, 50),
+  //   soulMdValue: input.preferences?.soulMd?.substring(0, 50),
+  // })
 
   // 使用用户配置或默认配置
   const agentsMd = input.preferences?.agentsMd || DEFAULT_LEAD_AGENTS_MD
   const soulMd = input.preferences?.soulMd || DEFAULT_LEAD_SOUL_MD
 
-  console.log('[LeadPreferences] 注入配置', {
-    hasAgentsMd: !!input.preferences?.agentsMd,
-    hasSoulMd: !!input.preferences?.soulMd,
-    usingDefaultAgents: !input.preferences?.agentsMd,
-    usingDefaultSoul: !input.preferences?.soulMd,
-    agentsMdLength: agentsMd.length,
-    soulMdLength: soulMd.length,
-  })
+  // console.log('[LeadPreferences] 注入配置', {
+  //   hasAgentsMd: !!input.preferences?.agentsMd,
+  //   hasSoulMd: !!input.preferences?.soulMd,
+  //   usingDefaultAgents: !input.preferences?.agentsMd,
+  //   usingDefaultSoul: !input.preferences?.soulMd,
+  //   agentsMdLength: agentsMd.length,
+  //   soulMdLength: soulMd.length,
+  // })
 
   parts.push('[用户配置]')
 
-  console.log('[LeadPreferences] 注入 AGENTS.md，长度:', agentsMd.length)
+  // console.log('[LeadPreferences] 注入 AGENTS.md，长度:', agentsMd.length)
   parts.push('## AGENTS.md')
   parts.push(agentsMd)
 
-  console.log('[LeadPreferences] 注入 SOUL.md，长度:', soulMd.length)
+  // console.log('[LeadPreferences] 注入 SOUL.md，长度:', soulMd.length)
   parts.push('## SOUL.md')
   parts.push(soulMd)
 
@@ -325,9 +325,9 @@ function buildLeadSystemStateMessage(input: {
 
   return parts.length > 0 ? (() => {
     const result = `[系统状态更新]\n${parts.join('\n')}`
-    console.log('[LeadPreferences] 最终系统状态消息长度:', result.length)
+    // console.log('[LeadPreferences] 最终系统状态消息长度:', result.length)
     // 打印前 500 个字符来验证
-    console.log('[LeadPreferences] 系统状态消息预览:', result.substring(0, 500))
+    // console.log('[LeadPreferences] 系统状态消息预览:', result.substring(0, 500))
     return result
   })() : null
 }

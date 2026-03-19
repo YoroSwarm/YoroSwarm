@@ -460,7 +460,11 @@ model SharedTask {
 
 enum LlmProvider {
   ANTHROPIC
-  OPENAI
+}
+
+enum LlmAuthMode {
+  BEARER_TOKEN
+  X_API_KEY
 }
 
 model LlmApiConfig {
@@ -474,6 +478,8 @@ model LlmApiConfig {
   maxContextTokens  Int         @default(128000) @map("max_context_tokens")
   maxOutputTokens   Int         @default(4096) @map("max_output_tokens")
   temperature       Float       @default(0.7)
+  authMode          LlmAuthMode @default(BEARER_TOKEN) @map("auth_mode")
+  customHeaders     String?     @map("custom_headers") // JSON string
   leadPriority      Int         @default(999) @map("lead_priority")
   teammatePriority  Int         @default(999) @map("teammate_priority")
   isEnabled         Boolean     @default(true) @map("is_enabled")

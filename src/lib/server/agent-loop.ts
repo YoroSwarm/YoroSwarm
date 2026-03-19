@@ -224,6 +224,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     const textContent = extractTextContent(response)
     const toolUseBlocks = extractToolUseBlocks(response)
 
+    // Capture provider reasoning/thinking content (e.g., Anthropic thinking blocks)
+    if (response.reasoningContent) {
+      thinkingContent.push(response.reasoningContent)
+    }
+
     // Message sequence counter for this iteration to ensure ordering
     let messageSeq = 0
 
