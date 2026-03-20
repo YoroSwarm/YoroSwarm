@@ -171,6 +171,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
     if (customHeaders.trim()) {
       try {
         JSON.parse(customHeaders.trim());
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (e) {
         newErrors.customHeaders = '自定义请求头必须是有效的 JSON 格式';
       }
@@ -204,6 +205,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
       // If editing and key is masked (unchanged), omit it from the payload
       let finalData = saveData;
       if (isEditing && isMaskedKey) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { apiKey, ...dataWithoutKey } = saveData;
         finalData = dataWithoutKey;
       }
