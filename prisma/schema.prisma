@@ -24,6 +24,7 @@ model User {
   isSuperuser    Boolean   @default(false) @map("is_superuser")
   leadAgentsMd   String?   @map("lead_agents_md")
   leadSoulMd     String?   @map("lead_soul_md")
+  timezone       String?   @map("timezone")        // IANA timezone, e.g. "Asia/Shanghai"; null = server local
   envVarsJson    String?   @map("env_vars_json")   // JSON: { "KEY": "value", ... }
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")

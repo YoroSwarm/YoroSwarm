@@ -4,6 +4,8 @@ import type { ToolApprovalType, ToolApprovalRequestPayload, ToolApprovalUpdatePa
 import { evaluateApproval } from './session-approval-rules'
 import { assessCommandRisk, type RiskLevel } from './command-risk'
 import { getSessionVenvBinPath, buildVenvEnvPath } from './session-workspace'
+import { buildSandboxedSpawnArgs, determineSandboxPolicy, type SandboxPolicy } from './sandbox-exec'
+import { resolveEffectivePolicy, getSessionSandboxConfig } from './sandbox-config'
 
 export interface CreateToolApprovalParams {
   swarmSessionId: string
@@ -28,7 +30,7 @@ export interface ToolApprovalResult {
   autoDecision?: boolean
 }
 
-const APPROVAL_EXPIRY_MS = 5 * 60 * 1000 // 5分钟过期
+const APPROVAL_EXPIRY_MS = 24 * 60 * 60 * 1000 // 审批请求不限时（设为24小时仅作DB占位）
 
 /**
  * 智能审批入口 — 在创建审批请求之前评估是否需要人工审批
@@ -204,16 +206,16 @@ export async function createToolApproval(params: CreateToolApprovalParams): Prom
 }
 
 /**
- * 等待用户审批（带超时）
+ * 等待用户审批（无超时，直到用户操作）
  */
 export async function waitForApproval(
   approvalId: string,
-  timeoutMs: number = APPROVAL_EXPIRY_MS
+  _timeoutMs?: number
 ): Promise<ToolApprovalResult> {
-  const startTime = Date.now()
   const checkInterval = 500 // 每500ms检查一次
 
-  while (Date.now() - startTime < timeoutMs) {
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
     const approval = await prisma.toolApproval.findUnique({
       where: { id: approvalId },
     })
@@ -222,18 +224,6 @@ export async function waitForApproval(
       return {
         success: false,
         error: 'Approval request not found',
-      }
-    }
-
-    // 检查是否过期
-    if (new Date() > approval.expiresAt) {
-      await prisma.toolApproval.update({
-        where: { id: approvalId },
-        data: { status: 'EXPIRED' },
-      })
-      return {
-        success: false,
-        error: 'Approval request expired',
       }
     }
 
@@ -265,19 +255,17 @@ export async function waitForApproval(
       }
     }
 
+    if (approval.status === 'EXPIRED') {
+      return {
+        success: false,
+        approvalId,
+        status: 'EXPIRED',
+        error: 'Approval request expired',
+      }
+    }
+
     // 等待一段时间再检查
     await new Promise(resolve => setTimeout(resolve, checkInterval))
-  }
-
-  // 超时
-  await prisma.toolApproval.update({
-    where: { id: approvalId },
-    data: { status: 'EXPIRED' },
-  })
-
-  return {
-    success: false,
-    error: 'Approval timeout',
   }
 }
 
@@ -383,9 +371,34 @@ export async function executeApprovedCommand(
       envVars.PATH = `${venvBin}${path.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
     }
 
-    const child = spawn(shellPath, ['-c', command], {
+    // 构建沙盒参数：根据平台自动选择 Seatbelt / Bubblewrap / 降级
+    const commandPolicy = determineSandboxPolicy(command)
+    const needsNet = commandPolicy === 'workspace-write-net'
+    const sandboxPolicy: SandboxPolicy = resolveEffectivePolicy(swarmSessionId, needsNet)
+    const sessionSandboxConfig = getSessionSandboxConfig(swarmSessionId)
+    const writableRoots = [workingDir, ...sessionSandboxConfig.extraWritableRoots]
+    // 如果 venv 目录在工作区外（通常不会），也加入可写列表
+    const venvPath = path.join(workingDir, '.venv')
+    if (!venvPath.startsWith(workingDir)) {
+      writableRoots.push(venvPath)
+    }
+
+    const sandboxArgs = buildSandboxedSpawnArgs({
+      shellPath,
+      command,
       cwd: workingDir,
       env: envVars,
+      policy: sandboxPolicy,
+      writableRoots,
+    })
+
+    if (sandboxArgs.sandboxed) {
+      console.log(`[ToolApproval] Sandboxed execution (${sandboxArgs.capability.tool}, policy=${sandboxPolicy}): ${command.slice(0, 80)}`)
+    }
+
+    const child = spawn(sandboxArgs.command, sandboxArgs.args, {
+      cwd: sandboxArgs.options.cwd,
+      env: sandboxArgs.options.env,
     })
 
     // 设置超时
@@ -519,7 +532,6 @@ export async function getPendingApprovals(swarmSessionId: string) {
     where: {
       swarmSessionId,
       status: 'PENDING',
-      expiresAt: { gt: new Date() },
     },
     orderBy: { createdAt: 'desc' },
   })
@@ -550,15 +562,6 @@ export async function handleApprovalDecision(
   // 检查状态
   if (approval.status !== 'PENDING') {
     return { success: false, error: `Approval already ${approval.status.toLowerCase()}` }
-  }
-
-  // 检查是否过期
-  if (new Date() > approval.expiresAt) {
-    await prisma.toolApproval.update({
-      where: { id: approvalId },
-      data: { status: 'EXPIRED' },
-    })
-    return { success: false, error: 'Approval request expired' }
   }
 
   const newStatus = decision === 'approve' ? 'APPROVED' : 'REJECTED'

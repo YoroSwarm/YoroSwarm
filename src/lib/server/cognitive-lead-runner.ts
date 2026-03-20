@@ -20,6 +20,7 @@ import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { getLeadSelfTodoItems } from './lead-self-todo'
 import { getLeadPreferences } from './lead-preferences'
 import { buildLeadSkillsSection } from './skills/skill-injector'
+import { getUserTimezone, buildTimeInfoSection } from './agent-time'
 
 // 认知收件箱
 import {
@@ -31,7 +32,14 @@ import {
   type CurrentWorkContext,
 } from './cognitive-inbox'
 
-const LEAD_SYSTEM_PROMPT = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
+/**
+ * 构建带有时间戳的 Lead 系统提示
+ */
+function buildLeadSystemPrompt(createdAt: Date, timezone: string): string {
+  return LEAD_SYSTEM_PROMPT_BASE + buildTimeInfoSection(createdAt, timezone)
+}
+
+const LEAD_SYSTEM_PROMPT_BASE = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
 
 ## 核心工作流（严格遵循此顺序）
 
@@ -177,6 +185,8 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
     throw new Error(`Lead agent not found: ${leadAgentId}. Cannot initialize cognitive lead processor.`)
   }
 
+  const timezone = await getUserTimezone(userId)
+
   // 如果已经初始化，先清理
   if (leadProcessors.has(key)) {
     const existing = leadProcessors.get(key)!
@@ -202,7 +212,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
     userId,
     llmConfig: {
-      systemPrompt: LEAD_SYSTEM_PROMPT,
+      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone),
       agentName: 'Team Lead',
       tools: leadTools,
       executeTool: buildLeadToolExecutor(input),
@@ -325,10 +335,12 @@ async function processInboxMessages(
 ): Promise<void> {
   const { swarmSessionId, userId, leadAgentId } = input
 
-  // 从数据库获取用户 Lead 配置和 Skills 目录
-  const [preferences, skillsSection] = await Promise.all([
+  // 从数据库获取用户 Lead 配置、Skills 目录、Lead 创建时间和用户时区
+  const [preferences, skillsSection, leadAgent, timezone] = await Promise.all([
     getLeadPreferences(userId),
     buildLeadSkillsSection(userId),
+    prisma.agent.findUnique({ where: { id: leadAgentId }, select: { createdAt: true } }),
+    getUserTimezone(userId),
   ])
 
   // 构建消息摘要
@@ -446,7 +458,7 @@ ${messageSummary}
   // 执行LLM循环
   const communicationToolCounts = new Map<string, number>()
   const result = await runAgentLoop({
-    systemPrompt: LEAD_SYSTEM_PROMPT,
+    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone),
     agentId: leadAgentId,
     agentName: 'Team Lead',
     swarmSessionId,

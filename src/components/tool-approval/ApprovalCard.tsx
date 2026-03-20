@@ -1,8 +1,8 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { Terminal, Clock, AlertTriangle, Check, X, Loader2, Shield, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react'
+import { Terminal, AlertTriangle, Check, X, Loader2, Shield, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react'
 import type { ToolApproval } from '@/hooks/use-tool-approvals'
 import type { RiskLevel } from '@/types/websocket'
 
@@ -47,50 +47,17 @@ interface ApprovalCardProps {
   approval: ToolApproval
   onApprove: () => Promise<{ success: boolean; error?: string }>
   onReject: () => Promise<{ success: boolean; error?: string }>
-  onExpired?: () => void
   onAlwaysAllow?: (category: string, description: string) => Promise<unknown>
 }
 
-export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlwaysAllow }: ApprovalCardProps) {
+export function ApprovalCard({ approval, onApprove, onReject, onAlwaysAllow }: ApprovalCardProps) {
   const [isProcessing, setIsProcessing] = useState<'approve' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [alwaysAllow, setAlwaysAllow] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(() => {
-    const expiresAt = new Date(approval.expiresAt).getTime()
-    const now = Date.now()
-    return Math.max(0, Math.floor((expiresAt - now) / 1000))
-  })
 
   const riskLevel = approval.riskLevel || 'medium'
   const riskConfig = RISK_CONFIG[riskLevel]
   const RiskIcon = riskConfig.icon
-
-  // 倒计时
-  useEffect(() => {
-    if (timeLeft <= 0) {
-      onExpired?.()
-      return
-    }
-
-    const interval = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          onExpired?.()
-          return 0
-        }
-        return prev - 1
-      })
-    }, 1000)
-
-    return () => clearInterval(interval)
-  }, [timeLeft, onExpired])
-
-  const formatTime = (seconds: number) => {
-    if (seconds < 60) return `${seconds}秒`
-    const minutes = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${minutes}分${secs}秒`
-  }
 
   const handleApprove = async () => {
     setIsProcessing('approve')
@@ -144,8 +111,6 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlway
     return params.command || '(无命令)'
   }
 
-  const isExpired = timeLeft <= 0
-  const isNearExpiry = timeLeft <= 60 && timeLeft > 0
   const isCritical = riskLevel === 'critical'
   const isHighRisk = riskLevel === 'high' || isCritical
 
@@ -153,9 +118,7 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlway
     <div
       className={cn(
         'w-full rounded-xl border bg-card p-4 shadow-lg transition-all animate-fade-in',
-        isExpired && 'opacity-50 grayscale',
-        isNearExpiry && !isExpired && 'border-amber-500/50 bg-amber-500/5',
-        isHighRisk && !isExpired && !isNearExpiry && riskConfig.borderClass,
+        isHighRisk && riskConfig.borderClass,
       )}
     >
       {/* 头部 */}
@@ -183,15 +146,6 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlway
           )}>
             <RiskIcon className="h-3.5 w-3.5" />
             {riskConfig.label}
-          </div>
-
-          {/* 倒计时 */}
-          <div className={cn(
-            'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium',
-            isNearExpiry && !isExpired ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-muted text-muted-foreground'
-          )}>
-            <Clock className="h-3.5 w-3.5" />
-            {isExpired ? '已过期' : formatTime(timeLeft)}
           </div>
         </div>
       </div>
@@ -260,7 +214,7 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlway
       <div className="flex items-center gap-2">
         <button
           onClick={handleReject}
-          disabled={isExpired || isProcessing !== null}
+          disabled={isProcessing !== null}
           className={cn(
             'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
             'border border-border hover:bg-accent hover:text-accent-foreground',
@@ -277,7 +231,7 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlway
 
         <button
           onClick={handleApprove}
-          disabled={isExpired || isProcessing !== null}
+          disabled={isProcessing !== null}
           className={cn(
             'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
             'bg-primary text-primary-foreground hover:bg-primary/90',

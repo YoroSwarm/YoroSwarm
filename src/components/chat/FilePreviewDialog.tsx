@@ -13,6 +13,8 @@ import { cn } from '@/lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import ReactMarkdown from 'react-markdown';
+import { DocxPreview } from './office-previews/DocxPreview';
+import { XlsxPreview } from './office-previews/XlsxPreview';
 import remarkGfm from 'remark-gfm';
 
 interface FilePreviewDialogProps {
@@ -79,10 +81,101 @@ function isVideo(mimeType?: string): boolean {
   return !!mimeType?.startsWith('video/');
 }
 
+function isDocx(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.docx');
+}
+
+function isDoc(fileName: string): boolean {
+  return fileName.toLowerCase().endsWith('.doc');
+}
+
+function isXlsx(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.xlsx') || lower.endsWith('.xls');
+}
+
+function isPptx(fileName: string): boolean {
+  const lower = fileName.toLowerCase();
+  return lower.endsWith('.pptx') || lower.endsWith('.ppt');
+}
+
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/** Server-side text extraction preview for .doc files */
+function DocServerPreview({ url }: { url: string; fileName: string }) {
+  const [content, setContent] = useState<{ text?: string; html?: string } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadContent = useCallback(async () => {
+    const params = new URL(url, window.location.origin).searchParams;
+    const sessionId = params.get('swarmSessionId') || '';
+    const filePath = params.get('path') || '';
+    if (!sessionId || !filePath) {
+      setError('无法解析文件路径');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const extractUrl = `/api/files/extract-text?swarmSessionId=${encodeURIComponent(sessionId)}&path=${encodeURIComponent(filePath)}`;
+      const res = await fetch(extractUrl);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (data.data?.html) {
+        setContent({ html: data.data.html });
+      } else if (data.data?.text) {
+        setContent({ text: data.data.text });
+      } else {
+        throw new Error('无法提取文本');
+      }
+    } catch (e) {
+      setError(`加载失败: ${e instanceof Error ? e.message : '未知错误'}`);
+    } finally {
+      setLoading(false);
+    }
+  }, [url]);
+
+  useEffect(() => {
+    loadContent();
+  }, [loadContent]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">正在提取文本...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8 text-center">
+        <FileText className="h-12 w-12 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">{error}</p>
+      </div>
+    );
+  }
+
+  if (content?.html) {
+    return (
+      <div
+        className="max-h-[70vh] overflow-auto rounded border border-border bg-white dark:bg-zinc-900 p-6 text-sm leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: content.html }}
+      />
+    );
+  }
+
+  return (
+    <pre className="max-h-[70vh] overflow-auto rounded border border-border bg-muted/50 p-4 text-sm font-mono whitespace-pre-wrap wrap-break-word">
+      {content?.text || '（空文档）'}
+    </pre>
+  );
 }
 
 export function FilePreviewDialog({
@@ -106,9 +199,13 @@ export function FilePreviewDialog({
   const isPdfFile = isPdf(mimeType);
   const isAudioFile = isAudio(mimeType);
   const isVideoFile = isVideo(mimeType);
+  const isDocxFile = isDocx(fileName);
+  const isDocFile = isDoc(fileName);
+  const isXlsxFile = isXlsx(fileName);
+  const isPptxFile = isPptx(fileName);
   const language = getLanguageFromFilename(fileName);
 
-  const downloadUrl = `${fileUrl}?download=1`;
+  const downloadUrl = fileUrl.includes('?') ? `${fileUrl}&download=1` : `${fileUrl}?download=1`;
   // For inline display, omit the download param
   const inlineUrl = fileUrl;
 
@@ -197,6 +294,36 @@ export function FilePreviewDialog({
             <source src={inlineUrl} type={mimeType} />
             您的浏览器不支持视频播放
           </video>
+        </div>
+      );
+    }
+
+    // DOCX preview
+    if (isDocxFile) {
+      return <DocxPreview url={inlineUrl} fileName={fileName} />;
+    }
+
+    // DOC preview (server-side text extraction)
+    if (isDocFile) {
+      return <DocServerPreview url={inlineUrl} fileName={fileName} />;
+    }
+
+    // XLSX/XLS preview
+    if (isXlsxFile) {
+      return <XlsxPreview url={inlineUrl} fileName={fileName} />;
+    }
+
+    // PPTX/PPT - not supported yet
+    if (isPptxFile) {
+      return (
+        <div className="flex flex-col items-center gap-4 py-12 text-center">
+          <FileText className="h-16 w-16 text-muted-foreground" />
+          <div>
+            <p className="text-sm font-medium">{fileName}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              PPT/PPTX 格式暂不支持在线预览，请下载后查看
+            </p>
+          </div>
         </div>
       );
     }
@@ -369,7 +496,8 @@ export function FilePreviewDialog({
             : cn(
                 "sm:max-w-3xl max-h-[90vh]",
                 (isPdfFile || isVideoFile) && "sm:max-w-4xl",
-                isHtml && "sm:max-w-5xl h-[85vh]"
+                isHtml && "sm:max-w-5xl h-[85vh]",
+                (isXlsxFile || isDocxFile || isDocFile) && "sm:max-w-5xl"
               )
         )}
       >

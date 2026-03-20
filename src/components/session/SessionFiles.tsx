@@ -84,17 +84,21 @@ function isPreviewable(mimeType?: string, fileName?: string): boolean {
   if (mimeType?.startsWith("text/")) return true;
   if (mimeType === "application/json" || mimeType === "application/xml") return true;
   if (mimeType === "application/javascript" || mimeType === "application/typescript") return true;
+  // Office 文档
+  if (mimeType?.startsWith("application/vnd.openxmlformats-officedocument.")) return true;
+  if (mimeType === "application/msword" || mimeType === "application/vnd.ms-excel" || mimeType === "application/vnd.ms-powerpoint") return true;
   // 根据扩展名判断
   const ext = fileName?.split(".").pop()?.toLowerCase() || "";
-  const textExts = [
+  const previewExts = [
     "txt", "log", "env", "gitignore", "editorconfig", "prettierrc",
     "ts", "tsx", "js", "jsx", "py", "rb", "go", "rs", "java", "kt",
     "swift", "c", "cpp", "h", "hpp", "cs", "css", "scss", "less",
     "html", "xml", "svg", "json", "yaml", "yml", "toml", "sql",
     "sh", "bash", "zsh", "dockerfile", "makefile", "md", "mdx",
-    "prisma", "graphql", "gql"
+    "prisma", "graphql", "gql",
+    "doc", "docx", "xls", "xlsx", "ppt", "pptx",
   ];
-  return textExts.includes(ext);
+  return previewExts.includes(ext);
 }
 
 export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps) {

@@ -40,6 +40,9 @@ import { getUpstreamKnowledge, formatUpstreamKnowledge } from './shared-knowledg
 // Skills 注入
 import { buildTeammateSkillsPromptSection, ensureTeammateSkillsMounted } from './skills/skill-injector'
 
+// 时间信息
+import { getUserTimezone, buildTimeInfoSection } from './agent-time'
+
 const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}**。
 
 ## 你的角色
@@ -169,6 +172,7 @@ async function ensureCognitiveTeammateProcessor(
     throw new Error(`Teammate not found: ${teammateId}`)
   }
   const sessionUserId = session?.userId
+  const timezone = sessionUserId ? await getUserTimezone(sessionUserId) : undefined
 
   const taskRuntime: TeammateTaskRuntime = {
     currentTaskId: null,
@@ -312,7 +316,7 @@ async function ensureCognitiveTeammateProcessor(
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, teammateId, {
     userId: sessionUserId,
     llmConfig: {
-      systemPrompt: buildTeammateSystemPrompt(teammate, null),
+      systemPrompt: buildTeammateSystemPrompt(teammate, null, undefined, timezone),
       agentName: teammate.name,
       tools: [...teammateTools, ...progressTools],
       executeTool: buildTeammateToolExecutor(
@@ -628,7 +632,7 @@ export async function runCognitiveTeammateLoop(
 async function processTeammateMessages(
   swarmSessionId: string,
   teammateId: string,
-  teammate: { name: string; role: string; description: string | null; capabilities: string | null },
+  teammate: { name: string; role: string; description: string | null; capabilities: string | null; createdAt: Date },
   leadAgentId: string,
   messages: InboxMessage[],
   context: CurrentWorkContext,
@@ -641,6 +645,7 @@ async function processTeammateMessages(
     select: { userId: true },
   })
   const userId = session?.userId
+  const timezone = userId ? await getUserTimezone(userId) : undefined
   if (taskRuntime.isTaskCompleted || !taskRuntime.isTaskActive) {
     return
   }
@@ -727,7 +732,7 @@ async function processTeammateMessages(
 
   // 执行LLM循环
   const result = await runAgentLoop({
-    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection),
+    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection, timezone),
     agentId: teammateId,
     agentName: teammate.name,
     swarmSessionId,
@@ -772,9 +777,10 @@ async function processTeammateMessages(
  * 构建Teammate系统提示
  */
 function buildTeammateSystemPrompt(
-  teammate: { name: string; role: string; description: string | null; capabilities: string | null },
+  teammate: { name: string; role: string; description: string | null; capabilities: string | null; createdAt: Date },
   task: { title: string; description: string | null } | null,
-  skillsSection?: string | null
+  skillsSection?: string | null,
+  timezone?: string
 ): string {
   const caps = teammate.capabilities
     ? (() => { try { return JSON.parse(teammate.capabilities) } catch { return [] } })()
@@ -792,6 +798,9 @@ function buildTeammateSystemPrompt(
   if (skillsSection) {
     prompt += '\n' + skillsSection
   }
+
+  const tz = timezone || Intl.DateTimeFormat().resolvedOptions().timeZone
+  prompt += buildTimeInfoSection(teammate.createdAt, tz)
 
   return prompt
 }

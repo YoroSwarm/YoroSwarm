@@ -62,6 +62,53 @@ try {
   process.exit(1)
 }
 
+// ============ 沙盒环境检测 ============
+import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { platform } from 'node:os'
+
+function detectSandboxDeps() {
+  const os = platform()
+  console.log(`🔒 Sandbox: Detecting capabilities (${os})...`)
+
+  if (os === 'darwin') {
+    const toolPath = '/usr/bin/sandbox-exec'
+    if (existsSync(toolPath)) {
+      try {
+        execFileSync(toolPath, ['-p', '(version 1)(allow default)', '/usr/bin/true'], {
+          timeout: 5000, stdio: 'pipe',
+        })
+        console.log('🔒 Sandbox: ✅ macOS Seatbelt (sandbox-exec) available')
+        return
+      } catch {
+        console.warn('🔒 Sandbox: ⚠️  sandbox-exec found but failed verification')
+      }
+    }
+    console.warn('🔒 Sandbox: ⚠️  sandbox-exec not available — commands will run without OS-level isolation')
+  } else if (os === 'linux') {
+    const candidates = ['/usr/bin/bwrap', '/usr/local/bin/bwrap']
+    for (const p of candidates) {
+      if (existsSync(p)) {
+        console.log(`🔒 Sandbox: ✅ Bubblewrap (bwrap) available at ${p}`)
+        return
+      }
+    }
+    try {
+      const result = execFileSync('which', ['bwrap'], { timeout: 5000, stdio: 'pipe' })
+      if (result.toString().trim()) {
+        console.log('🔒 Sandbox: ✅ Bubblewrap (bwrap) available')
+        return
+      }
+    } catch { /* not found */ }
+    console.warn('🔒 Sandbox: ⚠️  bwrap not found — install with: apt install bubblewrap')
+    console.warn('🔒 Sandbox: ⚠️  Commands will run without OS-level isolation')
+  } else {
+    console.warn(`🔒 Sandbox: ⚠️  Unsupported platform (${os}) — commands will run without OS-level isolation`)
+  }
+}
+
+detectSandboxDeps()
+
 // ============ Next.js 应用 ============
 const app = next({ dev, hostname, port })
 const handle = app.getRequestHandler()

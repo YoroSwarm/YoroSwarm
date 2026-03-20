@@ -46,6 +46,12 @@ export async function GET() {
         'WS   ws://localhost:3000/ws/agents/{id}': 'Agent realtime stream',
         'WS   ws://localhost:3000/ws/tasks/{id}': 'Task realtime stream',
       },
+      sandbox: {
+        'GET  /api/sandbox': 'Get platform sandbox capability status (public)',
+        'GET  /api/sessions/{id}/sandbox': 'Get session sandbox config and status',
+        'PATCH /api/sessions/{id}/sandbox': 'Update session sandbox policy',
+        'DELETE /api/sessions/{id}/sandbox': 'Reset session sandbox config to defaults',
+      },
     },
     docs: {
       response_format: 'All API responses follow { success: boolean, data?: T, error?: string, message?: string }',

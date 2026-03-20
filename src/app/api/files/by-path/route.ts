@@ -8,7 +8,7 @@ import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, unauthorizedResponse } from '@/lib/api/response'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { resolveSessionScope } from '@/lib/server/swarm'
-import { findWorkspaceFileByPath, resolveWorkspaceAbsolutePath } from '@/lib/server/session-workspace'
+import { findWorkspaceFileByPath, resolveWorkspaceAbsolutePath, inferMimeType } from '@/lib/server/session-workspace'
 
 function buildContentDisposition(filename: string, inline: boolean) {
   const encoded = encodeURIComponent(filename)
@@ -55,10 +55,14 @@ export async function GET(request: NextRequest) {
     }
 
     const fileRecord = await findWorkspaceFileByPath(sessionScope.id, resolved.relativePath)
-    const mimeType = fileRecord?.mimeType || 'application/octet-stream'
+    const mimeType = fileRecord?.mimeType || inferMimeType(resolved.relativePath)
     const originalName = fileRecord?.originalName || path.posix.basename(resolved.relativePath)
     const isInline = new URL(request.url).searchParams.get('download') !== '1'
-      && (mimeType.startsWith('image/') || mimeType === 'application/pdf' || mimeType.startsWith('text/'))
+      && (mimeType.startsWith('image/') || mimeType === 'application/pdf' || mimeType.startsWith('text/')
+        || mimeType.startsWith('audio/') || mimeType.startsWith('video/')
+        || mimeType.startsWith('application/vnd.openxmlformats-officedocument.')
+        || mimeType === 'application/msword' || mimeType === 'application/vnd.ms-excel'
+        || mimeType === 'application/vnd.ms-powerpoint')
 
     const stream = createReadStream(resolved.absolutePath)
     return new Response(Readable.toWeb(stream) as ReadableStream, {
@@ -67,7 +71,7 @@ export async function GET(request: NextRequest) {
         'Content-Type': mimeType,
         'Content-Length': String(fileStats.size),
         'Content-Disposition': buildContentDisposition(originalName, isInline),
-        'Cache-Control': 'private, max-age=3600',
+        'Cache-Control': 'no-cache',
       },
     })
   } catch (error) {

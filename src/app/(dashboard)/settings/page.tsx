@@ -13,6 +13,7 @@ import {
   Key,
   Puzzle,
   Terminal,
+  Globe,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,10 +31,12 @@ export default function SettingsPage() {
     isCustomized,
     lastUpdated,
     isLoading,
+    timezone,
     loadPreferences,
     savePreferences,
     setAgentsMd,
     setSoulMd,
+    setTimezone,
     resetToDefaults,
     getDisplayAgentsMd,
     getDisplaySoulMd,
@@ -72,6 +75,7 @@ export default function SettingsPage() {
 
   const tabs = [
     { id: "appearance", label: "外观", icon: Palette },
+    { id: "general", label: "通用", icon: Globe },
     { id: "notifications", label: "通知", icon: Bell },
     { id: "llm-api", label: "LLM API", icon: Key },
     { id: "skills", label: "Skills", icon: Puzzle },
@@ -158,6 +162,82 @@ export default function SettingsPage() {
                       系统
                     </button>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "general" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">通用设置</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="font-medium">时区</p>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    Agent 系统提示中显示的时间将使用此时区。留空则使用服务器本地时区。
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <select
+                      value={timezone || ""}
+                      onChange={(e) => {
+                        setTimezone(e.target.value || null);
+                      }}
+                      className="flex h-9 w-full max-w-sm rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    >
+                      <option value="">服务器默认</option>
+                      <optgroup label="亚洲">
+                        <option value="Asia/Shanghai">Asia/Shanghai (中国标准时间)</option>
+                        <option value="Asia/Tokyo">Asia/Tokyo (日本标准时间)</option>
+                        <option value="Asia/Seoul">Asia/Seoul (韩国标准时间)</option>
+                        <option value="Asia/Singapore">Asia/Singapore (新加坡)</option>
+                        <option value="Asia/Hong_Kong">Asia/Hong_Kong (香港)</option>
+                        <option value="Asia/Taipei">Asia/Taipei (台北)</option>
+                        <option value="Asia/Kolkata">Asia/Kolkata (印度)</option>
+                        <option value="Asia/Dubai">Asia/Dubai (迪拜)</option>
+                      </optgroup>
+                      <optgroup label="美洲">
+                        <option value="America/New_York">America/New_York (美东)</option>
+                        <option value="America/Chicago">America/Chicago (美中)</option>
+                        <option value="America/Denver">America/Denver (美山)</option>
+                        <option value="America/Los_Angeles">America/Los_Angeles (美西)</option>
+                        <option value="America/Sao_Paulo">America/Sao_Paulo (巴西)</option>
+                      </optgroup>
+                      <optgroup label="欧洲">
+                        <option value="Europe/London">Europe/London (伦敦)</option>
+                        <option value="Europe/Paris">Europe/Paris (巴黎)</option>
+                        <option value="Europe/Berlin">Europe/Berlin (柏林)</option>
+                        <option value="Europe/Moscow">Europe/Moscow (莫斯科)</option>
+                      </optgroup>
+                      <optgroup label="大洋洲">
+                        <option value="Australia/Sydney">Australia/Sydney (悉尼)</option>
+                        <option value="Pacific/Auckland">Pacific/Auckland (新西兰)</option>
+                      </optgroup>
+                      <optgroup label="其他">
+                        <option value="UTC">UTC (协调世界时)</option>
+                      </optgroup>
+                    </select>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          await savePreferences();
+                        } catch (error) {
+                          console.error("Failed to save timezone:", error);
+                        }
+                      }}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? "保存中..." : "保存"}
+                    </Button>
+                  </div>
+                  {timezone && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      当前选择: {timezone} — 示例: {new Date().toLocaleString('zh-CN', { timeZone: timezone, hour12: false })}
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>

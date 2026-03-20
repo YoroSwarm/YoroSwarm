@@ -12,6 +12,7 @@ export async function GET(_request: NextRequest) {
       select: {
         leadAgentsMd: true,
         leadSoulMd: true,
+        timezone: true,
       },
     });
 
@@ -19,15 +20,10 @@ export async function GET(_request: NextRequest) {
       return errorResponse('User not found', 404);
     }
 
-    // console.log('[API/LeadPreferences] GET 返回:', {
-    //   userId: payload.userId,
-    //   leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
-    //   leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
-    // })
-
     return successResponse({
       agentsMd: user.leadAgentsMd || null,
       soulMd: user.leadSoulMd || null,
+      timezone: user.timezone || null,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {
@@ -44,44 +40,63 @@ export async function PUT(request: NextRequest) {
     const payload = await requireTokenPayload();
     const body = await request.json();
 
-    const { agentsMd, soulMd } = body;
+    const { agentsMd, soulMd, timezone } = body;
 
     console.log('[API/LeadPreferences] PUT 收到:', {
       userId: payload.userId,
       agentsMd: agentsMd?.substring(0, 50) || null,
       soulMd: soulMd?.substring(0, 50) || null,
+      timezone,
       agentsMdType: typeof agentsMd,
       soulMdType: typeof soulMd,
     })
 
-    if (typeof agentsMd !== 'string' && agentsMd !== null) {
+    if (typeof agentsMd !== 'string' && agentsMd !== null && agentsMd !== undefined) {
       return errorResponse('Invalid agentsMd', 400);
     }
 
-    if (typeof soulMd !== 'string' && soulMd !== null) {
+    if (typeof soulMd !== 'string' && soulMd !== null && soulMd !== undefined) {
       return errorResponse('Invalid soulMd', 400);
     }
 
+    if (timezone !== undefined && timezone !== null && typeof timezone !== 'string') {
+      return errorResponse('Invalid timezone', 400);
+    }
+
+    // Validate IANA timezone if provided
+    if (typeof timezone === 'string') {
+      try {
+        Intl.DateTimeFormat(undefined, { timeZone: timezone })
+      } catch {
+        return errorResponse('Invalid timezone identifier. Use IANA format, e.g. "Asia/Shanghai"', 400);
+      }
+    }
+
+    const data: Record<string, string | null> = {}
+    if (agentsMd !== undefined) data.leadAgentsMd = agentsMd
+    if (soulMd !== undefined) data.leadSoulMd = soulMd
+    if (timezone !== undefined) data.timezone = timezone
+
     const user = await prisma.user.update({
       where: { id: payload.userId },
-      data: {
-        leadAgentsMd: agentsMd,
-        leadSoulMd: soulMd,
-      },
+      data,
       select: {
         leadAgentsMd: true,
         leadSoulMd: true,
+        timezone: true,
       },
     });
 
     console.log('[API/LeadPreferences] PUT 保存后:', {
       leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
       leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
+      timezone: user.timezone,
     })
 
     return successResponse({
       agentsMd: user.leadAgentsMd || null,
       soulMd: user.leadSoulMd || null,
+      timezone: user.timezone || null,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

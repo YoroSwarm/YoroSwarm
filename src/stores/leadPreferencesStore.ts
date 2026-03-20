@@ -14,6 +14,7 @@ function isUsingDefaults(agentsMd: string | null, soulMd: string | null): boolea
 interface LeadPreferencesState {
   agentsMd: string | null;
   soulMd: string | null;
+  timezone: string | null;
   isCustomized: boolean;
   isLoading: boolean;
   lastUpdated: string | null;
@@ -21,6 +22,7 @@ interface LeadPreferencesState {
   savePreferences: () => Promise<void>;
   setAgentsMd: (content: string) => void;
   setSoulMd: (content: string) => void;
+  setTimezone: (tz: string | null) => void;
   resetToDefaults: () => void;
   // 用于 UI 显示的默认值
   getDisplayAgentsMd: () => string;
@@ -30,6 +32,7 @@ interface LeadPreferencesState {
 export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get) => ({
   agentsMd: null,
   soulMd: null,
+  timezone: null,
   isCustomized: false,
   isLoading: false,
   lastUpdated: null,
@@ -37,7 +40,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   loadPreferences: async () => {
     set({ isLoading: true });
     try {
-      const response = await api.get<{ agentsMd: string | null; soulMd: string | null }>('/lead/preferences');
+      const response = await api.get<{ agentsMd: string | null; soulMd: string | null; timezone: string | null }>('/lead/preferences');
 
       console.log('[LeadPreferencesStore] 加载配置:', {
         agentsMd: response.agentsMd?.substring(0, 50),
@@ -47,6 +50,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
       set({
         agentsMd: response.agentsMd,
         soulMd: response.soulMd,
+        timezone: response.timezone,
         isCustomized: !isUsingDefaults(response.agentsMd, response.soulMd),
         isLoading: false,
       });
@@ -57,10 +61,11 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   },
 
   savePreferences: async () => {
-    const { agentsMd, soulMd } = get();
+    const { agentsMd, soulMd, timezone } = get();
     console.log('[LeadPreferencesStore] 保存配置:', {
       agentsMd: agentsMd?.substring(0, 50) || null,
       soulMd: soulMd?.substring(0, 50) || null,
+      timezone,
       agentsMdLength: agentsMd?.length || 0,
       soulMdLength: soulMd?.length || 0,
     })
@@ -69,6 +74,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
       await api.put('/lead/preferences', {
         agentsMd,
         soulMd,
+        timezone,
       });
       set({
         isLoading: false,
@@ -101,6 +107,10 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
       soulMd: content,
       isCustomized: true,
     });
+  },
+
+  setTimezone: (tz) => {
+    set({ timezone: tz });
   },
 
   resetToDefaults: () => {

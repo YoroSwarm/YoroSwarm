@@ -12,6 +12,8 @@ export interface RiskAssessment {
   category: string
   /** 匹配到的主命令（第一个 token） */
   primaryCommand: string
+  /** 是否需要网络访问（用于沙盒策略决策） */
+  needsNetwork: boolean
 }
 
 // ── Critical: 强制审批，不可自动放行 ──
@@ -115,11 +117,28 @@ function extractGitSubcommand(command: string): string | null {
   return match ? match[1] : null
 }
 
+// 需要网络访问的命令模式（用于沙盒策略决策）
+const NETWORK_COMMAND_PATTERNS: RegExp[] = [
+  /\bcurl\b/, /\bwget\b/, /\bfetch\b/,
+  /\bpip3?\s+install\b/, /\bnpm\s+(install|i|ci)\b/,
+  /\byarn\s+(add|install)\b/, /\bpnpm\s+(add|install)\b/,
+  /\bbrew\s+install\b/, /\bapt(-get)?\s+install\b/,
+  /\bgit\s+(clone|fetch|pull|push)\b/,
+  /\bssh\b/, /\bscp\b/, /\brsync\b/, /\bnpx\b/,
+  /\bplaywright\s+install\b/, /\bdotnet\s+restore\b/,
+  /\bcargo\s+(install|fetch)\b/, /\bgo\s+(get|install)\b/,
+]
+
+function commandNeedsNetwork(command: string): boolean {
+  return NETWORK_COMMAND_PATTERNS.some(p => p.test(command))
+}
+
 /**
  * 评估命令风险等级
  */
 export function assessCommandRisk(command: string): RiskAssessment {
   const primaryCommand = extractPrimaryCommand(command)
+  const needsNetwork = commandNeedsNetwork(command)
 
   // 1. 检查 Critical 级别
   for (const rule of CRITICAL_PATTERNS) {
@@ -129,6 +148,7 @@ export function assessCommandRisk(command: string): RiskAssessment {
         reason: rule.reason,
         category: rule.category,
         primaryCommand,
+        needsNetwork,
       }
     }
   }
@@ -141,6 +161,7 @@ export function assessCommandRisk(command: string): RiskAssessment {
         reason: rule.reason,
         category: rule.category,
         primaryCommand,
+        needsNetwork,
       }
     }
   }
@@ -154,21 +175,23 @@ export function assessCommandRisk(command: string): RiskAssessment {
     for (const segment of pipeSegments) {
       const segAssessment = assessSingleCommand(segment)
       if (segAssessment.level === 'critical') {
-        return { ...segAssessment, primaryCommand }
+        return { ...segAssessment, primaryCommand, needsNetwork }
       }
       if (segAssessment.level === 'high' && (!highestRisk || highestRisk.level !== 'high')) {
-        highestRisk = { ...segAssessment, primaryCommand }
+        highestRisk = { ...segAssessment, primaryCommand, needsNetwork }
       }
     }
     if (highestRisk) return highestRisk
   }
 
   // 4. 单命令评估
-  return assessSingleCommand(command)
+  const result = assessSingleCommand(command)
+  return { ...result, needsNetwork }
 }
 
 function assessSingleCommand(command: string): RiskAssessment {
   const primaryCommand = extractPrimaryCommand(command)
+  const needsNetwork = commandNeedsNetwork(command)
 
   // git 特殊处理：根据子命令决定
   if (primaryCommand === 'git') {
@@ -179,6 +202,7 @@ function assessSingleCommand(command: string): RiskAssessment {
         reason: `Git 只读操作 (${subcommand})`,
         category: 'git_read',
         primaryCommand,
+        needsNetwork,
       }
     }
     return {
@@ -186,6 +210,7 @@ function assessSingleCommand(command: string): RiskAssessment {
       reason: `Git 写入操作 (${subcommand || 'unknown'})`,
       category: 'git_write',
       primaryCommand,
+      needsNetwork,
     }
   }
 
@@ -198,6 +223,7 @@ function assessSingleCommand(command: string): RiskAssessment {
         reason: `${primaryCommand} 信息查询`,
         category: 'info_query',
         primaryCommand,
+        needsNetwork,
       }
     }
     return {
@@ -205,6 +231,7 @@ function assessSingleCommand(command: string): RiskAssessment {
       reason: `执行 ${primaryCommand} 脚本`,
       category: 'script_exec',
       primaryCommand,
+      needsNetwork,
     }
   }
 
@@ -215,6 +242,7 @@ function assessSingleCommand(command: string): RiskAssessment {
       reason: '只读/信息查询命令',
       category: 'info_query',
       primaryCommand,
+      needsNetwork,
     }
   }
 
@@ -226,6 +254,7 @@ function assessSingleCommand(command: string): RiskAssessment {
       reason: mediumRule.reason,
       category: mediumRule.category,
       primaryCommand,
+      needsNetwork,
     }
   }
 
@@ -235,6 +264,7 @@ function assessSingleCommand(command: string): RiskAssessment {
     reason: '未知命令，需要审批',
     category: 'unknown',
     primaryCommand,
+    needsNetwork,
   }
 }
 

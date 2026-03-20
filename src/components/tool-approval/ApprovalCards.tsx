@@ -22,7 +22,6 @@ export function ApprovalCards({ approvals, onDecision, onAlwaysAllow, className 
           approval={approval}
           onApprove={() => onDecision(approval.id, 'approve')}
           onReject={() => onDecision(approval.id, 'reject')}
-          onExpired={() => onDecision(approval.id, 'reject')}
           onAlwaysAllow={onAlwaysAllow}
         />
       ))}

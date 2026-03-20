@@ -6,7 +6,7 @@ import prisma from '@/lib/db'
 import { extractFileText } from './file-text-extractor'
 
 const execFileAsync = promisify(execFile)
-const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
+export const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
 const VENV_DIR_NAME = '.venv'
 
 type ManagedFileRecord = {
@@ -52,7 +52,7 @@ function parseMetadata(metadata: string | null | undefined): WorkspaceFileMetada
   }
 }
 
-function inferMimeType(filePath: string): string {
+export function inferMimeType(filePath: string): string {
   const ext = path.extname(filePath).toLowerCase()
   const mimeMap: Record<string, string> = {
     '.txt': 'text/plain',
@@ -71,11 +71,23 @@ function inferMimeType(filePath: string): string {
     '.pdf': 'application/pdf',
     '.doc': 'application/msword',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
     '.jpeg': 'image/jpeg',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
+    '.svg': 'image/svg+xml',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.zip': 'application/zip',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
   }
   return mimeMap[ext] || 'application/octet-stream'
 }
