@@ -30,21 +30,20 @@ interface LlmApiConfigDialogProps {
   onSave: (data: LlmApiConfigInput) => Promise<void>;
 }
 
-interface LlmApiConfigInput {
+export interface LlmApiConfigInput {
   provider: LlmProvider;
   name: string;
-  apiKey: string;
-  baseUrl?: string;
+  apiKey?: string;
+  baseUrl?: string | null;
   defaultModel: string;
   maxContextTokens?: number;
   maxOutputTokens?: number;
   temperature?: number;
   authMode?: LlmAuthMode;
   customHeaders?: string;
-  customHeaders?: string;
 }
 
-const PROVIDER_OPTIONS: Array<{ value: LlmProvider; label: string; defaultModel: string; defaultBaseUrl: string }> = [
+const PROVIDER_OPTIONS: Array<{ value: LlmProvider; label: string; defaultModel: string; defaultBaseUrl: string | null }> = [
   { value: 'ANTHROPIC', label: 'Anthropic', defaultModel: 'claude-sonnet-4-20250514', defaultBaseUrl: 'https://api.anthropic.com' },
 ];
 
@@ -109,7 +108,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
         setProvider(defaultProvider.value);
         setName('');
         setApiKey('');
-        setBaseUrl(defaultProvider.defaultBaseUrl);
+        setBaseUrl(defaultProvider.defaultBaseUrl || '');
         setDefaultModel(defaultProvider.defaultModel);
         setAuthMode('BEARER_TOKEN');
         setCustomHeaders('');
@@ -129,7 +128,7 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
       const option = PROVIDER_OPTIONS.find((p) => p.value === value);
       if (option) {
         setDefaultModel(option.defaultModel);
-        setBaseUrl(option.defaultBaseUrl);
+        setBaseUrl(option.defaultBaseUrl || '');
       }
     }
   };
@@ -201,11 +200,14 @@ export function LlmApiConfigDialog({ open, onOpenChange, config, onSave }: LlmAp
         maxOutputTokens: parseInt(maxOutputTokens, 10),
         temperature: parseFloat(temperature),
       };
+
       // If editing and key is masked (unchanged), omit it from the payload
+      let finalData = saveData;
       if (isEditing && isMaskedKey) {
-        delete (saveData as Record<string, unknown>).apiKey;
+        const { apiKey, ...dataWithoutKey } = saveData;
+        finalData = dataWithoutKey;
       }
-      await onSave(saveData);
+      await onSave(finalData);
 
       // Add to recent models
       addRecentModel(defaultModel.trim());

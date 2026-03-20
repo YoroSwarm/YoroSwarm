@@ -63,6 +63,7 @@ export interface Message {
     hasResult?: boolean;
     orphaned?: boolean;
     seq?: number;
+    model?: string;
   };
   toolCalls?: ToolCall[];
   thinkingContent?: string[];

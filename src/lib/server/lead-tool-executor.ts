@@ -1,4 +1,4 @@
-import type { ToolExecutor } from './agent-loop'
+import type { ToolExecutor, ToolExecutorContext } from './agent-loop'
 import prisma from '@/lib/db'
 import {
   provisionTeammate,
@@ -55,7 +55,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
   const { replyKey, allowReply = true } = options
   let replyIssuedInThisBatch = false
 
-  return async (name: string, toolInput: Record<string, unknown>) => {
+  return async (name: string, toolInput: Record<string, unknown>, context?: ToolExecutorContext) => {
     switch (name) {
       case 'reply_to_user': {
         if (!allowReply) {
@@ -96,6 +96,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           ...((toolInput.metadata as Record<string, unknown> | undefined) || {}),
           ...(replyKey ? { replyKey } : {}),
           ...(attachments ? { attachments } : {}),
+          ...(context?.currentModel ? { model: context.currentModel } : {}),
         }
 
         const result = await replyToUser(

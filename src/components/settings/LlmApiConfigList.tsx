@@ -33,7 +33,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { LlmApiConfigDialog } from './LlmApiConfigDialog';
+import { LlmApiConfigDialog, type LlmApiConfigInput } from './LlmApiConfigDialog';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 
 interface SortableConfigItemProps {
@@ -205,10 +205,19 @@ export function LlmApiConfigList({ onHasConfigChange }: LlmApiConfigListProps) {
     }
   };
 
-  const handleCreate = async (data: Omit<Parameters<typeof createConfig>[0], 'baseUrl'> & { baseUrl?: string }) => {
+  const handleCreate = async (data: LlmApiConfigInput) => {
+    // Ensure required fields for creation
     await createConfig({
-      ...data,
-      baseUrl: data.baseUrl ?? '',
+      provider: data.provider,
+      name: data.name,
+      apiKey: data.apiKey || '',
+      baseUrl: data.baseUrl || '',
+      defaultModel: data.defaultModel,
+      maxContextTokens: data.maxContextTokens,
+      maxOutputTokens: data.maxOutputTokens,
+      temperature: data.temperature,
+      authMode: data.authMode,
+      customHeaders: data.customHeaders,
     });
     setIsDialogOpen(false);
     onHasConfigChange?.(true);

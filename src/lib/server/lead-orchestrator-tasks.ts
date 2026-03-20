@@ -1,12 +1,11 @@
 import prisma from '@/lib/db'
 import { appendAgentContextEntry } from '@/lib/server/agent-context'
-import { createInternalThread, sendInternalMessage, resolveAgentInSession } from '@/lib/server/internal-bus'
+import { createInternalThread, resolveAgentInSession } from '@/lib/server/internal-bus'
 import { buildSessionTaskData } from '@/lib/server/swarm-session'
 import { getSessionAttachments, attachFilesToTask } from '@/lib/server/external-chat'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { activateAssignedTask } from './task-activation'
 import { unlockDependentTasks } from '@/lib/server/task-orchestrator'
-import { buildLeadToTeammateRuntimeControl } from './lead-orchestrator'
 
 // Private helpers
 
@@ -437,32 +436,15 @@ export async function assignTaskToTeammate(
       queuedBehindTaskTitle: teammateActiveTask?.title,
     })
   } else {
-    // 仅在存在前置依赖时通知等待，不投递到 teammate inbox，避免过早执行。
-    const thread = await prisma.internalThread.findFirst({
+    // 前置依赖未完成，仅预创建协调线程，不向 teammate 投递任何消息。
+    // 等到所有依赖完成后，由 unlockDependentTasks → activateAssignedTask 投递。
+    await prisma.internalThread.findFirst({
       where: { swarmSessionId, relatedTaskId: task.id },
     }) || await createInternalThread({
       swarmSessionId,
       threadType: 'task_coordination',
       subject: `任务: ${task.title}`,
       relatedTaskId: task.id,
-    })
-
-    await sendInternalMessage({
-      swarmSessionId,
-      threadId: thread.id,
-      senderAgentId: leadAgentId,
-      recipientAgentId: teammate.id,
-      messageType: 'coordination',
-      content: `任务 "${task.title}" 已分配给你，但仍有 ${pendingDeps.length} 个前置任务未完成。待前置任务完成后，系统会自动把它送入你的 inbox。`,
-      metadata: {
-        taskId: task.id,
-        hasPendingDependencies: true,
-        pendingDependencyCount: pendingDeps.length,
-        runtimeControl: buildLeadToTeammateRuntimeControl('coordination', {
-          taskId: task.id,
-          hasPendingDependencies: true,
-        }),
-      },
     })
   }
 

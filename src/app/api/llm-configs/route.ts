@@ -68,7 +68,6 @@ export async function POST(request: NextRequest) {
         temperature: body.temperature ?? 0.7,
         authMode: body.authMode || 'BEARER_TOKEN',
         customHeaders: body.customHeaders || null,
-        openaiApiMode: null,
         leadPriority: newLeadPriority,
         teammatePriority: newTeammatePriority,
         isEnabled: true,

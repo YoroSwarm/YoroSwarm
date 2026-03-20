@@ -1011,6 +1011,11 @@ export function MessageItem({
                 Teammate
               </span>
             )}
+            {message.metadata?.model && (
+              <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground/70">
+                {message.metadata.model}
+              </span>
+            )}
           </span>
         )}
 

@@ -9,8 +9,13 @@ const MAX_SESSION_TOOL_CALLS = 2000
 
 export type ToolExecutor = (
   name: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
+  context?: ToolExecutorContext,
 ) => Promise<string>
+
+export interface ToolExecutorContext {
+  currentModel?: string
+}
 
 export interface AgentLoopOptions {
   systemPrompt: string
@@ -70,6 +75,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
   const messages: LLMMessage[] = [...options.contextMessages]
   let totalToolCalls = 0
+  let currentModel: string | undefined
   const contextEntriesAdded: string[] = []
   const thinkingContent: string[] = []
   const toolCalls: { toolName: string; status: 'calling' | 'completed' | 'error'; inputSummary?: string; resultSummary?: string; timestamp: string }[] = []
@@ -223,6 +229,9 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
     const textContent = extractTextContent(response)
     const toolUseBlocks = extractToolUseBlocks(response)
+
+    // Track the model used for this iteration (for passing to tool executors)
+    currentModel = response.model
 
     // Capture provider reasoning/thinking content (e.g., Anthropic thinking blocks)
     if (response.reasoningContent) {
@@ -406,7 +415,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         let result: string
         let isError = false
         try {
-          result = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>)
+          result = await executeTool(toolUse.name, toolUse.input as Record<string, unknown>, { currentModel })
           if (!isError && singleUseToolsPerRun.has(toolUse.name)) {
             usedSingleUseTools.add(toolUse.name)
           }

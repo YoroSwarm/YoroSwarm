@@ -4,7 +4,7 @@
  * 从 cognitive-teammate-runner.ts 提取的工具处理逻辑
  */
 
-import type { ToolExecutor } from './agent-loop'
+import type { ToolExecutor, ToolExecutorContext } from './agent-loop'
 import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import {
@@ -281,7 +281,7 @@ export function buildTeammateToolExecutor(
   const persistentReadCache = teammateReadFileCache.get(persistentReadCacheKey) || new Map<string, string>()
   teammateReadFileCache.set(persistentReadCacheKey, persistentReadCache)
 
-  return async (name: string, input: Record<string, unknown>) => {
+  return async (name: string, input: Record<string, unknown>, _context?: ToolExecutorContext) => {
     const taskId = getCurrentTaskId()
     const task = taskId
       ? await prisma.teamLeadTask.findUnique({ where: { id: taskId } })
