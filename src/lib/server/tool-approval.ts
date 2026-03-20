@@ -3,6 +3,7 @@ import { publishRealtimeMessage } from '@/app/api/ws/route'
 import type { ToolApprovalType, ToolApprovalRequestPayload, ToolApprovalUpdatePayload } from '@/types/websocket'
 import { evaluateApproval } from './session-approval-rules'
 import { assessCommandRisk, type RiskLevel } from './command-risk'
+import { getSessionVenvBinPath, buildVenvEnvPath } from './session-workspace'
 
 export interface CreateToolApprovalParams {
   swarmSessionId: string
@@ -367,9 +368,24 @@ export async function executeApprovedCommand(
 
     const shellPath = detectShell()
 
+    // 构建 PATH：虚拟环境 bin 目录优先，确保 python/pip 使用工作区隔离版本
+    const venvEnvPath = buildVenvEnvPath(swarmSessionId)
+    const venvBin = getSessionVenvBinPath(swarmSessionId)
+    const envVars = {
+      ...process.env,
+      PATH: venvEnvPath,
+      VIRTUAL_ENV: path.join(workingDir, '.venv'),
+      ...userEnvVars,
+    }
+
+    // 如果 venv bin 存在，在 PATH 中覆盖用户设置的 PATH
+    if (fs.existsSync(venvBin)) {
+      envVars.PATH = `${venvBin}${path.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
+    }
+
     const child = spawn(shellPath, ['-c', command], {
       cwd: workingDir,
-      env: { ...process.env, PATH: process.env.PATH, ...userEnvVars },
+      env: envVars,
     })
 
     // 设置超时

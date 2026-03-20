@@ -41,6 +41,10 @@
   "exclude": [
     "node_modules",
     "dist",
-    "dist/**"
+    "dist/**",
+    "skills/**",
+    "to-be-add-skills/**",
+    "session-workspaces/**",
+    "ppt-agent-workflow-san/**"
   ]
 }

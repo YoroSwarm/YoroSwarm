@@ -163,6 +163,13 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
       agents: true,
       tasks: {
         where: { status: { in: ['PENDING', 'ASSIGNED', 'IN_PROGRESS'] } },
+        include: {
+          dependencies: {
+            include: {
+              dependsOnTask: true,
+            },
+          },
+        },
       },
     },
   })
@@ -236,8 +243,13 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
       )
 
       if (activeTask) {
+        // 检查任务依赖是否完成
+        const hasUnmetDependencies = activeTask.dependencies?.some(
+          dep => dep.dependsOnTask.status !== 'COMPLETED'
+        ) ?? false
+
         if (activeTask.status === 'IN_PROGRESS') {
-          // resumeTeammateTask creates the processor (and runtime via initCognitiveEngine)
+          // IN_PROGRESS 任务直接恢复（假设之前已经通过依赖检查）
           await resumeTeammateTask(swarmSessionId, agent.id, activeTask.id, leadAgentId)
           resumedTeammateTaskIds.push(activeTask.id)
           resumedAgents++
@@ -260,15 +272,22 @@ export async function resumeSwarmSession(swarmSessionId: string): Promise<{
             `[Lifecycle] Resumed teammate ${agent.name} with IN_PROGRESS task "${activeTask.title}"`
           )
         } else if (activeTask.status === 'ASSIGNED') {
-          // For ASSIGNED tasks, just initialize the processor (which starts idle check)
-          // The idle check mechanism will automatically pick up the task
-          const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
-          await initCognitiveTeammate(swarmSessionId, agent.id, leadAgentId)
-          resumedAgents++
+          // 对于 ASSIGNED 任务，只有依赖全部完成时才初始化 teammate
+          if (!hasUnmetDependencies) {
+            // For ASSIGNED tasks, just initialize the processor (which starts idle check)
+            // The idle check mechanism will automatically pick up the task
+            const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
+            await initCognitiveTeammate(swarmSessionId, agent.id, leadAgentId)
+            resumedAgents++
 
-          console.log(
-            `[Lifecycle] Initialized teammate ${agent.name} with ASSIGNED tasks (idle check will auto-start processing)`
-          )
+            console.log(
+              `[Lifecycle] Initialized teammate ${agent.name} with ASSIGNED task "${activeTask.title}" (dependencies satisfied, idle check will auto-start processing)`
+            )
+          } else {
+            console.log(
+              `[Lifecycle] Skipped teammate ${agent.name} with ASSIGNED task "${activeTask.title}" - waiting for dependencies to complete`
+            )
+          }
         }
       }
     } catch (err) {
@@ -464,7 +483,13 @@ export async function autoResumeActiveSessions(): Promise<{
           status: { in: ['IN_PROGRESS', 'ASSIGNED'] },
           assigneeId: { not: null },
         },
-        select: { id: true, title: true, assigneeId: true, status: true },
+        include: {
+          dependencies: {
+            include: {
+              dependsOnTask: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'asc' },
       })
 
@@ -479,6 +504,11 @@ export async function autoResumeActiveSessions(): Promise<{
           }
 
           try {
+            // 检查任务依赖是否完成
+            const hasUnmetDependencies = task.dependencies?.some(
+              dep => dep.dependsOnTask.status !== 'COMPLETED'
+            ) ?? false
+
             if (task.status === 'IN_PROGRESS') {
               await resumeTeammateTask(session.id, task.assigneeId, task.id, session.leadAgentId)
               resumedTeammateTaskIds.push(task.id)
@@ -501,13 +531,20 @@ export async function autoResumeActiveSessions(): Promise<{
                 `[Lifecycle] Auto-resumed teammate task "${task.title}" for agent ${task.assigneeId}`
               )
             } else if (task.status === 'ASSIGNED') {
-              // For ASSIGNED tasks, just initialize the processor (which starts idle check)
-              const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
-              await initCognitiveTeammate(session.id, task.assigneeId, session.leadAgentId)
+              // 对于 ASSIGNED 任务，只有依赖全部完成时才初始化 teammate
+              if (!hasUnmetDependencies) {
+                // For ASSIGNED tasks, just initialize the processor (which starts idle check)
+                const { initCognitiveTeammate } = await import('./cognitive-teammate-runner')
+                await initCognitiveTeammate(session.id, task.assigneeId, session.leadAgentId)
 
-              console.log(
-                `[Lifecycle] Initialized teammate ${task.assigneeId} with ASSIGNED tasks (idle check will auto-start processing)`
-              )
+                console.log(
+                  `[Lifecycle] Initialized teammate ${task.assigneeId} with ASSIGNED task "${task.title}" (dependencies satisfied, idle check will auto-start processing)`
+                )
+              } else {
+                console.log(
+                  `[Lifecycle] Skipped teammate ${task.assigneeId} with ASSIGNED task "${task.title}" - waiting for dependencies to complete`
+                )
+              }
             }
 
             initializedTeammates.add(task.assigneeId)

@@ -399,7 +399,32 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             select: { status: true },
           })
 
-          if (!session || session.status === 'PAUSED') {
+          if (!session) {
+            console.log(`[AgentLoop][${agentName}] Session deleted, stopping loop`)
+
+            publishRealtimeMessage(
+              {
+                type: 'agent_thinking',
+                payload: {
+                  agent_id: agentId,
+                  agent_name: agentName,
+                  swarm_session_id: swarmSessionId,
+                  status: 'end',
+                  timestamp: new Date().toISOString(),
+                },
+              },
+              { sessionId: swarmSessionId }
+            )
+
+            return {
+              finalText: '会话已删除',
+              toolCallsMade: totalToolCalls,
+              iterationsUsed: iteration,
+              contextEntriesAdded,
+            }
+          }
+
+          if (session.status === 'PAUSED') {
             console.log(`[AgentLoop][${agentName}] Session paused, stopping tool execution`)
             toolResults.push({
               type: 'tool_result',

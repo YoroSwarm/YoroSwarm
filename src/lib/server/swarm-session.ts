@@ -1,6 +1,6 @@
 import { AgentKind, type Prisma } from '@prisma/client'
 import prisma from '@/lib/db'
-import { ensureSessionWorkspaceRoot } from './session-workspace'
+import { ensureSessionWorkspaceRoot, ensureSessionVenv } from './session-workspace'
 
 type RosterMember = {
   name: string
@@ -99,6 +99,10 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
   })
 
   await ensureSessionWorkspaceRoot(createdSession.id)
+  // 异步创建 Python 虚拟环境（不阻塞会话创建）
+  ensureSessionVenv(createdSession.id).catch((err) =>
+    console.warn(`[SwarmSession] Venv creation failed for ${createdSession.id}:`, err)
+  )
   return createdSession
 }
 

@@ -4,24 +4,28 @@ import { useAgents } from "@/hooks/use-agents";
 import {
   Search,
   Clock,
-  Loader2
+  Loader2,
+  List,
+  Network
 } from "lucide-react";
 import { Task } from "@/types/agent";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { TaskFlowChart } from "./TaskFlowChart";
 
 interface SessionTasksProps {
   sessionId: string;
 }
 
 export function SessionTasks({ sessionId }: SessionTasksProps) {
-  const { tasks, isLoading } = useTasks({ 
+  const { tasks, isLoading } = useTasks({
     swarmSessionId: sessionId,
-    autoLoad: true 
+    autoLoad: true
   });
   const { agents } = useAgents({ autoLoad: true });
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<Task["status"] | "all">("all");
+  const [viewMode, setViewMode] = useState<"list" | "flow">("list");
 
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -61,47 +65,102 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
             <option value="failed">失败</option>
           </select>
         </div>
+
+        {/* 视图切换按钮 */}
+        <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1 border border-border">
+          <button
+            onClick={() => setViewMode("list")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+              viewMode === "list"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            )}
+          >
+            <List className="h-4 w-4" />
+            <span className="hidden sm:inline">列表</span>
+          </button>
+          <button
+            onClick={() => setViewMode("flow")}
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+              viewMode === "flow"
+                ? "bg-background text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/50"
+            )}
+          >
+            <Network className="h-4 w-4" />
+            <span className="hidden sm:inline">流程图</span>
+          </button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto pr-2">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredTasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
-            <Clock className="h-12 w-12 mb-3 opacity-50" />
-            <p className="font-medium">暂无任务</p>
-            <p className="text-sm mt-1">任务将由 Agent 自动创建</p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredTasks.map((task) => (
-              <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:shadow-md transition-all">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <p className="font-semibold text-lg truncate">{task.title}</p>
-                    <TaskPriorityBadge priority={task.priority} />
+      {/* 列表视图 */}
+      {viewMode === "list" && (
+        <div className="flex-1 overflow-y-auto pr-2">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
+              <Clock className="h-12 w-12 mb-3 opacity-50" />
+              <p className="font-medium">暂无任务</p>
+              <p className="text-sm mt-1">任务将由 Agent 自动创建</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {filteredTasks.map((task) => (
+                <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:shadow-md transition-all">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="font-semibold text-lg truncate">{task.title}</p>
+                      <TaskPriorityBadge priority={task.priority} />
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {task.description || "无描述"}
+                    </p>
+                    {task.dependencyIds && task.dependencyIds.length > 0 && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+                        <span className="font-medium">前置任务:</span>
+                        <span className="px-1.5 py-0.5 bg-muted rounded text-[10px]">
+                          {task.dependencyIds.length} 个
+                        </span>
+                      </div>
+                    )}
                   </div>
-                  <p className="text-sm text-muted-foreground line-clamp-2">
-                    {task.description || "无描述"}
-                  </p>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-3 sm:shrink-0 w-full sm:w-auto justify-between sm:justify-end">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">分配给:</span>
-                    <span className="text-xs font-bold px-2 py-1 bg-muted rounded border border-border">
-                      {getAgentName(task.assignedTo)}
-                    </span>
+
+                  <div className="flex flex-wrap items-center gap-3 sm:shrink-0 w-full sm:w-auto justify-between sm:justify-end">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">分配给:</span>
+                      <span className="text-xs font-bold px-2 py-1 bg-muted rounded border border-border">
+                        {getAgentName(task.assignedTo)}
+                      </span>
+                    </div>
+                    <TaskStatusBadge status={task.status} />
                   </div>
-                  <TaskStatusBadge status={task.status} />
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 流程图视图 */}
+      {viewMode === "flow" && (
+        <div className="flex-1 min-h-[400px] relative">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : (
+            <TaskFlowChart
+              tasks={filteredTasks.length > 0 ? filteredTasks : tasks}
+              onTaskClick={(task) => console.log("Clicked task:", task)}
+            />
+          )}
+        </div>
+      )}
     </div>
   );
 }

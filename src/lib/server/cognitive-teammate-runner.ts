@@ -224,10 +224,29 @@ async function ensureCognitiveTeammateProcessor(
             assigneeId: teammateId,
             status: 'ASSIGNED',
           },
+          include: {
+            dependencies: {
+              include: {
+                dependsOnTask: true,
+              },
+            },
+          },
           orderBy: { createdAt: 'asc' },
         })
 
         if (nextTask) {
+          // 检查任务依赖是否完成
+          const hasUnmetDependencies = nextTask.dependencies?.some(
+            dep => dep.dependsOnTask.status !== 'COMPLETED'
+          ) ?? false
+
+          if (hasUnmetDependencies) {
+            console.log(
+              `[CognitiveTeammateRunner] ${teammateId} is idle, found ASSIGNED task: ${nextTask.title}, but waiting for dependencies to complete`
+            )
+            return
+          }
+
           console.log(
             `[CognitiveTeammateRunner] ${teammateId} is idle, found ASSIGNED task: ${nextTask.title}, auto-starting`
           )

@@ -1,9 +1,13 @@
 import path from 'path'
 import { mkdir, readFile, readdir, rm, stat, unlink, writeFile } from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import prisma from '@/lib/db'
 import { extractFileText } from './file-text-extractor'
 
+const execFileAsync = promisify(execFile)
 const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
+const VENV_DIR_NAME = '.venv'
 
 type ManagedFileRecord = {
   id: string
@@ -85,6 +89,9 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+// 工作区扫描时排除的目录名
+const WORKSPACE_SCAN_EXCLUDE_DIRS = new Set(['.venv', 'node_modules', '__pycache__', '.git'])
+
 async function scanWorkspaceFiles(
   root: string,
   relativeBase = ''
@@ -98,6 +105,7 @@ async function scanWorkspaceFiles(
     const absolutePath = path.join(dirPath, dirent.name)
 
     if (dirent.isDirectory()) {
+      if (WORKSPACE_SCAN_EXCLUDE_DIRS.has(dirent.name)) continue
       files.push(...await scanWorkspaceFiles(root, relativePath))
       continue
     }
@@ -190,6 +198,87 @@ export async function ensureSessionWorkspaceRoot(swarmSessionId: string): Promis
   const root = getSessionWorkspaceRoot(swarmSessionId)
   await mkdir(root, { recursive: true })
   return root
+}
+
+/**
+ * 获取会话工作区的 Python 虚拟环境路径
+ */
+export function getSessionVenvPath(swarmSessionId: string): string {
+  return path.join(getSessionWorkspaceRoot(swarmSessionId), VENV_DIR_NAME)
+}
+
+/**
+ * 获取虚拟环境的 bin 目录路径（用于 PATH 注入）
+ */
+export function getSessionVenvBinPath(swarmSessionId: string): string {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  return process.platform === 'win32'
+    ? path.join(venvPath, 'Scripts')
+    : path.join(venvPath, 'bin')
+}
+
+/**
+ * 创建会话级 Python 虚拟环境（如果尚不存在）
+ * 在工作区根目录下创建 .venv/ 目录
+ */
+export async function ensureSessionVenv(swarmSessionId: string): Promise<string> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  const venvBinPath = getSessionVenvBinPath(swarmSessionId)
+  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+
+  // 检查虚拟环境是否已存在
+  if (await pathExists(pythonPath)) {
+    return venvPath
+  }
+
+  // 检测系统 Python
+  const pythonCmd = await detectPython()
+  if (!pythonCmd) {
+    console.warn(`[Workspace][${swarmSessionId}] Python not found, skipping venv creation`)
+    return ''
+  }
+
+  try {
+    console.log(`[Workspace][${swarmSessionId}] Creating Python venv at ${venvPath}`)
+    await execFileAsync(pythonCmd, ['-m', 'venv', venvPath], {
+      cwd: getSessionWorkspaceRoot(swarmSessionId),
+      timeout: 30000,
+    })
+    console.log(`[Workspace][${swarmSessionId}] Python venv created successfully`)
+    return venvPath
+  } catch (error) {
+    console.warn(`[Workspace][${swarmSessionId}] Failed to create venv:`, error)
+    return ''
+  }
+}
+
+/**
+ * 检测系统中可用的 Python 命令
+ */
+async function detectPython(): Promise<string | null> {
+  const candidates = process.platform === 'win32'
+    ? ['python', 'python3', 'py']
+    : ['python3', 'python']
+
+  for (const cmd of candidates) {
+    try {
+      await execFileAsync(cmd, ['--version'], { timeout: 5000 })
+      return cmd
+    } catch {
+      // 尝试下一个
+    }
+  }
+  return null
+}
+
+/**
+ * 构建包含虚拟环境的 PATH 环境变量
+ * 将 venv/bin 插入到 PATH 最前面，确保 python/pip 优先使用虚拟环境版本
+ */
+export function buildVenvEnvPath(swarmSessionId: string): string {
+  const venvBin = getSessionVenvBinPath(swarmSessionId)
+  const currentPath = process.env.PATH || ''
+  return `${venvBin}${path.delimiter}${currentPath}`
 }
 
 export async function createWorkspaceDirectory(swarmSessionId: string, directoryPath: string): Promise<{ relativePath: string }> {
@@ -515,6 +604,7 @@ export async function listWorkspaceDirectory(
       const absPath = path.join(dirPath, dirent.name)
 
       if (dirent.isDirectory()) {
+        if (WORKSPACE_SCAN_EXCLUDE_DIRS.has(dirent.name)) continue
         entries.push({ path: relPath, name: dirent.name, type: 'directory' })
         if (recursive) {
           entries.push(...await scan(absPath, relPath))
