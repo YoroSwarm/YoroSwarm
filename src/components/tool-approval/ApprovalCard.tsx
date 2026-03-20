@@ -2,24 +2,68 @@
 
 import React, { useState, useEffect } from 'react'
 import { cn } from '@/lib/utils'
-import { Terminal, Clock, AlertTriangle, Check, X, Loader2 } from 'lucide-react'
+import { Terminal, Clock, AlertTriangle, Check, X, Loader2, Shield, ShieldAlert, ShieldCheck, ShieldX } from 'lucide-react'
 import type { ToolApproval } from '@/hooks/use-tool-approvals'
+import type { RiskLevel } from '@/types/websocket'
+
+const RISK_CONFIG: Record<RiskLevel, {
+  label: string
+  icon: React.ElementType
+  colorClass: string
+  bgClass: string
+  borderClass: string
+}> = {
+  low: {
+    label: '低风险',
+    icon: ShieldCheck,
+    colorClass: 'text-emerald-600 dark:text-emerald-400',
+    bgClass: 'bg-emerald-500/10',
+    borderClass: 'border-emerald-500/30',
+  },
+  medium: {
+    label: '中风险',
+    icon: Shield,
+    colorClass: 'text-cyan-600 dark:text-cyan-400',
+    bgClass: 'bg-cyan-500/10',
+    borderClass: 'border-cyan-500/30',
+  },
+  high: {
+    label: '高风险',
+    icon: ShieldAlert,
+    colorClass: 'text-amber-600 dark:text-amber-400',
+    bgClass: 'bg-amber-500/10',
+    borderClass: 'border-amber-500/30',
+  },
+  critical: {
+    label: '危险',
+    icon: ShieldX,
+    colorClass: 'text-red-600 dark:text-red-400',
+    bgClass: 'bg-red-500/10',
+    borderClass: 'border-red-500/30',
+  },
+}
 
 interface ApprovalCardProps {
   approval: ToolApproval
   onApprove: () => Promise<{ success: boolean; error?: string }>
   onReject: () => Promise<{ success: boolean; error?: string }>
   onExpired?: () => void
+  onAlwaysAllow?: (category: string, description: string) => Promise<unknown>
 }
 
-export function ApprovalCard({ approval, onApprove, onReject, onExpired }: ApprovalCardProps) {
+export function ApprovalCard({ approval, onApprove, onReject, onExpired, onAlwaysAllow }: ApprovalCardProps) {
   const [isProcessing, setIsProcessing] = useState<'approve' | 'reject' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [alwaysAllow, setAlwaysAllow] = useState(false)
   const [timeLeft, setTimeLeft] = useState(() => {
     const expiresAt = new Date(approval.expiresAt).getTime()
     const now = Date.now()
     return Math.max(0, Math.floor((expiresAt - now) / 1000))
   })
+
+  const riskLevel = approval.riskLevel || 'medium'
+  const riskConfig = RISK_CONFIG[riskLevel]
+  const RiskIcon = riskConfig.icon
 
   // 倒计时
   useEffect(() => {
@@ -51,6 +95,15 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired }: Appro
   const handleApprove = async () => {
     setIsProcessing('approve')
     setError(null)
+
+    // 如果勾选了 "总是允许"，先添加规则
+    if (alwaysAllow && approval.riskCategory && onAlwaysAllow) {
+      await onAlwaysAllow(
+        approval.riskCategory,
+        `自动放行: ${approval.riskReason || riskConfig.label + '命令'}`
+      )
+    }
+
     const result = await onApprove()
     if (!result.success) {
       setError(result.error || '审批失败')
@@ -93,13 +146,16 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired }: Appro
 
   const isExpired = timeLeft <= 0
   const isNearExpiry = timeLeft <= 60 && timeLeft > 0
+  const isCritical = riskLevel === 'critical'
+  const isHighRisk = riskLevel === 'high' || isCritical
 
   return (
     <div
       className={cn(
         'w-full rounded-xl border bg-card p-4 shadow-lg transition-all animate-fade-in',
         isExpired && 'opacity-50 grayscale',
-        isNearExpiry && !isExpired && 'border-amber-500/50 bg-amber-500/5'
+        isNearExpiry && !isExpired && 'border-amber-500/50 bg-amber-500/5',
+        isHighRisk && !isExpired && !isNearExpiry && riskConfig.borderClass,
       )}
     >
       {/* 头部 */}
@@ -117,15 +173,39 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired }: Appro
           </div>
         </div>
 
-        {/* 倒计时 */}
-        <div className={cn(
-          'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium',
-          isNearExpiry && !isExpired ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-muted text-muted-foreground'
-        )}>
-          <Clock className="h-3.5 w-3.5" />
-          {isExpired ? '已过期' : formatTime(timeLeft)}
+        <div className="flex items-center gap-2">
+          {/* 风险等级 Badge */}
+          <div className={cn(
+            'flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border',
+            riskConfig.bgClass,
+            riskConfig.colorClass,
+            riskConfig.borderClass,
+          )}>
+            <RiskIcon className="h-3.5 w-3.5" />
+            {riskConfig.label}
+          </div>
+
+          {/* 倒计时 */}
+          <div className={cn(
+            'flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium',
+            isNearExpiry && !isExpired ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400' : 'bg-muted text-muted-foreground'
+          )}>
+            <Clock className="h-3.5 w-3.5" />
+            {isExpired ? '已过期' : formatTime(timeLeft)}
+          </div>
         </div>
       </div>
+
+      {/* 风险原因 */}
+      {approval.riskReason && (
+        <div className={cn(
+          'mb-2 px-2.5 py-1.5 rounded-lg text-xs',
+          riskConfig.bgClass,
+          riskConfig.colorClass,
+        )}>
+          {approval.riskReason}
+        </div>
+      )}
 
       {/* 描述 */}
       <div className="mb-3">
@@ -144,11 +224,29 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired }: Appro
 
       {/* 命令预览 */}
       {approval.type === 'SHELL_EXEC' && (
-        <div className="mb-3 rounded-lg bg-muted/50 p-2.5 max-h-32 overflow-y-auto">
+        <div className={cn(
+          'mb-3 rounded-lg p-2.5 max-h-32 overflow-y-auto',
+          isHighRisk ? 'bg-muted/70 border border-dashed ' + riskConfig.borderClass : 'bg-muted/50'
+        )}>
           <code className="text-xs font-mono break-all block">
             <span className="text-muted-foreground">$</span> {getCommandDisplay()}
           </code>
         </div>
+      )}
+
+      {/* "本会话总是允许此类命令" 复选框 — critical 级别不可用 */}
+      {approval.riskCategory && !isCritical && onAlwaysAllow && (
+        <label className="flex items-center gap-2 mb-3 cursor-pointer select-none group">
+          <input
+            type="checkbox"
+            checked={alwaysAllow}
+            onChange={(e) => setAlwaysAllow(e.target.checked)}
+            className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary/20"
+          />
+          <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">
+            本会话总是允许此类命令
+          </span>
+        </label>
       )}
 
       {/* 错误提示 */}
@@ -191,7 +289,7 @@ export function ApprovalCard({ approval, onApprove, onReject, onExpired }: Appro
           ) : (
             <Check className="h-4 w-4" />
           )}
-          批准
+          批准{alwaysAllow ? '（并记住）' : ''}
         </button>
       </div>
     </div>

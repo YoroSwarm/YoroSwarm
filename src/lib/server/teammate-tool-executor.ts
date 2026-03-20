@@ -21,7 +21,7 @@ import {
   createInternalThread,
 } from './internal-bus'
 import {
-  createToolApproval,
+  smartApproval,
   waitForApproval,
   executeApprovedCommand,
 } from './tool-approval'
@@ -580,8 +580,8 @@ export function buildTeammateToolExecutor(
         const workingDir = input.working_dir as string | undefined
         const timeout = input.timeout as number | undefined
 
-        // 创建审批请求（timeout 存储在 inputParams 中，审批通过后再使用）
-        const approvalResult = await createToolApproval({
+        // 智能审批（自动放行低风险命令）
+        const approvalResult = await smartApproval({
           swarmSessionId,
           agentId: teammateId,
           agentName: teammate.name,
@@ -596,6 +596,41 @@ export function buildTeammateToolExecutor(
           return JSON.stringify({
             success: false,
             error: approvalResult.error || 'Failed to create approval request',
+          })
+        }
+
+        // 自动放行：跳过等待，直接执行
+        if (approvalResult.autoDecision && approvalResult.status === 'AUTO_APPROVED') {
+          try {
+            const result = await executeApprovedCommand(
+              approvalResult.approvalId,
+              swarmSessionId,
+              teammateId,
+              teammate.name
+            )
+            return JSON.stringify({
+              success: true,
+              approval_id: approvalResult.approvalId,
+              auto_approved: true,
+              risk_level: approvalResult.riskLevel,
+              output: result.slice(0, 10000),
+            })
+          } catch (execError) {
+            return JSON.stringify({
+              success: false,
+              approval_id: approvalResult.approvalId,
+              error: execError instanceof Error ? execError.message : 'Command execution failed',
+            })
+          }
+        }
+
+        // 自动拒绝
+        if (approvalResult.autoDecision && approvalResult.status === 'AUTO_REJECTED') {
+          return JSON.stringify({
+            success: false,
+            auto_rejected: true,
+            risk_level: approvalResult.riskLevel,
+            error: approvalResult.error,
           })
         }
 

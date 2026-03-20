@@ -29,7 +29,7 @@ import {
   saveWorkspaceFile,
 } from './session-workspace'
 import {
-  createToolApproval,
+  smartApproval,
   waitForApproval,
   executeApprovedCommand,
 } from './tool-approval'
@@ -515,7 +515,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           return JSON.stringify({ success: false, error: 'Lead agent not found' })
         }
 
-        const approvalResult = await createToolApproval({
+        const approvalResult = await smartApproval({
           swarmSessionId,
           agentId: leadAgentId,
           agentName: leadAgent.name,
@@ -530,6 +530,41 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           return JSON.stringify({
             success: false,
             error: approvalResult.error || 'Failed to create approval request',
+          })
+        }
+
+        // 自动放行：跳过等待，直接执行
+        if (approvalResult.autoDecision && approvalResult.status === 'AUTO_APPROVED') {
+          try {
+            const result = await executeApprovedCommand(
+              approvalResult.approvalId,
+              swarmSessionId,
+              leadAgentId,
+              leadAgent.name
+            )
+            return JSON.stringify({
+              success: true,
+              approval_id: approvalResult.approvalId,
+              auto_approved: true,
+              risk_level: approvalResult.riskLevel,
+              output: result.slice(0, 10000),
+            })
+          } catch (execError) {
+            return JSON.stringify({
+              success: false,
+              approval_id: approvalResult.approvalId,
+              error: execError instanceof Error ? execError.message : 'Command execution failed',
+            })
+          }
+        }
+
+        // 自动拒绝
+        if (approvalResult.autoDecision && approvalResult.status === 'AUTO_REJECTED') {
+          return JSON.stringify({
+            success: false,
+            auto_rejected: true,
+            risk_level: approvalResult.riskLevel,
+            error: approvalResult.error,
           })
         }
 

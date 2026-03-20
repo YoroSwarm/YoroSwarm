@@ -7,10 +7,11 @@ import type { ToolApproval } from '@/hooks/use-tool-approvals'
 interface ApprovalCardsProps {
   approvals: ToolApproval[]
   onDecision: (id: string, decision: 'approve' | 'reject') => Promise<{ success: boolean; error?: string }>
+  onAlwaysAllow?: (category: string, description: string) => Promise<unknown>
   className?: string
 }
 
-export function ApprovalCards({ approvals, onDecision, className }: ApprovalCardsProps) {
+export function ApprovalCards({ approvals, onDecision, onAlwaysAllow, className }: ApprovalCardsProps) {
   if (approvals.length === 0) return null
 
   return (
@@ -22,6 +23,7 @@ export function ApprovalCards({ approvals, onDecision, className }: ApprovalCard
           onApprove={() => onDecision(approval.id, 'approve')}
           onReject={() => onDecision(approval.id, 'reject')}
           onExpired={() => onDecision(approval.id, 'reject')}
+          onAlwaysAllow={onAlwaysAllow}
         />
       ))}
     </div>

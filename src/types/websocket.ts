@@ -160,6 +160,8 @@ export interface SessionStatusUpdate {
 export type ToolApprovalType = 'SHELL_EXEC' | 'FILE_WRITE' | 'NETWORK_REQUEST';
 export type ToolApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED';
 
+export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
+
 export interface ToolApprovalRequestPayload {
   approval_id: string;
   swarm_session_id: string;
@@ -172,6 +174,9 @@ export interface ToolApprovalRequestPayload {
   working_dir?: string;
   created_at: string;
   expires_at: string;
+  risk_level?: RiskLevel;
+  risk_reason?: string;
+  risk_category?: string;
 }
 
 export interface ToolApprovalUpdatePayload {

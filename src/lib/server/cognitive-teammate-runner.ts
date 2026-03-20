@@ -565,6 +565,10 @@ export async function runCognitiveTeammateLoop(
   // 发布状态更新
   publishStatusUpdate(swarmSessionId, teammate, task, 'busy')
 
+  // 等待短暂的准备窗口，让 Lead 有时间完成后续操作（如分配 Skills）
+  // 因为 Lead 的工具调用是顺序执行的，assign_skill 通常紧跟 assign_task
+  await new Promise(resolve => setTimeout(resolve, 2000))
+
   // 投递初始任务消息到收件箱
   await deliverMessage(swarmSessionId, teammateId, {
     source: 'system',

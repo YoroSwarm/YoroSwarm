@@ -8,8 +8,10 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { SessionFiles } from '@/components/session/SessionFiles';
 import { SessionTasks } from '@/components/session/SessionTasks';
+import { SessionSettings } from '@/components/session/SessionSettings';
 import { ApprovalCards } from '@/components/tool-approval/ApprovalCards';
 import { useToolApprovals } from '@/hooks/use-tool-approvals';
+import { useApprovalRules } from '@/hooks/use-approval-rules';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
@@ -17,7 +19,7 @@ import { useTeamStats } from '@/hooks/use-team-stats';
 import { useSidebar } from '@/stores';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
-import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings } from 'lucide-react';
 
 const RIGHT_PANEL_STORAGE_KEY = 'right_panel_open';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -27,7 +29,7 @@ interface ChatLayoutProps {
   initialSessionId?: string | null;
 }
 
-type TabType = 'chat' | 'files' | 'tasks';
+type TabType = 'chat' | 'files' | 'tasks' | 'settings';
 
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(2)}M`;
@@ -112,6 +114,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
   // 工具审批 hook - 需要在 resolvedSessionId 之后调用
   const { approvals: toolApprovals, handleDecision: handleToolApprovalDecision, handleWSMessage: handleApprovalWSMessage } = useToolApprovals(resolvedSessionId);
+  const { addInlineAutoApprove } = useApprovalRules(resolvedSessionId);
 
   const currentSession = useMemo(
     () => sessions.find((session) => session.id === resolvedSessionId) || null,
@@ -337,7 +340,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                   { id: 'chat', label: '对话', icon: MessageSquare },
                   { id: 'files', label: '文件', icon: FolderOpen },
                   { id: 'tasks', label: '任务', icon: CheckSquare },
-                ].map((tab) => {
+                  { id: 'settings', label: '设置', icon: Settings },].map((tab) => {
                   const isActive = activeTab === tab.id;
                   const Icon = tab.icon;
                   return (
@@ -404,6 +407,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                 { id: 'chat', label: '对话', icon: MessageSquare },
                 { id: 'files', label: '文件', icon: FolderOpen },
                 { id: 'tasks', label: '任务', icon: CheckSquare },
+                { id: 'settings', label: '设置', icon: Settings },
               ].map((tab) => {
                 const isActive = activeTab === tab.id;
                 const Icon = tab.icon;
@@ -450,6 +454,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         <ApprovalCards
                             approvals={toolApprovals}
                             onDecision={(id, decision) => handleToolApprovalDecision(id, decision)}
+                            onAlwaysAllow={addInlineAutoApprove}
                             className="mb-3"
                         />
 
@@ -473,6 +478,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               )}
               {activeTab === 'files' && <SessionFiles sessionId={resolvedSessionId} refreshToken={fileRefreshTick} />}
               {activeTab === 'tasks' && <SessionTasks sessionId={resolvedSessionId} />}
+              {activeTab === 'settings' && <SessionSettings sessionId={resolvedSessionId} />}
             </>
           ) : (
             <div className="flex h-full flex-col items-center justify-center p-8 text-center">

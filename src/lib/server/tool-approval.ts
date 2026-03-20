@@ -1,6 +1,8 @@
 import prisma from '@/lib/db'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import type { ToolApprovalType, ToolApprovalRequestPayload, ToolApprovalUpdatePayload } from '@/types/websocket'
+import { evaluateApproval } from './session-approval-rules'
+import { assessCommandRisk, type RiskLevel } from './command-risk'
 
 export interface CreateToolApprovalParams {
   swarmSessionId: string
@@ -16,12 +18,110 @@ export interface CreateToolApprovalParams {
 export interface ToolApprovalResult {
   success: boolean
   approvalId?: string
-  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
+  status?: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED' | 'AUTO_APPROVED' | 'AUTO_REJECTED'
   result?: string
   error?: string
+  riskLevel?: RiskLevel
+  riskReason?: string
+  riskCategory?: string
+  autoDecision?: boolean
 }
 
 const APPROVAL_EXPIRY_MS = 5 * 60 * 1000 // 5分钟过期
+
+/**
+ * 智能审批入口 — 在创建审批请求之前评估是否需要人工审批
+ * 返回 autoDecision=true 表示已自动处理（放行或拒绝），无需等待用户
+ */
+export async function smartApproval(params: CreateToolApprovalParams): Promise<ToolApprovalResult> {
+  const { swarmSessionId, type, inputParams } = params
+
+  // 仅对 SHELL_EXEC 类型启用智能审批
+  if (type !== 'SHELL_EXEC') {
+    return createToolApproval(params)
+  }
+
+  const command = (inputParams.command as string) || ''
+  const decision = evaluateApproval(swarmSessionId, command)
+
+  if (decision.action === 'auto_approve') {
+    // 自动放行：创建一条已批准的记录用于审计
+    const approval = await prisma.toolApproval.create({
+      data: {
+        swarmSessionId,
+        agentId: params.agentId,
+        type,
+        toolName: params.toolName,
+        inputParams: JSON.stringify(inputParams),
+        description: params.description,
+        workingDir: params.workingDir,
+        status: 'APPROVED',
+        expiresAt: new Date(Date.now() + APPROVAL_EXPIRY_MS),
+      },
+    })
+
+    console.log(`[SmartApproval] Auto-approved (${decision.riskLevel}): ${command.slice(0, 80)}`)
+
+    // 发送自动放行通知
+    publishRealtimeMessage(
+      {
+        type: 'tool_approval_update',
+        payload: {
+          approval_id: approval.id,
+          swarm_session_id: swarmSessionId,
+          agent_id: params.agentId,
+          status: 'APPROVED',
+          timestamp: new Date().toISOString(),
+        } satisfies ToolApprovalUpdatePayload,
+      },
+      { sessionId: swarmSessionId }
+    )
+
+    return {
+      success: true,
+      approvalId: approval.id,
+      status: 'AUTO_APPROVED',
+      riskLevel: decision.riskLevel,
+      riskReason: decision.riskReason,
+      riskCategory: decision.riskCategory,
+      autoDecision: true,
+    }
+  }
+
+  if (decision.action === 'always_reject') {
+    console.log(`[SmartApproval] Auto-rejected (rule: ${decision.matchedRule?.description}): ${command.slice(0, 80)}`)
+    return {
+      success: false,
+      status: 'AUTO_REJECTED',
+      error: `命令被会话规则自动拒绝: ${decision.matchedRule?.description || '未知规则'}`,
+      riskLevel: decision.riskLevel,
+      riskReason: decision.riskReason,
+      riskCategory: decision.riskCategory,
+      autoDecision: true,
+    }
+  }
+
+  // 需要人工审批 — 走原有流程，但附带风险信息
+  return createToolApprovalWithRisk(params, decision.riskLevel, decision.riskReason, decision.riskCategory)
+}
+
+/**
+ * 创建带风险信息的审批请求
+ */
+async function createToolApprovalWithRisk(
+  params: CreateToolApprovalParams,
+  riskLevel: RiskLevel,
+  riskReason: string,
+  riskCategory: string
+): Promise<ToolApprovalResult> {
+  const result = await createToolApproval(params)
+  return {
+    ...result,
+    riskLevel,
+    riskReason,
+    riskCategory,
+  }
+}
 
 /**
  * 创建工具审批请求
@@ -31,6 +131,17 @@ export async function createToolApproval(params: CreateToolApprovalParams): Prom
 
   // 计算过期时间（审批请求过期时间，与命令执行超时时间无关）
   const expiresAt = new Date(Date.now() + APPROVAL_EXPIRY_MS)
+
+  // 计算风险等级（用于前端展示）
+  let riskLevel: RiskLevel = 'medium'
+  let riskReason = ''
+  let riskCategory = ''
+  if (type === 'SHELL_EXEC' && typeof inputParams.command === 'string') {
+    const risk = assessCommandRisk(inputParams.command)
+    riskLevel = risk.level
+    riskReason = risk.reason
+    riskCategory = risk.category
+  }
 
   try {
     const approval = await prisma.toolApproval.create({
@@ -59,6 +170,9 @@ export async function createToolApproval(params: CreateToolApprovalParams): Prom
       working_dir: workingDir,
       created_at: approval.createdAt.toISOString(),
       expires_at: expiresAt.toISOString(),
+      risk_level: riskLevel,
+      risk_reason: riskReason,
+      risk_category: riskCategory,
     }
 
     console.log('[ToolApproval] Publishing tool_approval_request for session:', swarmSessionId)
@@ -75,6 +189,9 @@ export async function createToolApproval(params: CreateToolApprovalParams): Prom
       success: true,
       approvalId: approval.id,
       status: 'PENDING',
+      riskLevel,
+      riskReason,
+      riskCategory,
     }
   } catch (error) {
     console.error('[ToolApproval] Failed to create approval request:', error)

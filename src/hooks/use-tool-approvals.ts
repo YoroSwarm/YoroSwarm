@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { ToolApprovalRequestPayload, ToolApprovalUpdatePayload } from '@/types/websocket'
+import type { ToolApprovalRequestPayload, ToolApprovalUpdatePayload, RiskLevel } from '@/types/websocket'
 
 export interface ToolApproval {
   id: string
@@ -13,6 +13,9 @@ export interface ToolApproval {
   status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED' | 'EXPIRED'
   result?: string
   error?: string
+  riskLevel?: RiskLevel
+  riskReason?: string
+  riskCategory?: string
 }
 
 export function useToolApprovals(sessionId: string | null) {
@@ -96,6 +99,9 @@ export function useToolApprovals(sessionId: string | null) {
               createdAt: payload.created_at,
               expiresAt: payload.expires_at,
               status: 'PENDING',
+              riskLevel: payload.risk_level,
+              riskReason: payload.risk_reason,
+              riskCategory: payload.risk_category,
             },
             ...prev,
           ]
