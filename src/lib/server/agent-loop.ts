@@ -81,6 +81,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
   const toolCalls: { toolName: string; status: 'calling' | 'completed' | 'error'; inputSummary?: string; resultSummary?: string; timestamp: string }[] = []
   const singleUseToolsPerRun = new Set(['reply_to_user', 'get_team_roster'])
   const usedSingleUseTools = new Set<string>()
+  let maxTokensContinuations = 0
+  const MAX_CONTINUATIONS = 5 // prevent infinite continuation loops
 
   // Broadcast agent status
   publishRealtimeMessage(
@@ -533,6 +535,48 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       // Add tool results as next user message
       messages.push({ role: 'user', content: toolResults })
+    } else if (response.stopReason === 'max_tokens' && maxTokensContinuations < MAX_CONTINUATIONS) {
+      // Response was truncated due to max_tokens limit — continue the loop
+      maxTokensContinuations++
+      console.warn(`[AgentLoop][${agentName}] Response truncated (max_tokens), continuation ${maxTokensContinuations}/${MAX_CONTINUATIONS}`)
+
+      // Save partial response as assistant message
+      if (textContent) {
+        messages.push({ role: 'assistant', content: textContent })
+
+        const entry = await appendAgentContextEntry({
+          swarmSessionId,
+          agentId,
+          sourceType: 'llm',
+          entryType: 'assistant_response',
+          content: textContent,
+          metadata: { truncated: true, continuation: maxTokensContinuations },
+        })
+
+        publishRealtimeMessage(
+          {
+            type: 'agent_thinking',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              status: 'response',
+              content: textContent,
+              entry_id: entry?.id,
+              timestamp: new Date().toISOString(),
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
+      }
+
+      // Add continuation prompt to encourage LLM to keep going
+      messages.push({
+        role: 'user',
+        content: '你的回复因长度限制被截断了。请从截断处继续完成。如果你正在生成文件内容，请使用工具（如 write_file）来写入完整内容，而不是直接在回复中输出长文本。',
+      })
+
+      // Continue the loop — next iteration will call LLM again
     } else {
       // LLM returned text without tool calls — loop ends
       if (textContent) {

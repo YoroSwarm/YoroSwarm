@@ -8,7 +8,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, FileText, Loader2 } from 'lucide-react';
+import { Download, FileText, Loader2, Code, Eye, Maximize2, Minimize2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -48,6 +48,11 @@ function getLanguageFromFilename(filename: string): string | null {
 function isMarkdownFile(fileName: string): boolean {
   const ext = fileName.split('.').pop()?.toLowerCase() || '';
   return ext === 'md' || ext === 'mdx';
+}
+
+function isHtmlFile(fileName: string): boolean {
+  const ext = fileName.split('.').pop()?.toLowerCase() || '';
+  return ext === 'html' || ext === 'htm';
 }
 
 function isPreviewableText(mimeType?: string, fileName?: string): boolean {
@@ -91,6 +96,10 @@ export function FilePreviewDialog({
   const [textContent, setTextContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [htmlViewSource, setHtmlViewSource] = useState(false);
+  const [isMaximized, setIsMaximized] = useState(false);
+
+  const isHtml = isHtmlFile(fileName);
 
   const isTextFile = isPreviewableText(mimeType, fileName);
   const isImageFile = isImage(mimeType);
@@ -136,6 +145,8 @@ export function FilePreviewDialog({
     if (!open) {
       setTextContent(null);
       setError(null);
+      setHtmlViewSource(false);
+      setIsMaximized(false);
     }
   }, [open, isTextFile, fetchTextContent]);
 
@@ -209,6 +220,53 @@ export function FilePreviewDialog({
         );
       }
       if (textContent !== null) {
+        // HTML 文件：默认渲染，可切换查看源码
+        if (isHtmlFile(fileName)) {
+          if (htmlViewSource) {
+            return (
+              <div className="relative h-full overflow-auto rounded border border-border text-sm">
+                <button
+                  onClick={() => setHtmlViewSource(false)}
+                  className="sticky top-2 right-2 float-right z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-background/80 backdrop-blur border border-border text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                  title="切换到渲染视图"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  渲染
+                </button>
+                <SyntaxHighlighter
+                  language="html"
+                  style={vscDarkPlus}
+                  showLineNumbers
+                  customStyle={{
+                    margin: 0,
+                    borderRadius: '0.375rem',
+                    fontSize: '0.8125rem',
+                  }}
+                >
+                  {textContent}
+                </SyntaxHighlighter>
+              </div>
+            );
+          }
+          return (
+            <div className="relative h-full rounded border border-border">
+              <button
+                onClick={() => setHtmlViewSource(true)}
+                className="absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-background/80 backdrop-blur border border-border text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+                title="查看源码"
+              >
+                <Code className="h-3.5 w-3.5" />
+                源码
+              </button>
+              <iframe
+                srcDoc={textContent}
+                className="w-full h-full rounded bg-white"
+                title={fileName}
+                sandbox="allow-scripts allow-same-origin"
+              />
+            </div>
+          );
+        }
         // Markdown 文件渲染为 HTML
         if (isMarkdownFile(fileName)) {
           return (
@@ -217,15 +275,16 @@ export function FilePreviewDialog({
                 remarkPlugins={[remarkGfm]}
                 components={{
                   // 代码块使用语法高亮
-                  pre: ({ node, children, ...props }) => (
+                  pre: ({ children, ...props }) => (
                     <pre className="bg-muted p-4 rounded-lg overflow-x-auto" {...props}>
                       {children}
                     </pre>
                   ),
-                  code: ({ node, inline, className, children, ...props }) => {
+                  code: ({ className, children, ...props }) => {
                     const match = /language-(\w+)/.exec(className || '');
                     const lang = match ? match[1] : '';
-                    if (!inline && lang) {
+                    const isInline = !match;
+                    if (!isInline && lang) {
                       return (
                         <SyntaxHighlighter
                           language={lang}
@@ -304,26 +363,37 @@ export function FilePreviewDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className={cn(
-          "sm:max-w-3xl max-h-[90vh] flex flex-col",
-          (isPdfFile || isVideoFile) && "sm:max-w-4xl"
+          "flex flex-col transition-all duration-200",
+          isMaximized
+            ? "max-w-[95vw]! w-[95vw]! h-[90vh]! max-h-[90vh]!"
+            : cn(
+                "sm:max-w-3xl max-h-[90vh]",
+                (isPdfFile || isVideoFile) && "sm:max-w-4xl",
+                isHtml && "sm:max-w-5xl h-[85vh]"
+              )
         )}
       >
-        {/* Download button - positioned at top-right, left of close button */}
-        <a
-          href={downloadUrl}
-          download={fileName}
-          className="absolute top-2 right-10 z-10"
-          onClick={(e) => e.stopPropagation()}
-        >
+        {/* Toolbar buttons - left of close button */}
+        <div className="absolute top-2 right-10 z-10 flex items-center gap-1">
+          <a
+            href={downloadUrl}
+            download={fileName}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Button variant="ghost" size="icon" className="h-6 w-6" title="下载文件">
+              <Download className="h-4 w-4" />
+            </Button>
+          </a>
           <Button
             variant="ghost"
             size="icon"
             className="h-6 w-6"
-            title="下载文件"
+            title={isMaximized ? '恢复大小' : '最大化'}
+            onClick={() => setIsMaximized(v => !v)}
           >
-            <Download className="h-4 w-4" />
+            {isMaximized ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
           </Button>
-        </a>
+        </div>
         <DialogHeader className="flex flex-row items-center gap-2 pr-20">
           <DialogTitle className="truncate text-sm font-medium">{fileName}</DialogTitle>
         </DialogHeader>
