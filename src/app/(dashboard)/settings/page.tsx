@@ -30,6 +30,7 @@ import { LlmApiConfigList } from "@/components/settings/LlmApiConfigList";
 import { SkillsManager } from "@/components/settings/SkillsManager";
 import { EnvVarsManager } from "@/components/settings/EnvVarsManager";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
+import { toast } from "sonner";
 
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
@@ -111,8 +112,14 @@ export default function SettingsPage() {
   const handleLeadAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 2 * 1024 * 1024) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error('图片大小不能超过 2MB');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('avatar', file);
@@ -122,9 +129,13 @@ export default function SettingsPage() {
       const json = await res.json();
       if (json.success) {
         setLeadAvatarUrl(json.data.leadAvatarUrl);
+        toast.success('头像上传成功');
+      } else {
+        toast.error(json.error || '上传失败，请重试');
       }
     } catch (error) {
       console.error('Failed to upload lead avatar:', error);
+      toast.error('上传失败，请检查网络连接');
     }
     // Reset input
     if (leadAvatarInputRef.current) leadAvatarInputRef.current.value = '';
@@ -133,8 +144,14 @@ export default function SettingsPage() {
   const handleBackgroundImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.type.startsWith('image/')) return;
-    if (file.size > 5 * 1024 * 1024) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('请选择图片文件');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('图片大小不能超过 5MB');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('image', file);
@@ -144,9 +161,13 @@ export default function SettingsPage() {
       const json = await res.json();
       if (json.success) {
         setBackgroundImage(json.data.backgroundImage);
+        toast.success('背景图片上传成功');
+      } else {
+        toast.error(json.error || '上传失败，请重试');
       }
     } catch (error) {
       console.error('Failed to upload background image:', error);
+      toast.error('上传失败，请检查网络连接');
     }
 
     if (backgroundImageInputRef.current) backgroundImageInputRef.current.value = '';
@@ -158,9 +179,13 @@ export default function SettingsPage() {
       const json = await res.json();
       if (json.success) {
         setBackgroundImage(null);
+        toast.success('背景图片已移除');
+      } else {
+        toast.error(json.error || '移除失败，请重试');
       }
     } catch (error) {
       console.error('Failed to remove background image:', error);
+      toast.error('移除失败，请检查网络连接');
     }
   };
 
