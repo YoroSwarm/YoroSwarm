@@ -69,6 +69,11 @@ export function Sidebar() {
     resumeSession,
   } = useSessions();
 
+  // 处理开关切换
+  const handleToggleArchived = (checked: boolean) => {
+    setShowArchivedUserPreference(checked);
+  };
+
   // 分离已归档和未归档会话
   const { activeSessions, archivedSessions } = useMemo(() => {
     const active: typeof sessions = [];
@@ -83,15 +88,8 @@ export function Sidebar() {
     return { activeSessions: active, archivedSessions: archived };
   }, [sessions]);
 
-  // 派生 showArchived 状态：优先使用当前会话的状态，否则使用用户偏好
-  const showArchived = useMemo(() => {
-    if (!currentSessionId) return showArchivedUserPreference;
-    const currentSession = sessions.find((s) => s.id === currentSessionId);
-    if (currentSession) {
-      return currentSession.status === 'archived';
-    }
-    return showArchivedUserPreference;
-  }, [currentSessionId, sessions, showArchivedUserPreference]);
+  // 显示归档会话列表
+  const showArchived = showArchivedUserPreference;
 
   // 根据开关状态决定显示的会话
   const displayedSessions = showArchived ? archivedSessions : activeSessions;
@@ -221,13 +219,13 @@ export function Sidebar() {
             <Switch
               size="sm"
               checked={showArchived}
-              onCheckedChange={setShowArchivedUserPreference}
+              onCheckedChange={handleToggleArchived}
             />
           </div>
         </div>
 
         {/* 4. Chat List */}
-        <ScrollArea className="flex-1 [&>[data-slot=scroll-area-viewport]>div]:block!">
+        <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]>div]:block!">
           <div
             key={showArchived ? 'archived' : 'active'}
             className="space-y-1 p-2 animate-in fade-in slide-in-from-left-2 duration-300"
