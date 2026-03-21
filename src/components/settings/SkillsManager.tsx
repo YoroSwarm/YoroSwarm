@@ -7,7 +7,6 @@ import { Separator } from "@/components/ui/separator";
 import {
   Download,
   Trash2,
-  ChevronDown,
   ChevronRight,
   FileCode,
   Package,
@@ -39,6 +38,7 @@ export function SkillsManager() {
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null);
   const [skillDetail, setSkillDetail] = useState<SkillDetail | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [expandedInstructions, setExpandedInstructions] = useState<Set<string>>(new Set());
 
   const fetchSkills = useCallback(async () => {
     try {
@@ -131,10 +131,12 @@ export function SkillsManager() {
     if (expandedSkill === skillName) {
       setExpandedSkill(null);
       setSkillDetail(null);
+      setExpandedInstructions(new Set());
       return;
     }
 
     setExpandedSkill(skillName);
+    setExpandedInstructions(new Set());
     try {
       const res = await fetch(`/api/skills/${skillName}`);
       const data = await res.json();
@@ -177,11 +179,11 @@ export function SkillsManager() {
                       onClick={() => handleExpand(skill.name)}
                       className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                     >
-                      {expandedSkill === skill.name ? (
-                        <ChevronDown className="h-4 w-4" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4" />
-                      )}
+                      <ChevronRight
+                        className={`h-4 w-4 transition-transform duration-300 ease-in-out ${
+                          expandedSkill === skill.name ? 'rotate-90' : ''
+                        }`}
+                      />
                     </button>
                     <Package className="h-4 w-4 text-primary shrink-0" />
                     <div className="min-w-0 overflow-hidden">
@@ -213,37 +215,73 @@ export function SkillsManager() {
                 </div>
 
                 {/* 展开详情 */}
-                {expandedSkill === skill.name && skillDetail && (
-                  <div className="border-t px-3 py-3 bg-muted/30 overflow-hidden">
-                    {skillDetail.license && (
-                      <p className="text-xs text-muted-foreground mb-2">
-                        许可证: {skillDetail.license}
-                      </p>
-                    )}
-                    {skillDetail.scriptFiles.length > 0 && (
-                      <div className="mb-2">
-                        <p className="text-xs font-medium mb-1">脚本文件:</p>
-                        {skillDetail.scriptFiles.map((f) => (
-                          <div
-                            key={f}
-                            className="flex items-center gap-1.5 text-xs text-muted-foreground overflow-hidden"
+                <div
+                  className={`grid transition-all duration-300 ease-in-out ${
+                    expandedSkill === skill.name && skillDetail
+                      ? 'grid-rows-[1fr] opacity-100'
+                      : 'grid-rows-[0fr] opacity-0'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="border-t px-3 py-3 bg-muted/30">
+                      {skillDetail?.license && (
+                        <p className="text-xs text-muted-foreground mb-2">
+                          许可证: {skillDetail.license}
+                        </p>
+                      )}
+                      {skillDetail?.scriptFiles && skillDetail.scriptFiles.length > 0 && (
+                        <div className="mb-2">
+                          <p className="text-xs font-medium mb-1">脚本文件:</p>
+                          {skillDetail.scriptFiles.map((f) => (
+                            <div
+                              key={f}
+                              className="flex items-center gap-1.5 text-xs text-muted-foreground overflow-hidden"
+                            >
+                              <FileCode className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {skillDetail && (
+                        <div className="mt-2">
+                          <button
+                            onClick={() => {
+                              const newSet = new Set(expandedInstructions);
+                              if (newSet.has(skill.name)) {
+                                newSet.delete(skill.name);
+                              } else {
+                                newSet.add(skill.name);
+                              }
+                              setExpandedInstructions(newSet);
+                            }}
+                            className="flex items-center gap-1 text-xs font-medium cursor-pointer hover:text-primary transition-colors"
                           >
-                            <FileCode className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{f}</span>
+                            <ChevronRight
+                              className={`h-3 w-3 transition-transform duration-200 ${
+                                expandedInstructions.has(skill.name) ? 'rotate-90' : ''
+                              }`}
+                            />
+                            完整指令
+                          </button>
+                          <div
+                            className={`grid transition-all duration-200 ease-in-out ${
+                              expandedInstructions.has(skill.name)
+                                ? 'grid-rows-[1fr] mt-2'
+                                : 'grid-rows-[0fr]'
+                            }`}
+                          >
+                            <div className="overflow-hidden">
+                              <pre className="text-xs whitespace-pre-wrap wrap-break-word bg-muted p-2 rounded max-h-60 overflow-y-auto overflow-x-hidden">
+                                {skillDetail.instructions}
+                              </pre>
+                            </div>
                           </div>
-                        ))}
-                      </div>
-                    )}
-                    <details className="mt-2">
-                      <summary className="text-xs font-medium cursor-pointer">
-                        完整指令
-                      </summary>
-                      <pre className="mt-2 text-xs whitespace-pre-wrap break-words bg-muted p-2 rounded max-h-60 overflow-y-auto overflow-x-hidden">
-                        {skillDetail.instructions}
-                      </pre>
-                    </details>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                )}
+                </div>
               </div>
             ))}
           </div>
