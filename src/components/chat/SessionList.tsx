@@ -15,6 +15,8 @@ import {
   AlertCircle,
   Pause,
   Play,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -41,6 +43,8 @@ interface SessionListProps {
   onArchiveSession: (sessionId: string) => Promise<void> | void;
   onPauseSession?: (sessionId: string) => Promise<void> | void;
   onResumeSession?: (sessionId: string) => Promise<void> | void;
+  onPinSession?: (sessionId: string) => Promise<void> | void;
+  onUnpinSession?: (sessionId: string) => Promise<void> | void;
   onCloseMobile?: () => void;
 }
 
@@ -55,6 +59,8 @@ export function SessionList({
   onArchiveSession,
   onPauseSession,
   onResumeSession,
+  onPinSession,
+  onUnpinSession,
   onCloseMobile,
 }: SessionListProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -97,6 +103,22 @@ export function SessionList({
       await onResumeSession?.(sessionId);
     } catch (err) {
       console.error('恢复会话失败:', err);
+    }
+  };
+
+  const handlePinSession = async (sessionId: string) => {
+    try {
+      await onPinSession?.(sessionId);
+    } catch (err) {
+      console.error('置顶会话失败:', err);
+    }
+  };
+
+  const handleUnpinSession = async (sessionId: string) => {
+    try {
+      await onUnpinSession?.(sessionId);
+    } catch (err) {
+      console.error('取消置顶失败:', err);
     }
   };
 
@@ -195,6 +217,9 @@ export function SessionList({
                         session.unreadCount > 0 && 'font-semibold'
                       )}
                     >
+                      {session.isPinned && (
+                        <Pin className="inline h-3 w-3 mr-1 text-primary shrink-0" />
+                      )}
                       {session.title}
                     </h3>
                     {session.status === 'paused' && (
@@ -232,6 +257,17 @@ export function SessionList({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
+                    {session.isPinned ? (
+                      <DropdownMenuItem onClick={() => handleUnpinSession(session.id)}>
+                        <PinOff className="h-4 w-4" />
+                        取消置顶
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => handlePinSession(session.id)}>
+                        <Pin className="h-4 w-4" />
+                        置顶
+                      </DropdownMenuItem>
+                    )}
                     {session.status === 'paused' ? (
                       <DropdownMenuItem onClick={() => handleResumeSession(session.id)}>
                         <Play className="h-4 w-4" />

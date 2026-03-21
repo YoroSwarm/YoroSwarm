@@ -13,6 +13,8 @@ import {
   Pause,
   Play,
   AlertCircle,
+  Pin,
+  PinOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore, useLlmConfigsStore } from '@/stores';
@@ -67,6 +69,8 @@ export function Sidebar() {
     unarchiveSession,
     pauseSession,
     resumeSession,
+    pinSession,
+    unpinSession,
   } = useSessions();
 
   // 处理开关切换
@@ -155,6 +159,16 @@ export function Sidebar() {
   const handleResumeSession = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     await resumeSession(sessionId);
+  };
+
+  const handlePinSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    await pinSession(sessionId);
+  };
+
+  const handleUnpinSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    await unpinSession(sessionId);
   };
 
   return (
@@ -248,6 +262,7 @@ export function Sidebar() {
                 <div className="flex-1 min-w-0 pr-7">
                   <div className="flex items-center gap-1.5">
                      <span className={cn("font-medium text-sm truncate", currentSessionId === session.id ? "text-foreground" : "text-muted-foreground")}>
+                       {session.isPinned && <Pin className="inline w-3 h-3 mr-1 text-primary" />}
                        {session.title || '未命名会话'}
                      </span>
                      {session.status === 'paused' && (
@@ -271,6 +286,17 @@ export function Sidebar() {
                     </button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-40">
+                    {session.isPinned ? (
+                      <DropdownMenuItem onClick={(e) => handleUnpinSession(e, session.id)}>
+                        <PinOff className="w-4 h-4 mr-2" />
+                        取消置顶
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={(e) => handlePinSession(e, session.id)}>
+                        <Pin className="w-4 h-4 mr-2" />
+                        置顶
+                      </DropdownMenuItem>
+                    )}
                     {session.status === 'paused' ? (
                       <DropdownMenuItem onClick={(e) => handleResumeSession(e, session.id)}>
                         <Play className="w-4 h-4 mr-2" />

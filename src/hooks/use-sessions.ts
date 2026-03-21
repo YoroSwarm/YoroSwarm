@@ -30,6 +30,8 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const unarchiveSession = useSessionsStore((state) => state.unarchiveSession);
   const pauseSession = useSessionsStore((state) => state.pauseSession);
   const resumeSession = useSessionsStore((state) => state.resumeSession);
+  const pinSession = useSessionsStore((state) => state.pinSession);
+  const unpinSession = useSessionsStore((state) => state.unpinSession);
   const setSessions = useSessionsStore((state) => state.setSessions);
   const updateSessionParticipant = useSessionsStore((state) => state.updateSessionParticipant);
 
@@ -80,6 +82,8 @@ export function useSessions(options: UseSessionsOptions = {}) {
     unarchiveSession,
     pauseSession,
     resumeSession,
+    pinSession,
+    unpinSession,
     setSessions,
     updateSessionParticipant,
   };

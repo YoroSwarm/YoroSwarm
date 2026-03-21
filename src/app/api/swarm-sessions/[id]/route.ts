@@ -79,6 +79,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
         mode: typeof body.mode === 'string' ? body.mode : undefined,
         status: typeof body.status === 'string' ? body.status.toUpperCase() : undefined,
         archivedAt: body.status === 'archived' ? new Date() : body.status ? null : undefined,
+        pinnedAt: body.isPinned === true ? new Date() : body.isPinned === false ? null : undefined,
       },
     });
 

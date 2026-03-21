@@ -79,6 +79,7 @@ export interface Session {
   createdAt: string;
   updatedAt: string;
   status: 'active' | 'archived' | 'deleted' | 'paused';
+  isPinned?: boolean;
   tags?: string[];
 }
 

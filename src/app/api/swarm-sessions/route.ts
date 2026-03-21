@@ -24,7 +24,7 @@ export async function GET() {
           },
         },
       },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
     });
 
     return successResponse({

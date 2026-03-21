@@ -57,6 +57,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     createdAt: session.created_at,
     updatedAt: session.updated_at,
     status: session.status === 'archived' ? 'archived' : ['PAUSED', 'paused'].includes(session.status) ? 'paused' : 'active',
+    isPinned: !!session.pinned_at,
   };
 }
 
@@ -75,6 +76,8 @@ interface SessionsActions {
   unarchiveSession: (sessionId: string) => Promise<void>;
   pauseSession: (sessionId: string) => Promise<void>;
   resumeSession: (sessionId: string) => Promise<void>;
+  pinSession: (sessionId: string) => Promise<void>;
+  unpinSession: (sessionId: string) => Promise<void>;
   setSessions: (sessions: Session[] | ((prev: Session[]) => Session[])) => void;
   updateSessionParticipant: (sessionId: string, agent: { id: string; name: string; role?: string; status?: string }) => void;
 }
@@ -106,9 +109,14 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
       mode: 'general_office',
     });
     const converted = convertSession(created);
-    set((state) => ({
-      sessions: [converted, ...state.sessions.filter((s) => s.id !== converted.id)],
-    }));
+    set((state) => {
+      const rest = state.sessions.filter((s) => s.id !== converted.id);
+      const pinnedIdx = rest.findLastIndex((s) => s.isPinned);
+      const insertAt = pinnedIdx + 1;
+      return {
+        sessions: [...rest.slice(0, insertAt), converted, ...rest.slice(insertAt)],
+      };
+    });
     return converted;
   },
 
@@ -162,6 +170,22 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
             }
           : s
       ),
+    }));
+  },
+
+  pinSession: async (sessionId: string) => {
+    const updated = await swarmSessionsApi.updateSession(sessionId, { isPinned: true });
+    const converted = convertSession(updated);
+    set((state) => ({
+      sessions: [converted, ...state.sessions.filter((s) => s.id !== sessionId)],
+    }));
+  },
+
+  unpinSession: async (sessionId: string) => {
+    const updated = await swarmSessionsApi.updateSession(sessionId, { isPinned: false });
+    const converted = convertSession(updated);
+    set((state) => ({
+      sessions: state.sessions.map((s) => (s.id === sessionId ? converted : s)),
     }));
   },
 

@@ -72,6 +72,7 @@ model SwarmSession {
   createdAt   DateTime           @default(now()) @map("created_at")
   updatedAt   DateTime           @updatedAt @map("updated_at")
   archivedAt  DateTime?          @map("archived_at")
+  pinnedAt    DateTime?          @map("pinned_at")
 
   user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   leadAgent             Agent?                @relation("LeadAgent", fields: [leadAgentId], references: [id], onDelete: SetNull)
