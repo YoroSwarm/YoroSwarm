@@ -129,32 +129,79 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
             </div>
 
             <div className="space-y-4">
-              {group.messages.map((message, messageIndex) => {
-                const prevMessage = group.messages[messageIndex - 1];
-                const showAvatar =
-                  !prevMessage || prevMessage.sender.id !== message.sender.id;
+              {(() => {
+                const elements: React.ReactNode[] = [];
+                let i = 0;
+                const msgs = group.messages;
+
+                // Helper: check if message should render as compact badge or be hidden (internal)
+                const isCompactMessage = (m: Message) => {
+                  const at = m.metadata?.activityType;
+                  if (at === 'thinking' || at === 'tool_call' || at === 'tool_result') return true;
+                  // Non-Lead agent messages are hidden but should not break compact groups
+                  if (m.sender.type === 'agent') {
+                    const isLeadMsg = m.sender.id === leadAgentId || !leadAgentId;
+                    if (!isLeadMsg) return true;
+                  }
+                  return false;
+                };
                 
-                // 判断是否需要显示时间：5分钟内连续消息不显示时间
-                const showTime = !prevMessage || 
-                  new Date(message.createdAt).getTime() - 
-                  new Date(prevMessage.createdAt).getTime() > 5 * 60 * 1000;
-
-                // Determine if sender is Lead
-                const isLead = message.sender.type === 'user' ||
-                  (message.sender.type === 'agent' &&
-                    (message.sender.id === leadAgentId || !leadAgentId));
-
-                return (
-                  <MessageItem
-                    key={message.id}
-                    message={message}
-                    showAvatar={showAvatar}
-                    isConsecutive={!showAvatar}
-                    showTime={showTime}
-                    isLead={isLead}
-                  />
-                );
-              })}
+                while (i < msgs.length) {
+                  const message = msgs[i];
+                  const prevMessage = i > 0 ? msgs[i - 1] : undefined;
+                  
+                  if (isCompactMessage(message)) {
+                    // Collect consecutive compact messages
+                    const compactGroup: { msg: Message; idx: number }[] = [];
+                    while (i < msgs.length && isCompactMessage(msgs[i])) {
+                      compactGroup.push({ msg: msgs[i], idx: i });
+                      i++;
+                    }
+                    
+                    elements.push(
+                      <div key={`compact-group-${compactGroup[0].msg.id}`} className="flex flex-wrap gap-1 items-start ml-10">
+                        {compactGroup.map(({ msg, idx }) => {
+                          const prev = idx > 0 ? msgs[idx - 1] : undefined;
+                          const showAvatar = !prev || prev.sender.id !== msg.sender.id;
+                          const showTime = !prev ||
+                            new Date(msg.createdAt).getTime() - new Date(prev.createdAt).getTime() > 5 * 60 * 1000;
+                          const msgIsLead = msg.sender.type === 'user' ||
+                            (msg.sender.type === 'agent' && (msg.sender.id === leadAgentId || !leadAgentId));
+                          return (
+                            <MessageItem
+                              key={msg.id}
+                              message={msg}
+                              showAvatar={showAvatar}
+                              isConsecutive={!showAvatar}
+                              showTime={showTime}
+                              isLead={msgIsLead}
+                            />
+                          );
+                        })}
+                      </div>
+                    );
+                  } else {
+                    const showAvatar = !prevMessage || prevMessage.sender.id !== message.sender.id;
+                    const showTime = !prevMessage ||
+                      new Date(message.createdAt).getTime() - new Date(prevMessage.createdAt).getTime() > 5 * 60 * 1000;
+                    const isLead = message.sender.type === 'user' ||
+                      (message.sender.type === 'agent' && (message.sender.id === leadAgentId || !leadAgentId));
+                    
+                    elements.push(
+                      <MessageItem
+                        key={message.id}
+                        message={message}
+                        showAvatar={showAvatar}
+                        isConsecutive={!showAvatar}
+                        showTime={showTime}
+                        isLead={isLead}
+                      />
+                    );
+                    i++;
+                  }
+                }
+                return elements;
+              })()}
             </div>
           </div>
         ))}

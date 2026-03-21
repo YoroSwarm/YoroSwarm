@@ -9,6 +9,7 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { cn } from '@/lib/utils';
 import { formatMessageTime } from '@/lib/utils/date';
 import { useThemeStore } from '@/stores/themeStore';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import {
   Check,
   CheckCheck,
@@ -22,12 +23,10 @@ import {
   CornerUpLeft,
   Download,
   Brain,
-  ChevronDown,
   Wrench,
   Paperclip,
   X,
   Loader2,
-  Bot,
   EyeOff,
 } from 'lucide-react';
 import type { Message } from '@/types/chat';
@@ -492,8 +491,7 @@ export function MessageItem({
   const isAgent = message.sender.type === 'agent';
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
-  const [isThinkingExpanded, setIsThinkingExpanded] = useState(false);
-  const [isContentExpanded, setIsContentExpanded] = useState(isLead);
+
   const [previewFile, setPreviewFile] = useState<{
     url: string;
     name: string;
@@ -766,85 +764,51 @@ export function MessageItem({
     const isError = message.metadata?.isError;
     const tc = toolCalls?.[0];
 
+    const hasExpandableContent = (isThinking && message.content) || (isToolCall && tc && (tc.inputSummary || tc.resultSummary));
+
     return (
-      <div
-        className={cn(
-          'group flex gap-2 items-start animate-fade-in py-1',
-          isUser ? 'flex-row-reverse justify-end' : 'flex-row',
-          isConsecutive && 'mt-0.5'
-        )}
-      >
-        {/* Avatar placeholder to align with regular messages */}
-        <div className="w-8 shrink-0" />
-
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2">
-            {/* Combined Agent name + Activity badge - always show for activity messages */}
-            {!isUser && (
-              <button
-                onClick={() => setIsThinkingExpanded(!isThinkingExpanded)}
-                className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full border border-border/50 hover:bg-muted transition-colors"
-              >
-                <span className="font-medium text-foreground">{message.sender.name}</span>
-
-                {/* Activity badge - inline with agent name */}
-                {isThinking ? (
-                  <span className="inline-flex items-center gap-1 text-purple-600">
-                    <Brain className="h-3 w-3" />
-                    <span>思考</span>
-                    <div className={cn("transition-transform duration-200", isThinkingExpanded && "rotate-180")}>
-                      <ChevronDown className="h-3 w-3" />
-                    </div>
-                  </span>
-                ) : isToolCall ? (
-                  <span className={cn(
-                    "inline-flex items-center gap-1",
-                    hasResult
-                      ? isError
-                        ? "text-red-600"
-                        : "text-green-600"
-                      : "text-amber-600"
-                  )}>
-                    {hasResult ? (
-                      isError ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />
-                    ) : (
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                    )}
-                    <Wrench className="h-3 w-3" />
-                    <span>{getToolDisplayName(tc?.toolName)}</span>
-                    <div className={cn("transition-transform duration-200", isThinkingExpanded && "rotate-180")}>
-                      <ChevronDown className="h-3 w-3" />
-                    </div>
-                  </span>
-                ) : null}
-              </button>
-            )}
-          </div>
-
-          {/* Expanded thinking content with animation and scroll */}
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-200 ease-in-out",
-              isThinking && isThinkingExpanded ? "max-h-48 opacity-100 mt-1" : "max-h-0 opacity-0"
-            )}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 transition-all cursor-pointer"
           >
-            <div className="max-w-md bg-muted/50 rounded-lg p-2 text-xs text-muted-foreground overflow-y-auto max-h-48">
-              <div className="pl-2 border-l-2 border-purple-500/30 italic">
-                {message.content}
+            <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{message.sender.name}</span>
+
+            {isThinking ? (
+              <span className="inline-flex items-center gap-1 text-purple-600/60">
+                <Brain className="h-3 w-3" />
+              </span>
+            ) : isToolCall ? (
+              <span className={cn(
+                "inline-flex items-center gap-1 opacity-60",
+                hasResult
+                  ? isError ? "text-red-600" : "text-green-600"
+                  : "text-amber-600"
+              )}>
+                {hasResult ? (
+                  isError ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />
+                ) : (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                )}
+                <Wrench className="h-3 w-3" />
+                <span>{getToolDisplayName(tc?.toolName)}</span>
+              </span>
+            ) : null}
+          </button>
+        </PopoverTrigger>
+
+        {hasExpandableContent && (
+          <PopoverContent align="start" side="bottom" className="w-auto max-w-md p-0">
+            {isThinking && (
+              <div className="p-2.5 text-xs text-muted-foreground max-h-48 overflow-y-auto">
+                <div className="pl-2 border-l-2 border-purple-500/30 italic">
+                  {message.content}
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Tool call details with animation and scroll */}
-          <div
-            className={cn(
-              "overflow-hidden transition-all duration-200 ease-in-out",
-              isToolCall && isThinkingExpanded ? "max-h-64 opacity-100 mt-1" : "max-h-0 opacity-0"
             )}
-          >
+
             {isToolCall && tc && (
-              <div className="max-w-md bg-muted/50 rounded-lg p-2.5 text-xs space-y-2.5 overflow-y-auto max-h-64">
-                {/* Input */}
+              <div className="p-2.5 text-xs space-y-2.5 max-h-64 overflow-y-auto">
                 {tc.inputSummary && (
                   <div>
                     {(() => {
@@ -867,7 +831,6 @@ export function MessageItem({
                           </>
                         );
                       }
-                      // Fallback to generic JSON formatting
                       const formatted = formatJsonReadable(tc.inputSummary);
                       if (formatted) {
                         return (
@@ -888,7 +851,6 @@ export function MessageItem({
                     })()}
                   </div>
                 )}
-                {/* Output */}
                 {tc.resultSummary && (
                   <div className={cn("border-t border-border/30 pt-2", !tc.inputSummary && "border-t-0 pt-0")}>
                     {(() => {
@@ -947,10 +909,15 @@ export function MessageItem({
                 )}
               </div>
             )}
-          </div>
-        </div>
-      </div>
+          </PopoverContent>
+        )}
+      </Popover>
     );
+  }
+
+  // Hide non-Lead agent messages (internal messages)
+  if (isAgent && !isLead && !isSystem) {
+    return null;
   }
 
   return (
@@ -1028,40 +995,13 @@ export function MessageItem({
             message.type === 'code' && 'p-0 overflow-hidden bg-muted border-border',
             message.type === 'image' && 'p-1 bg-card border-border',
             message.type === 'file' && 'p-2',
-            !isLead && !isContentExpanded && 'py-1.5 px-3'
           )}
           style={{
             borderRadius: "12px",
           }}
         >
-          {/* Non-Lead Agent Collapsed Header */}
-          {isAgent && !isLead && !isContentExpanded && (
-            <button
-              onClick={() => setIsContentExpanded(true)}
-              className="flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <Bot className="h-3.5 w-3.5" />
-              <span className="italic">内部消息 (点击展开)</span>
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-          )}
-
-          {/* Content Area - Expandable for non-Lead agents */}
-          <div className={cn(
-            (isAgent && !isLead && !isContentExpanded) && 'hidden'
-          )}>
+          <div>
             {renderContent()}
-
-            {/* Collapse button for non-Lead agents */}
-            {isAgent && !isLead && isContentExpanded && (
-              <button
-                onClick={() => setIsContentExpanded(false)}
-                className="mt-2 flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <EyeOff className="h-3 w-3" />
-                折叠消息
-              </button>
-            )}
           </div>
         </div>
 

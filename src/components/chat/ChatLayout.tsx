@@ -530,10 +530,10 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
           <div className="flex-1 overflow-y-auto p-4">
             {resolvedSessionId ? (
-              <div className="space-y-6">
+              <div className="space-y-4">
                 <section>
-                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">会话信息</h3>
-                  <div className="space-y-2 text-sm">
+                  <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">会话信息</h3>
+                  <div className="space-y-1.5 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">会话ID</span>
                       <span className="font-mono text-xs">{resolvedSessionId.slice(0, 8)}...</span>
@@ -543,28 +543,25 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       <span>{currentSession?.status === 'paused' ? '已暂停' : currentSession?.status === 'archived' ? '已归档' : '活跃'}</span>
                     </div>
                     {stats?.llm_usage.session ? (
-                      <>
-                        <div className="pt-2 text-xs font-medium uppercase tracking-[0.18em] text-muted-foreground">Token 用量</div>
-                        <div className="rounded-lg border border-border/60 bg-muted/40 p-3">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="text-muted-foreground">总量</span>
-                            <span className="font-semibold">{formatTokenCount(stats.llm_usage.session.total_tokens)}</span>
-                          </div>
-                          <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                            <div>输入 {formatTokenCount(stats.llm_usage.session.input_tokens)}</div>
-                            <div>输出 {formatTokenCount(stats.llm_usage.session.output_tokens)}</div>
-                            <div>缓存读取 {formatTokenCount(stats.llm_usage.session.cache_read_tokens)}</div>
-                            <div>缓存率 {formatPercent(stats.llm_usage.session.cache_hit_rate)}</div>
-                          </div>
+                      <div className="rounded-md border border-border/60 bg-muted/40 px-2.5 py-2 mt-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Token 总量</span>
+                          <span className="font-semibold">{formatTokenCount(stats.llm_usage.session.total_tokens)}</span>
                         </div>
-                      </>
+                        <div className="mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                          <div>输入 {formatTokenCount(stats.llm_usage.session.input_tokens)}</div>
+                          <div>输出 {formatTokenCount(stats.llm_usage.session.output_tokens)}</div>
+                          <div>缓存读取 {formatTokenCount(stats.llm_usage.session.cache_read_tokens)}</div>
+                          <div>缓存率 {formatPercent(stats.llm_usage.session.cache_hit_rate)}</div>
+                        </div>
+                      </div>
                     ) : null}
                   </div>
                 </section>
 
                 <section>
-                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">会话团队</h3>
-                  <div className="space-y-2">
+                  <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">会话团队</h3>
+                  <div className="space-y-1">
                     {visibleParticipants.map((participant) => {
                       const participantName = typeof participant.name === 'string' && participant.name.trim().length > 0
                         ? participant.name.trim()
@@ -587,13 +584,13 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       return (
                         <Popover key={participant.id}>
                           <PopoverTrigger asChild>
-                            <div className="flex items-center gap-3 rounded-lg p-2 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20 cursor-default" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
-                              <div className="flex h-8 w-8 items-center justify-center bg-primary/10 text-sm font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
+                            <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20 cursor-default" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                              <div className="flex h-6 w-6 items-center justify-center bg-primary/10 text-xs font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
                                 {participantInitial}
                               </div>
                               <div className="min-w-0 flex-1">
-                                <p className="truncate text-sm font-bold">{participantName}</p>
-                                <div className="mt-1 flex items-center gap-1.5">
+                                <p className="truncate text-xs font-bold">{participantName}</p>
+                                <div className="mt-0.5 flex items-center gap-1.5">
                                   <div className="h-1.5 flex-1 rounded-full bg-muted/60 overflow-hidden">
                                     <div
                                       className={cn(
@@ -673,16 +670,16 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                 </section>
 
                 <section>
-                  <h3 className="mb-3 text-sm font-medium text-muted-foreground">Lead Todo</h3>
-                  <div className="space-y-1.5">
+                  <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">Lead Todo</h3>
+                  <div className="space-y-1">
                     {leadTodos.active.length === 0 && leadTodos.done.length === 0 ? (
-                      <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      <div className="rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs text-muted-foreground">
                         当前没有记录到 Lead 私有待办。
                       </div>
                     ) : (
                       <>
                         {leadTodos.active.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm">
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5 text-xs">
                             <span
                               className={cn(
                                 'inline-block h-2.5 w-2.5 shrink-0 rounded-full',
@@ -694,7 +691,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         ))}
 
                         {leadTodos.done.map((item) => (
-                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-3 py-2 text-sm text-muted-foreground">
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg border border-border/40 bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground">
                             <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full bg-green-500" />
                             <span className="truncate">{item.title}</span>
                           </div>
