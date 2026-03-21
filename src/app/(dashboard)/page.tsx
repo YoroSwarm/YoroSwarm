@@ -3,6 +3,7 @@
 import { useTasks } from "@/hooks/use-tasks";
 import { useTeamStats } from "@/hooks/use-team-stats";
 import { useState, useEffect, useCallback } from "react";
+import { motion } from "framer-motion";
 import {
   Users,
   CheckCircle2,
@@ -148,29 +149,43 @@ export default function DashboardPage() {
       </div>
 
       {/* 统计卡片 */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <StatCard
-          title="Agent 数量"
-          value={String(totalAgents)}
-          icon={Users}
-          trend="集群成员"
-          trendUp={totalAgents > 0}
-        />
-        <StatCard
-          title="进行中任务"
-          value={String(inProgressTasks)}
-          icon={Clock}
-          trend={`${pendingTasks} 待处理`}
-          trendUp={inProgressTasks > 0}
-        />
-        <StatCard
-          title="已完成任务"
-          value={String(completedTasks)}
-          icon={CheckCircle2}
-          trend={`${totalTasks} 总计`}
-          trendUp={true}
-        />
-      </div>
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          hidden: {},
+          visible: { transition: { staggerChildren: 0.08 } },
+        }}
+      >
+        <motion.div variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
+          <StatCard
+            title="Agent 数量"
+            value={String(totalAgents)}
+            icon={Users}
+            trend="集群成员"
+            trendUp={totalAgents > 0}
+          />
+        </motion.div>
+        <motion.div variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
+          <StatCard
+            title="进行中任务"
+            value={String(inProgressTasks)}
+            icon={Clock}
+            trend={`${pendingTasks} 待处理`}
+            trendUp={inProgressTasks > 0}
+          />
+        </motion.div>
+        <motion.div variants={{ hidden: { opacity: 0, y: 16 }, visible: { opacity: 1, y: 0, transition: { duration: 0.35 } } }}>
+          <StatCard
+            title="已完成任务"
+            value={String(completedTasks)}
+            icon={CheckCircle2}
+            trend={`${totalTasks} 总计`}
+            trendUp={true}
+          />
+        </motion.div>
+      </motion.div>
 
       {/* 主要内容区域 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

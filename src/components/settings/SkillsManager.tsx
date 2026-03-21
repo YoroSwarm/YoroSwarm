@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
@@ -170,9 +171,22 @@ export function SkillsManager() {
             暂无已启用的 Skills。从下方的预置库中安装。
           </p>
         ) : (
-          <div className="space-y-2">
-            {installedSkills.map((skill) => (
-              <div key={skill.name} className="border rounded-lg overflow-hidden">
+          <div className="flex flex-col gap-2">
+            <AnimatePresence initial={false}>
+              {installedSkills.map((skill) => (
+                <motion.div
+                  key={skill.name}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                  transition={{
+                    layout: { type: 'spring', stiffness: 500, damping: 35 },
+                    opacity: { duration: 0.2 },
+                    scale: { duration: 0.2 },
+                  }}
+                  className="border rounded-lg overflow-hidden"
+                >
                 <div className="flex items-center justify-between p-3 gap-2">
                   <div className="flex items-center gap-3 flex-1 min-w-0 overflow-hidden">
                     <button
@@ -282,8 +296,9 @@ export function SkillsManager() {
                     </div>
                   </div>
                 </div>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
           </div>
         )}
       </div>
@@ -294,12 +309,22 @@ export function SkillsManager() {
           <Separator />
           <div className="min-w-0">
             <h3 className="text-sm font-medium mb-3">预置 Skills 库</h3>
-            <div className="space-y-2">
-              {uninstalledRegistry.map((skill) => (
-                <div
-                  key={skill.name}
-                  className="flex items-center justify-between border rounded-lg p-3 gap-2"
-                >
+            <div className="flex flex-col gap-2">
+              <AnimatePresence initial={false}>
+                {uninstalledRegistry.map((skill) => (
+                  <motion.div
+                    key={skill.name}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                    transition={{
+                      layout: { type: 'spring', stiffness: 500, damping: 35 },
+                      opacity: { duration: 0.2 },
+                      scale: { duration: 0.2 },
+                    }}
+                    className="flex items-center justify-between border rounded-lg p-3 gap-2"
+                  >
                   <div className="flex items-center gap-3 min-w-0 overflow-hidden">
                     <Package className="h-4 w-4 text-muted-foreground shrink-0" />
                     <div className="min-w-0 overflow-hidden">
@@ -319,8 +344,9 @@ export function SkillsManager() {
                     <Download className="h-3.5 w-3.5 mr-1.5" />
                     {actionLoading === skill.name ? "安装中..." : "安装"}
                   </Button>
-                </div>
+                </motion.div>
               ))}
+              </AnimatePresence>
             </div>
           </div>
         </>

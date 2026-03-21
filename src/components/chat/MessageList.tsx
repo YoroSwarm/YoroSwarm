@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { formatMessageGroup } from '@/lib/utils/date';
@@ -99,7 +99,7 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
     return groups;
   }, [messages]);
 
-  const messageGroups = groupMessages();
+  const messageGroups = useMemo(() => groupMessages(), [groupMessages]);
 
   return (
     <div
@@ -159,7 +159,7 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                     }
                     
                     elements.push(
-                      <div key={`compact-group-${compactGroup[0].msg.id}`} className="flex flex-wrap gap-1 items-start ml-10 animate-slide-up">
+                      <div key={`compact-group-${compactGroup[0].msg.id}`} className="flex flex-wrap gap-1 items-start ml-10">
                         {compactGroup.map(({ msg, idx }) => {
                           const prev = idx > 0 ? msgs[idx - 1] : undefined;
                           const showAvatar = !prev || prev.sender.id !== msg.sender.id;

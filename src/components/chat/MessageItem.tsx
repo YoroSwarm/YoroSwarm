@@ -1,7 +1,7 @@
 'use client';
 
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useMemo, memo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -478,7 +478,7 @@ interface MessageItemProps {
   isLead?: boolean;
 }
 
-export function MessageItem({
+export const MessageItem = memo(function MessageItem({
   message,
   showAvatar,
   isConsecutive,
@@ -495,7 +495,6 @@ export function MessageItem({
   const displayName = (isAgent && isLead && leadNickname) ? leadNickname : message.sender.name;
   const displayAvatar = (isAgent && isLead && leadAvatarUrl) ? leadAvatarUrl : message.sender.avatar;
   const [copied, setCopied] = useState(false);
-  const [showActions, setShowActions] = useState(false);
 
   const [previewFile, setPreviewFile] = useState<{
     url: string;
@@ -533,6 +532,41 @@ export function MessageItem({
         return null;
     }
   };
+
+  // Memoize ReactMarkdown components to avoid recreating on every render
+  const markdownComponents = useMemo(() => ({
+    code({ _node, inline, className, children, ...props }: { _node?: unknown; inline?: boolean; className?: string; children?: React.ReactNode }) {
+      const match = /language-(\w+)/.exec(className || '');
+      return !inline && match ? (
+        <div className="overflow-x-auto rounded-lg my-2 border border-border/50 shadow-sm">
+          <SyntaxHighlighter
+            style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
+            language={match[1]}
+            PreTag="div"
+            customStyle={{
+              margin: 0,
+              fontSize: '0.875rem',
+            }}
+            {...props}
+          >
+            {String(children).replace(/\n$/, '')}
+          </SyntaxHighlighter>
+        </div>
+      ) : (
+        <code className={cn("bg-muted px-1 py-0.5 rounded font-mono text-xs", className)} {...props}>
+          {children}
+        </code>
+      );
+    },
+    p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
+    ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
+    ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
+    a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+      <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+        {children}
+      </a>
+    ),
+  }), [resolvedTheme]);
 
   const renderContent = () => {
     switch (message.type) {
@@ -684,39 +718,7 @@ export function MessageItem({
           <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-wordword">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
-              components={{
-                code({ _node, inline, className, children, ...props }: { _node?: unknown; inline?: boolean; className?: string; children?: React.ReactNode }) {
-                  const match = /language-(\w+)/.exec(className || '');
-                  return !inline && match ? (
-                    <div className="overflow-x-auto rounded-lg my-2 border border-border/50 shadow-sm">
-                      <SyntaxHighlighter
-                        style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
-                        language={match[1]}
-                        PreTag="div"
-                        customStyle={{
-                          margin: 0,
-                          fontSize: '0.875rem',
-                        }}
-                        {...props}
-                      >
-                        {String(children).replace(/\n$/, '')}
-                      </SyntaxHighlighter>
-                    </div>
-                  ) : (
-                    <code className={cn("bg-muted px-1 py-0.5 rounded font-mono text-xs", className)} {...props}>
-                      {children}
-                    </code>
-                  );
-                },
-                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                ul: ({ children }) => <ul className="list-disc list-inside mb-2">{children}</ul>,
-                ol: ({ children }) => <ol className="list-decimal list-inside mb-2">{children}</ol>,
-                a: ({ href, children }) => (
-                  <a href={href} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                    {children}
-                  </a>
-                ),
-              }}
+              components={markdownComponents}
             >
               {message.content}
             </ReactMarkdown>
@@ -753,7 +755,7 @@ export function MessageItem({
 
   if (isSystem) {
     return (
-      <div className="flex items-center justify-center py-2 animate-fade-in">
+      <div className="flex items-center justify-center py-2">
         <span className="text-xs text-muted-foreground bg-muted px-3 py-1 rounded-full">
           {message.content}
         </span>
@@ -775,13 +777,13 @@ export function MessageItem({
       <Popover>
         <PopoverTrigger asChild>
           <button
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer animate-pop-in"
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer"
           >
             <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{displayName}</span>
 
             {/* Model provider badge */}
             {message.metadata?.model && (
-              <span className="text-[9px] px-1 py-0.5 bg-muted rounded text-muted-foreground/70 font-medium animate-fade-in">
+              <span className="text-[9px] px-1 py-0.5 bg-muted rounded text-muted-foreground/70 font-medium">
                 {message.metadata.model}
               </span>
             )}
@@ -945,12 +947,10 @@ export function MessageItem({
     <>
     <div
       className={cn(
-        'group flex gap-3 animate-slide-up',
+        'group flex gap-3',
         isUser ? 'flex-row-reverse' : 'flex-row',
         isConsecutive && 'mt-1'
       )}
-      onMouseEnter={() => setShowActions(true)}
-      onMouseLeave={() => setShowActions(false)}
     >
       {showAvatar ? (
         <div
@@ -1009,7 +1009,7 @@ export function MessageItem({
 
         <div
           className={cn(
-            'relative px-4 py-2.5 border shadow-sm animate-fade-in',
+            'relative px-4 py-2.5 border shadow-sm',
             isUser
               ? 'bg-primary text-primary-foreground border-primary'
               : 'bg-card text-foreground border-border',
@@ -1041,8 +1041,7 @@ export function MessageItem({
 
       <div
         className={cn(
-          'flex items-center gap-1 opacity-0 transition-opacity',
-          showActions && 'opacity-100'
+          'flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity',
         )}
       >
         <button
@@ -1071,4 +1070,4 @@ export function MessageItem({
     )}
     </>
   );
-}
+});

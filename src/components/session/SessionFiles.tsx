@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Upload,
   FileText,
@@ -251,19 +252,29 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
             <p className="text-sm mt-1">您可上传或等待 Swarm 创建文件</p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {visibleEntries.map((entry) => {
+          <div className="flex flex-col gap-2">
+            <AnimatePresence initial={false}>
+              {visibleEntries.map((entry) => {
               if (entry.type === 'directory') {
                 return (
-                  <button
+                  <motion.button
                     key={entry.path}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                    transition={{
+                      layout: { type: 'spring', stiffness: 500, damping: 35 },
+                      opacity: { duration: 0.2 },
+                      scale: { duration: 0.2 },
+                    }}
                     onClick={() => setCurrentDir(entry.path)}
                     className="w-full text-left card-hand px-4 py-3 flex items-center gap-3 hover:bg-accent/20"
                   >
                     <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     <FolderOpen className="h-4 w-4 text-amber-500" />
                     <span className="font-medium truncate">{entry.name}</span>
-                  </button>
+                  </motion.button>
                 );
               }
 
@@ -272,7 +283,19 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
               const handleDeleteClick = () => file ? handleDelete(file.id) : filesApi.deleteFileByPath(sessionId, entry.path).then(load).catch((err) => console.error('Failed to delete file:', err));
               const canPreview = isPreviewable(entry.mimeType || file?.mimeType, entry.name);
               return (
-                <div key={entry.path} className="card-hand px-4 py-3 flex items-center justify-between gap-3 group">
+                <motion.div
+                  key={entry.path}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                  transition={{
+                    layout: { type: 'spring', stiffness: 500, damping: 35 },
+                    opacity: { duration: 0.2 },
+                    scale: { duration: 0.2 },
+                  }}
+                  className="card-hand px-4 py-3 flex items-center justify-between gap-3 group"
+                >
                   <div className="flex items-center gap-3 min-w-0">
                     {getFileIcon(entry.mimeType || file?.mimeType || 'application/octet-stream')}
                     <div className="min-w-0">
@@ -297,9 +320,10 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
-                </div>
+                </motion.div>
               );
             })}
+            </AnimatePresence>
           </div>
         )}
       </div>

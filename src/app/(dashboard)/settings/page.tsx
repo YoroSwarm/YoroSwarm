@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useThemeStore, useLeadPreferencesStore } from "@/stores";
 import {
@@ -243,6 +244,14 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex-1 min-w-0">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeTab}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.2, ease: 'easeInOut' }}
+            >
           {activeTab === "appearance" && (
             <Card>
               <CardHeader>
@@ -640,6 +649,8 @@ export default function SettingsPage() {
               </CardContent>
             </Card>
           )}
+            </motion.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>

@@ -16,16 +16,19 @@ import {
   InputGroupAddon,
 } from "@/components/ui/input-group"
 import { SearchIcon, CheckIcon } from "lucide-react"
+import { useLeadPreferencesStore } from "@/stores/leadPreferencesStore"
 
 function Command({
   className,
   ...props
 }: React.ComponentProps<typeof CommandPrimitive>) {
+  const { glassEffect } = useLeadPreferencesStore()
   return (
     <CommandPrimitive
       data-slot="command"
       className={cn(
         "flex size-full flex-col overflow-hidden rounded-xl! bg-popover p-1 text-popover-foreground",
+        glassEffect && "backdrop-blur-sm",
         className
       )}
       {...props}

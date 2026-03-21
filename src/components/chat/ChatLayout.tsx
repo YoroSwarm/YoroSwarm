@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
@@ -112,6 +113,19 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     setCurrentSessionId(nextSessionId);
     storage.set(CURRENT_SESSION_STORAGE_KEY, nextSessionId);
   }, [resolvedSessionId, sessions]);
+
+  // Sync URL when auto-selecting a session (no explicit sessionId in URL)
+  const initialUrlSynced = useRef(false);
+  useEffect(() => {
+    if (initialSessionId) {
+      initialUrlSynced.current = true;
+      return;
+    }
+    if (!initialUrlSynced.current && resolvedSessionId) {
+      initialUrlSynced.current = true;
+      router.replace(`/chat?sessionId=${resolvedSessionId}`, { scroll: false });
+    }
+  }, [initialSessionId, resolvedSessionId, router]);
 
   // 工具审批 hook - 需要在 resolvedSessionId 之后调用
   const { approvals: toolApprovals, handleDecision: handleToolApprovalDecision, handleWSMessage: handleApprovalWSMessage } = useToolApprovals(resolvedSessionId);
@@ -331,89 +345,38 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   return (
     <div className={cn('chat-glass-root flex h-full w-full bg-background', glassEffect && 'backdrop-blur-sm', className)}>
       <main className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
-        <header className={cn("chat-glass-surface flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/50 px-4 shadow-sm", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
-          <div className="flex items-center gap-3 overflow-hidden">
-            <button
-              onClick={toggleSidebar}
-              className="lg:hidden -ml-2 rounded-md p-2 hover:bg-accent active:bg-accent/80"
-            >
-               <Menu className="h-5 w-5" />
-            </button>
-            <h1 className="truncate text-lg font-bold font-heading">
-              {currentSessionTitle || '新对话'}
-            </h1>
-            
-            {/* Hand-Drawn Tabs */}
-            {resolvedSessionId && (
-              <div className="hidden md:flex items-center gap-2 ml-4">
-                {[
-                  { id: 'chat', label: '对话', icon: MessageSquare },
-                  { id: 'files', label: '文件', icon: FolderOpen },
-                  { id: 'tasks', label: '任务', icon: CheckSquare },
-                  { id: 'settings', label: '设置', icon: Settings },].map((tab) => {
-                  const isActive = activeTab === tab.id;
-                  const Icon = tab.icon;
-                  return (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id as TabType)}
-                      className={cn(
-                        "flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition-all border",
-                        isActive 
-                          ? "bg-accent text-accent-foreground border-border shadow-sm" 
-                          : "bg-transparent text-muted-foreground border-transparent hover:bg-accent/20 hover:text-foreground hover:border-border/50 active:bg-accent/30"
-                      )}
-                      style={{
-                        borderRadius: "8px",
-                      }}
-                    >
-                      <Icon className="h-4 w-4" />
-                      {tab.label}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+        <header className={cn("chat-glass-surface shrink-0 border-b border-border bg-card/50 px-4 shadow-sm", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
+          {/* First row: title + panel toggle */}
+          <div className="flex h-12 items-center justify-between">
+            <div className="flex items-center gap-3 overflow-hidden">
+              <button
+                onClick={toggleSidebar}
+                className="lg:hidden -ml-2 rounded-md p-2 hover:bg-accent active:bg-accent/80"
+              >
+                 <Menu className="h-5 w-5" />
+              </button>
+              <h1 className="truncate text-lg font-bold font-heading">
+                {currentSessionTitle || '新对话'}
+              </h1>
+            </div>
 
-          <div className="flex items-center gap-2">
-            {resolvedSessionId && currentSession && (
-              currentSession.status === 'paused' ? (
-                <button
-                  onClick={() => resumeSession(resolvedSessionId)}
-                  className="flex items-center rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-950 dark:active:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 transition-all"
-                  title="恢复会话"
-                >
-                  <Play className="h-4 w-4" />
-                </button>
-              ) : currentSession.status === 'active' ? (
-                <button
-                  onClick={() => pauseSession(resolvedSessionId)}
-                  className="flex items-center rounded-lg p-2 text-amber-600 hover:bg-amber-50 active:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-950 dark:active:bg-amber-900 border border-amber-200 dark:border-amber-800 transition-all"
-                  title="暂停会话"
-                >
-                  <Pause className="h-4 w-4" />
-                </button>
-              ) : null
-            )}
             <button
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
-              className="hidden rounded-lg p-2 hover:bg-accent active:bg-accent/80 md:flex border border-transparent hover:border-border transition-all"
+              className="hidden rounded-md p-1.5 hover:bg-accent active:bg-accent/80 md:flex border border-transparent hover:border-border transition-all"
               title={isRightPanelOpen ? '关闭右侧面板' : '打开右侧面板'}
             >
               {isRightPanelOpen ? (
-                <PanelRightClose className="h-5 w-5" />
+                <PanelRightClose className="h-4 w-4" />
               ) : (
-                <PanelRightOpen className="h-5 w-5" />
+                <PanelRightOpen className="h-4 w-4" />
               )}
             </button>
           </div>
-        </header>
 
-        {/* Mobile Tabs (Visible only on small screens) */}
-        {resolvedSessionId && (
-          <div className={cn("chat-glass-surface flex md:hidden items-center justify-around border-b border-border bg-card p-2 overflow-x-auto shadow-sm", glassEffect && 'backdrop-blur')}>
-             {[
+          {/* Second row: tab badges + pause/resume */}
+          {resolvedSessionId && (
+            <div className="flex items-center gap-1.5 pb-2">
+              {[
                 { id: 'chat', label: '对话', icon: MessageSquare },
                 { id: 'files', label: '文件', icon: FolderOpen },
                 { id: 'tasks', label: '任务', icon: CheckSquare },
@@ -426,70 +389,111 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as TabType)}
                     className={cn(
-                      "flex flex-col items-center gap-1 p-2 text-xs font-bold border transition-all rounded-lg",
-                      isActive 
-                        ? "bg-accent/20 text-accent-foreground border-border shadow-sm" 
-                        : "text-muted-foreground border-transparent"
+                      "flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border transition-all",
+                      isActive
+                        ? "bg-accent text-accent-foreground border-border shadow-sm"
+                        : "text-muted-foreground border-transparent hover:bg-accent/30 hover:text-foreground"
                     )}
                   >
-                    <Icon className="h-5 w-5" />
+                    <Icon className="h-3 w-3" />
                     {tab.label}
                   </button>
                 );
               })}
-          </div>
-        )}
+
+              {/* Pause/Resume badge */}
+              {currentSession && (
+                currentSession.status === 'paused' ? (
+                  <button
+                    onClick={() => resumeSession(resolvedSessionId)}
+                    className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition-all ml-auto"
+                    title="恢复会话"
+                  >
+                    <Play className="h-3 w-3" />
+                    恢复
+                  </button>
+                ) : currentSession.status === 'active' ? (
+                  <button
+                    onClick={() => pauseSession(resolvedSessionId)}
+                    className="flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950 transition-all ml-auto"
+                    title="暂停会话"
+                  >
+                    <Pause className="h-3 w-3" />
+                    暂停
+                  </button>
+                ) : null
+              )}
+            </div>
+          )}
+        </header>
 
         <div className={cn("chat-glass-panel flex-1 overflow-hidden bg-background relative", glassEffect && 'backdrop-blur-sm')}>
           {resolvedSessionId ? (
-            <>
+            <div className="flex flex-col h-full">
+              {/* Main content area */}
+              <div className="flex-1 overflow-hidden">
+                {/* Chat tab kept mounted (hidden) to avoid expensive re-mount */}
+                <div className={cn("h-full", activeTab !== 'chat' && 'hidden')}>
+                  <MessageList
+                    sessionId={resolvedSessionId}
+                    messages={messages}
+                    isLoading={isMessagesLoading}
+                    hasMore={hasMore}
+                    onLoadMore={() => {
+                      void loadMessages(true);
+                    }}
+                    streamingState={streamingState}
+                    activeStreamingStates={activeStreamingStates}
+                    participants={visibleParticipants}
+                  />
+                </div>
+                <AnimatePresence mode="wait">
+                  {activeTab === 'files' && (
+                    <motion.div key="files" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15, ease: 'easeInOut' }} className="h-full">
+                      <SessionFiles sessionId={resolvedSessionId} refreshToken={fileRefreshTick} />
+                    </motion.div>
+                  )}
+                  {activeTab === 'tasks' && (
+                    <motion.div key="tasks" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15, ease: 'easeInOut' }} className="h-full">
+                      <SessionTasks sessionId={resolvedSessionId} />
+                    </motion.div>
+                  )}
+                  {activeTab === 'settings' && (
+                    <motion.div key="settings" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15, ease: 'easeInOut' }} className="h-full">
+                      <SessionSettings sessionId={resolvedSessionId} />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {/* Chat input - only on chat tab */}
               {activeTab === 'chat' && (
-                <div className="flex flex-col h-full">
-                    <div className="flex-1 overflow-hidden">
-                        <MessageList
-                        sessionId={resolvedSessionId}
-                        messages={messages}
-                        isLoading={isMessagesLoading}
-                        hasMore={hasMore}
-                        onLoadMore={() => {
-                            void loadMessages(true);
-                        }}
-                        streamingState={streamingState}
-                        activeStreamingStates={activeStreamingStates}
-                        participants={visibleParticipants}
-                        />
-                    </div>
-                    <div className={cn("chat-glass-surface border-t border-border bg-card/50 p-4", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
-                        {/* 工具审批卡片堆叠区 */}
-                        <ApprovalCards
-                            approvals={toolApprovals}
-                            onDecision={(id, decision) => handleToolApprovalDecision(id, decision)}
-                            onAlwaysAllow={addInlineAutoApprove}
-                            className="mb-3"
-                        />
+                <div className={cn("chat-glass-surface border-t border-border bg-card/50 p-4", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
+                  <ApprovalCards
+                    approvals={toolApprovals}
+                    onDecision={(id, decision) => handleToolApprovalDecision(id, decision)}
+                    onAlwaysAllow={addInlineAutoApprove}
+                    className="mb-3"
+                  />
 
-                        <ChatInput
-                            sessionId={resolvedSessionId}
-                            disabled={isCreatingSession || currentSession?.status === 'paused'}
-                            placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
-                            onSend={async (content, attachments) => {
-                            let targetSessionId = resolvedSessionId;
+                  <ChatInput
+                    sessionId={resolvedSessionId}
+                    disabled={isCreatingSession || currentSession?.status === 'paused'}
+                    placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
+                    onSend={async (content, attachments) => {
+                      let targetSessionId = resolvedSessionId;
 
-                            if (!targetSessionId) {
-                                const created = await handleCreateSession();
-                                targetSessionId = created.id;
-                            }
+                      if (!targetSessionId) {
+                        const created = await handleCreateSession();
+                        targetSessionId = created.id;
+                      }
 
-                            await sendMessage(content, 'text', attachments, targetSessionId);
-                            }}
-                        />
-                    </div>
+                      await sendMessage(content, 'text', attachments, targetSessionId);
+                    }}
+                  />
                 </div>
               )}
-              {activeTab === 'files' && <SessionFiles sessionId={resolvedSessionId} refreshToken={fileRefreshTick} />}
-              {activeTab === 'tasks' && <SessionTasks sessionId={resolvedSessionId} />}
-              {activeTab === 'settings' && <SessionSettings sessionId={resolvedSessionId} />}
-            </>
+            </div>
           ) : (
             <div className="flex h-full flex-col items-center justify-center p-8 text-center">
               <div className="mb-8 relative">

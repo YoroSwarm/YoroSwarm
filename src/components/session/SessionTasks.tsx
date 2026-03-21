@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useTasks } from "@/hooks/use-tasks";
 import { useAgents } from "@/hooks/use-agents";
 import {
@@ -109,10 +110,22 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
               <p className="text-sm mt-1">任务将由 Agent 自动创建</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {filteredTasks.map((task) => (
-                <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between shadow-sm hover:shadow-md transition-all">
-                  <div className="flex-1 min-w-0">
+            <div className="flex flex-col gap-3">
+              <AnimatePresence initial={false}>
+                {filteredTasks.map((task) => (
+                  <motion.div
+                    key={task.id}
+                    layout
+                    initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                    transition={{
+                      layout: { type: 'spring', stiffness: 500, damping: 35 },
+                      opacity: { duration: 0.2 },
+                      scale: { duration: 0.2 },
+                    }}
+                    className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between shadow-sm hover:shadow-md transition-shadow"
+                  >                  <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-semibold text-lg truncate">{task.title}</p>
                       <TaskPriorityBadge priority={task.priority} />
@@ -139,8 +152,9 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
                     </div>
                     <TaskStatusBadge status={task.status} />
                   </div>
-                </div>
+                </motion.div>
               ))}
+              </AnimatePresence>
             </div>
           )}
         </div>

@@ -202,21 +202,31 @@ body {
 
 /* Glass effect variables */
 :root[data-glass-effect] {
-  --glass-bg-opacity: 0.40;
-  --glass-panel-opacity: 0.22;
-  --glass-surface-opacity: 0.35;
+  --glass-bg-opacity: 0.30;
+  --glass-panel-opacity: 0.15;
+  --glass-surface-opacity: 0.65;
+  --glass-chat-surface-opacity: 0.12;
+  --glass-overlay-opacity: 0.50;
   --glass-blur: 24px;
   --glass-blur-heavy: 32px;
   --glass-ring-opacity: 0.16;
 }
 
+/* Dedicated overlay baked into the background image itself — no extra stacking layer.
+ * Uses multiple backgrounds: color overlay on top of image. */
+:root[data-glass-effect][data-has-background] body {
+  background-image:
+    linear-gradient(rgb(var(--background-rgb) / var(--glass-overlay-opacity)), rgb(var(--background-rgb) / var(--glass-overlay-opacity))),
+    var(--background-image);
+}
+
 /*
- * Prevent opacity stacking: generic bg-background layers (body, layout wrappers)
- * get reduced opacity so the background image can reach the actual glass elements.
+ * Make generic bg-background layers fully transparent when glass is active,
+ * since the background overlay handles the global tint.
  */
-:root[data-glass-effect] .bg-background,
-:root[data-glass-effect] [class*="bg-background/"] {
-  background-color: rgb(var(--background-rgb) / 0.65);
+:root[data-glass-effect] .bg-background:not([data-slot="switch-thumb"]),
+:root[data-glass-effect] [class*="bg-background/"]:not([data-slot="switch-thumb"]) {
+  background-color: transparent;
 }
 
 /* ── Chat glass hierarchy ───────────────────────────────────────────────
@@ -236,7 +246,7 @@ body {
 }
 
 :root[data-glass-effect] .chat-glass-surface {
-  background-color: rgb(var(--card-rgb) / var(--glass-surface-opacity)) !important;
+  background-color: rgb(var(--card-rgb) / var(--glass-chat-surface-opacity)) !important;
   border-color: rgb(var(--border-rgb) / 0.4);
 }
 

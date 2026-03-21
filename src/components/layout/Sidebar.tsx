@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   Plus,
   MoreVertical,
@@ -245,7 +246,7 @@ export function Sidebar() {
         <ScrollArea className="flex-1 min-h-0 [&>[data-slot=scroll-area-viewport]>div]:block!">
           <div
             key={showArchived ? 'archived' : 'active'}
-            className="space-y-1 p-2 animate-in fade-in slide-in-from-left-2 duration-300"
+            className="flex flex-col gap-1 p-2 animate-in fade-in slide-in-from-left-2 duration-300"
           >
             {displayedSessions.length === 0 && !isLoading && (
                <div className="text-center text-muted-foreground text-sm py-4">
@@ -253,15 +254,25 @@ export function Sidebar() {
                </div>
             )}
 
-            {displayedSessions.map((session) => (
-              <div
-                key={session.id}
-                onClick={() => router.push(`/chat?sessionId=${session.id}`)}
-                className={cn(
-                  'group relative flex items-center gap-2 px-3 py-2 cursor-pointer transition-all border border-border rounded-lg hover:bg-accent/30 active:bg-accent/50',
-                  currentSessionId === session.id && 'bg-primary/10 border-primary/30 shadow-sm'
-                )}
-              >
+            <AnimatePresence initial={false}>
+              {displayedSessions.map((session) => (
+                <motion.div
+                  key={session.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, x: -40 }}
+                  transition={{
+                    layout: { type: 'spring', stiffness: 500, damping: 35 },
+                    opacity: { duration: 0.2 },
+                    scale: { duration: 0.2 },
+                  }}
+                  onClick={() => router.push(`/chat?sessionId=${session.id}`)}
+                  className={cn(
+                    'group relative flex items-center gap-2 px-3 py-2 cursor-pointer transition-colors border border-border rounded-lg hover:bg-accent/30 active:bg-accent/50',
+                    currentSessionId === session.id && 'bg-primary/10 border-primary/30 shadow-sm'
+                  )}
+                >
                 <div className="flex-1 min-w-0 pr-7">
                   <div className="flex items-center gap-1.5">
                      <span className={cn("font-medium text-sm truncate", currentSessionId === session.id ? "text-foreground" : "text-muted-foreground")}>
@@ -331,8 +342,9 @@ export function Sidebar() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-              </div>
+              </motion.div>
             ))}
+            </AnimatePresence>
           </div>
         </ScrollArea>
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { AgentActivity, AgentMessage } from '@/types/agent';
 
 interface RealTimeMonitorProps {
@@ -24,13 +25,20 @@ export const RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
         </div>
       </div>
 
-      <div className="space-y-4 max-h-96 overflow-y-auto">
+      <div className="flex flex-col gap-4 max-h-96 overflow-y-auto">
         {activities.length === 0 && messages.length === 0 ? (
           <div className="text-center text-gray-500 py-8">暂无活动数据</div>
         ) : (
-          <>
+          <AnimatePresence initial={false}>
             {activities.slice(0, 10).map((activity, index) => (
-              <div key={index} className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <motion.div
+                key={`${activity.agentName}-${activity.timestamp}-${index}`}
+                initial={{ opacity: 0, y: -12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.25, delay: index * 0.03 }}
+                className="flex items-start gap-3 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              >
                 <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm">
                   {activity.agentName.charAt(0)}
                 </div>
@@ -39,9 +47,9 @@ export const RealTimeMonitor: React.FC<RealTimeMonitorProps> = ({
                   <div className="text-sm text-gray-500">{activity.details || activity.action}</div>
                   <div className="text-xs text-gray-400 mt-1">{new Date(activity.timestamp).toLocaleTimeString()}</div>
                 </div>
-              </div>
+              </motion.div>
             ))}
-          </>
+          </AnimatePresence>
         )}
       </div>
     </div>

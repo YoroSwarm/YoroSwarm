@@ -1,9 +1,8 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Agent } from '@/types/agent';
-
-interface AgentListProps {
   agents: Agent[];
   onAgentClick: (agent: Agent) => void;
   selectedAgentId?: string;
@@ -36,20 +35,30 @@ export const AgentList: React.FC<AgentListProps> = ({
   };
 
   return (
-    <div className="space-y-3">
-      {agents.map((agent) => {
+    <div className="flex flex-col gap-3">
+      <AnimatePresence initial={false}>
+        {agents.map((agent) => {
         const status = statusConfig[agent.status];
         const type = typeConfig[agent.type];
         const isSelected = selectedAgentId === agent.id;
 
         return (
-          <div
+          <motion.div
             key={agent.id}
+            layout
+            initial={{ opacity: 0, scale: 0.95, y: -8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, x: -30 }}
+            transition={{
+              layout: { type: 'spring', stiffness: 500, damping: 35 },
+              opacity: { duration: 0.2 },
+              scale: { duration: 0.2 },
+            }}
             onClick={() => onAgentClick(agent)}
             className={`
               relative p-4 rounded-lg border-2 cursor-pointer
-              transition-all duration-200 ease-in-out
-              hover:shadow-md hover:scale-[1.02]
+              transition-colors duration-200 ease-in-out
+              hover:shadow-md
               dark:bg-gray-800 dark:border-gray-700
               ${isSelected
                 ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -121,9 +130,10 @@ export const AgentList: React.FC<AgentListProps> = ({
               <span>消息: {agent.messageCount}</span>
               <span>已完成: {agent.completedTasks}</span>
             </div>
-          </div>
+          </motion.div>
         );
       })}
+      </AnimatePresence>
     </div>
   );
 };

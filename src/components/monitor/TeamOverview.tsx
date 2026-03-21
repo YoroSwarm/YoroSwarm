@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { SessionSummary } from '@/types/agent';
 import type { SwarmSessionMonitorResponse } from '@/lib/api/swarm-sessions';
 
@@ -99,8 +100,21 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
               <div className="mt-3 space-y-3">
                 {teammateUsage.length === 0 ? (
                   <div className="text-sm text-gray-500 dark:text-gray-400">暂无 teammate token 数据</div>
-                ) : teammateUsage.map((item) => (
-                  <div key={item.agent_id} className="rounded-lg bg-white/80 px-3 py-2 dark:bg-gray-800/70">
+                ) : (
+                  <AnimatePresence initial={false}>
+                    {teammateUsage.map((item) => (
+                      <motion.div
+                        key={item.agent_id}
+                        layout
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{
+                          layout: { type: 'spring', stiffness: 500, damping: 35 },
+                          opacity: { duration: 0.2 },
+                        }}
+                        className="rounded-lg bg-white/80 px-3 py-2 dark:bg-gray-800/70"
+                      >
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="text-sm font-medium text-gray-900 dark:text-white">{item.agent_name}</div>
@@ -111,8 +125,9 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
                     <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                       输入 {formatTokenCount(item.usage.input_tokens)} / 输出 {formatTokenCount(item.usage.output_tokens)} / 缓存率 {formatPercent(item.usage.cache_hit_rate)}
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
+                </AnimatePresence>
               </div>
             </div>
           </div>

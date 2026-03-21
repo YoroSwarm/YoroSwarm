@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
@@ -167,12 +168,22 @@ export function EnvVarsManager() {
 
       {/* 已有变量 */}
       {entries.length > 0 && (
-        <div className="space-y-2">
-          {entries.map((entry) => (
-            <div
-              key={entry.key}
-              className="flex items-center gap-2 border rounded-lg p-2"
-            >
+        <div className="flex flex-col gap-2">
+          <AnimatePresence initial={false}>
+            {entries.map((entry) => (
+              <motion.div
+                key={entry.key}
+                layout
+                initial={{ opacity: 0, scale: 0.95, y: -6 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                transition={{
+                  layout: { type: 'spring', stiffness: 500, damping: 35 },
+                  opacity: { duration: 0.2 },
+                  scale: { duration: 0.2 },
+                }}
+                className="flex items-center gap-2 border rounded-lg p-2"
+              >
               <code className="text-sm font-mono bg-muted px-2 py-1 rounded min-w-[120px]">
                 {entry.key}
               </code>
@@ -254,8 +265,9 @@ export function EnvVarsManager() {
                   </Button>
                 </>
               )}
-            </div>
-          ))}
+              </motion.div>
+            ))}
+          </AnimatePresence>
         </div>
       )}
 

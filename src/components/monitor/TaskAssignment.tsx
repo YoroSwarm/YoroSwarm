@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import type { Agent, Task } from '@/types/agent';
 
 interface TaskAssignmentProps {
@@ -42,12 +43,25 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4">任务分配</h2>
 
-      <div className="space-y-3">
+      <div className="flex flex-col gap-3">
         {tasks.length === 0 ? (
           <div className="text-center text-gray-500 py-8">暂无任务</div>
         ) : (
-          tasks.map((task) => (
-            <div key={task.id} className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+          <AnimatePresence initial={false}>
+            {tasks.map((task) => (
+              <motion.div
+                key={task.id}
+                layout
+                initial={{ opacity: 0, scale: 0.95, y: -8 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, x: -30 }}
+                transition={{
+                  layout: { type: 'spring', stiffness: 500, damping: 35 },
+                  opacity: { duration: 0.2 },
+                  scale: { duration: 0.2 },
+                }}
+                className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              >
               <div className="flex-1">
                 <div className="font-medium text-gray-900 dark:text-white">{task.title}</div>
                 <div className="text-sm text-gray-500 dark:text-gray-400">{task.description}</div>
@@ -81,8 +95,9 @@ export const TaskAssignment: React.FC<TaskAssignmentProps> = ({
                   <option value="cancelled">已取消</option>
                 </select>
               </div>
-            </div>
-          ))
+            </motion.div>
+          ))}
+          </AnimatePresence>
         )}
       </div>
 
