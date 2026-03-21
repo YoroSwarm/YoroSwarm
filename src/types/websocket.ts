@@ -123,7 +123,7 @@ export interface AgentThinkingPayload {
   agent_id: string;
   agent_name: string;
   swarm_session_id: string;
-  status: 'start' | 'thinking' | 'end' | 'response';
+  status: 'start' | 'thinking' | 'end' | 'response' | 'bubble';
   content?: string;
   entry_id?: string;
   timestamp: string;

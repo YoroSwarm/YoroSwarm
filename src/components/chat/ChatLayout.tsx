@@ -172,7 +172,32 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
       }
 
       if (message.type === 'chat_message') {
-        appendRealtimeMessage(message.payload as ChatMessagePayload);
+        const chatPayload = message.payload as ChatMessagePayload & { sender_type?: string; message_type?: string };
+        appendRealtimeMessage(chatPayload as Parameters<typeof appendRealtimeMessage>[0]);
+        // Update session list preview with latest message
+        const isUserMsg = chatPayload.sender_type === 'user';
+        setSessions((prev) =>
+          prev.map((s) => {
+            if (s.id !== resolvedSessionId) return s;
+            return {
+              ...s,
+              lastMessage: {
+                id: chatPayload.id,
+                sessionId: resolvedSessionId,
+                type: chatPayload.message_type === 'file' ? 'file' as const : 'text' as const,
+                content: chatPayload.content,
+                sender: {
+                  id: chatPayload.sender_id,
+                  type: isUserMsg ? 'user' as const : 'agent' as const,
+                  name: isUserMsg ? '我' : chatPayload.sender_name || 'Swarm',
+                },
+                status: 'received' as const,
+                createdAt: chatPayload.created_at || chatPayload.timestamp || new Date().toISOString(),
+              },
+              updatedAt: chatPayload.created_at || chatPayload.timestamp || new Date().toISOString(),
+            };
+          })
+        );
         return;
       }
       if (message.type === 'agent_thinking' || message.type === 'tool_activity') {

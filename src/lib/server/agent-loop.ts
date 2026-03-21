@@ -61,6 +61,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     stopOnSuccessfulTools = [],
     shouldStopAfterToolCall,
     abortSignal,
+    agentType,
   } = options
 
   // Check if aborted before starting
@@ -236,25 +237,17 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     currentModel = response.model
 
     // Capture provider reasoning/thinking content (e.g., Anthropic thinking blocks)
+    // Persist real thinking to DB and broadcast
+    let messageSeq = 0
     if (response.reasoningContent) {
       thinkingContent.push(response.reasoningContent)
-    }
 
-    // Message sequence counter for this iteration to ensure ordering
-    let messageSeq = 0
-
-    // Broadcast thinking content if LLM returned text alongside tool calls
-    if (textContent) {
-      // Record thinking content for persistence
-      thinkingContent.push(textContent)
-
-      // Persist thinking to DB so it appears in historical view
       const thinkingEntry = await appendAgentContextEntry({
         swarmSessionId,
         agentId,
         sourceType: 'llm',
         entryType: 'thinking',
-        content: textContent,
+        content: response.reasoningContent,
       })
 
       publishRealtimeMessage(
@@ -265,7 +258,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             agent_name: agentName,
             swarm_session_id: swarmSessionId,
             status: 'thinking',
-            content: textContent,
+            content: response.reasoningContent,
             entry_id: thinkingEntry?.id,
             timestamp: new Date().toISOString(),
             seq: messageSeq++,
@@ -279,6 +272,34 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     if (response.stopReason === 'tool_use' && toolUseBlocks.length > 0) {
       // Add assistant message with all content blocks
       messages.push({ role: 'assistant', content: response.content })
+
+      // Record Lead's text output alongside tool calls as bubble message
+      if (textContent && agentType === 'lead') {
+        const bubbleEntry = await appendAgentContextEntry({
+          swarmSessionId,
+          agentId,
+          sourceType: 'llm',
+          entryType: 'bubble',
+          content: textContent,
+        })
+
+        publishRealtimeMessage(
+          {
+            type: 'agent_thinking',
+            payload: {
+              agent_id: agentId,
+              agent_name: agentName,
+              swarm_session_id: swarmSessionId,
+              status: 'bubble',
+              content: textContent,
+              entry_id: bubbleEntry?.id,
+              timestamp: new Date().toISOString(),
+              seq: messageSeq++,
+            },
+          },
+          { sessionId: swarmSessionId }
+        )
+      }
 
       const toolResults: ToolResultBlock[] = []
 
@@ -569,30 +590,33 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       if (textContent) {
         messages.push({ role: 'assistant', content: textContent })
 
-        const entry = await appendAgentContextEntry({
-          swarmSessionId,
-          agentId,
-          sourceType: 'llm',
-          entryType: 'assistant_response',
-          content: textContent,
-          metadata: { truncated: true, continuation: maxTokensContinuations },
-        })
+        // Record as bubble message for Lead only; discard for non-Lead
+        if (agentType === 'lead') {
+          const entry = await appendAgentContextEntry({
+            swarmSessionId,
+            agentId,
+            sourceType: 'llm',
+            entryType: 'bubble',
+            content: textContent,
+            metadata: { truncated: true, continuation: maxTokensContinuations },
+          })
 
-        publishRealtimeMessage(
-          {
-            type: 'agent_thinking',
-            payload: {
-              agent_id: agentId,
-              agent_name: agentName,
-              swarm_session_id: swarmSessionId,
-              status: 'response',
-              content: textContent,
-              entry_id: entry?.id,
-              timestamp: new Date().toISOString(),
+          publishRealtimeMessage(
+            {
+              type: 'agent_thinking',
+              payload: {
+                agent_id: agentId,
+                agent_name: agentName,
+                swarm_session_id: swarmSessionId,
+                status: 'bubble',
+                content: textContent,
+                entry_id: entry?.id,
+                timestamp: new Date().toISOString(),
+              },
             },
-          },
-          { sessionId: swarmSessionId }
-        )
+            { sessionId: swarmSessionId }
+          )
+        }
       }
 
       // Add continuation prompt to encourage LLM to keep going
@@ -604,16 +628,16 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Continue the loop — next iteration will call LLM again
     } else {
       // LLM returned text without tool calls — loop ends
-      if (textContent) {
+      // Record as bubble message for Lead only; discard for non-Lead
+      if (textContent && agentType === 'lead') {
         const entry = await appendAgentContextEntry({
           swarmSessionId,
           agentId,
           sourceType: 'llm',
-          entryType: 'assistant_response',
+          entryType: 'bubble',
           content: textContent,
         })
 
-        // Broadcast assistant response so frontend can display it in real-time
         publishRealtimeMessage(
           {
             type: 'agent_thinking',
@@ -621,7 +645,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               agent_id: agentId,
               agent_name: agentName,
               swarm_session_id: swarmSessionId,
-              status: 'response',
+              status: 'bubble',
               content: textContent,
               entry_id: entry?.id,
               timestamp: new Date().toISOString(),

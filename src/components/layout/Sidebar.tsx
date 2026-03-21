@@ -187,10 +187,10 @@ export function Sidebar() {
       {/* 1. Logo (Return to Dashboard) + Close Button */}
       <div className="h-16 flex items-center justify-between border-b border-border px-4 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
-          <div className="w-8 h-8 rounded-lg bg-black/30 flex items-center justify-center shrink-0 border border-border/50 group-hover:border-border transition-all shadow-md group-hover:shadow-lg">
-            <Image src="/icon.svg" alt="Swarm" width={24} height={24} />
+          <div className="w-10 h-10 flex items-center justify-center shrink-0">
+            <Image src="/icon.svg" alt="Swarm" width={32} height={32} />
           </div>
-          <span className="font-semibold text-xl text-foreground group-hover:translate-x-1 transition-transform">Swarm</span>
+          <span className="font-semibold text-xl text-foreground group-hover:text-primary/80 transition-colors">Swarm</span>
         </Link>
         <Button
           variant="ghost"

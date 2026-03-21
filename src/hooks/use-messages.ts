@@ -5,6 +5,7 @@ import { swarmSessionsApi, type ExternalMessageResponse, type SendExternalMessag
 import { filesApi } from '@/lib/api/files';
 import type { Agent, Message, ToolCall } from '@/types/chat';
 import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload, ExecutionStatusUpdate } from '@/types/websocket';
+import { useAuthStore } from '@/stores/authStore';
 
 export interface ToolCallState {
   toolName: string;
@@ -74,7 +75,7 @@ function mergeUniqueMessages(existing: Message[], incoming: Message[]): Message[
 
 const EMPTY_PARTICIPANTS: Agent[] = [];
 
-function convertExternalMessage(message: ExternalMessageResponse, participants: Agent[]): Message {
+function convertExternalMessage(message: ExternalMessageResponse, participants: Agent[], userAvatar?: string): Message {
   const lead = participants.find((participant) => participant.role === 'lead');
   const isUser = message.sender_type === 'user';
 
@@ -97,6 +98,7 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
       id: message.sender_id || (isUser ? 'user' : lead?.id || 'lead'),
       type: isUser ? 'user' : 'agent',
       name: isUser ? '我' : lead?.name || 'Swarm',
+      avatar: isUser ? userAvatar : undefined,
     },
     status: 'received',
     createdAt: message.created_at,
@@ -115,6 +117,7 @@ export function useMessages(options: UseMessagesOptions) {
   const [hasMore, setHasMore] = useState(false);
   const optimisticIds = useRef(new Set<string>());
   const [streamingStateMap, setStreamingStateMap] = useState<StreamingStateMap>(new Map());
+  const userAvatar = useAuthStore((s) => s.user?.avatar);
 
   // Get all active streaming states (agents that are thinking or have recent activity)
   // Also include agents that are marked as 'busy' in participants
@@ -172,6 +175,8 @@ export function useMessages(options: UseMessagesOptions) {
   // Use ref for participantMap inside loadMessages to prevent unnecessary recreation
   const participantMapRef = useRef(participantMap);
   useEffect(() => { participantMapRef.current = participantMap; }, [participantMap]);
+  const userAvatarRef = useRef(userAvatar);
+  useEffect(() => { userAvatarRef.current = userAvatar; }, [userAvatar]);
 
   const loadMessages = useCallback(async (_isLoadMore = false) => {
     if (!sessionId) return;
@@ -189,7 +194,7 @@ export function useMessages(options: UseMessagesOptions) {
       const currentParticipants = participantMapRef.current;
 
       // Convert external messages
-      const externalMessages = messagesResponse.items.map((message) => convertExternalMessage(message, currentParticipants));
+      const externalMessages = messagesResponse.items.map((message) => convertExternalMessage(message, currentParticipants, userAvatarRef.current));
 
       // Convert agent activities to individual messages (chronological order)
       // Process in order to handle tool_result -> tool_call associations
@@ -218,7 +223,7 @@ export function useMessages(options: UseMessagesOptions) {
             },
           });
         } else if (activity.activityType === 'assistant_response') {
-          // Lead communicates only via reply_to_user tool — skip its raw responses
+          // Legacy: Lead communicates only via reply_to_user tool — skip its raw responses
           const activityIsLead = currentParticipants.some(
             (p) => p.id === activity.agentId && p.role === 'lead'
           );
@@ -240,6 +245,24 @@ export function useMessages(options: UseMessagesOptions) {
               },
             });
           }
+        } else if (activity.activityType === 'bubble') {
+          // Lead's normal output (not via reply_to_user) — show as bubble message
+          activityMessages.push({
+            id: activity.id,
+            sessionId,
+            type: 'text' as const,
+            content: activity.content,
+            sender: {
+              id: activity.agentId,
+              type: 'agent' as const,
+              name: activity.agentName,
+            },
+            status: 'received' as const,
+            createdAt: activity.createdAt,
+            metadata: {
+              activityType: 'bubble',
+            },
+          });
         } else if (isToolCall) {
           // Show ALL tool calls (no isHighSignalTool filter — consistent with real-time)
           activityMessages.push({
@@ -365,6 +388,7 @@ export function useMessages(options: UseMessagesOptions) {
         name: incoming.sender_type === 'user'
           ? '我'
           : participantMapRef.current.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Swarm',
+        avatar: incoming.sender_type === 'user' ? userAvatarRef.current : undefined,
       },
       status: 'received',
       createdAt: incoming.created_at || incoming.timestamp,
@@ -440,7 +464,7 @@ export function useMessages(options: UseMessagesOptions) {
           sessionId: activeSessionId,
           type: uploadedFiles.length > 0 && !trimmed ? 'file' : 'text',
           content: displayContent,
-          sender: { id: 'user', type: 'user', name: '我' },
+          sender: { id: 'user', type: 'user', name: '我', avatar: userAvatarRef.current },
           status: 'sending',
           createdAt: new Date().toISOString(),
           attachments: uploadedFiles.map(f => ({
@@ -477,7 +501,7 @@ export function useMessages(options: UseMessagesOptions) {
         }
 
         const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);
-        const serverMessage = convertExternalMessage(response, participantMapRef.current);
+        const serverMessage = convertExternalMessage(response, participantMapRef.current, userAvatarRef.current);
         
         setMessages((prev) => {
           // 如果 WebSocket 已经推送了这条消息，直接删除临时消息
@@ -573,7 +597,7 @@ export function useMessages(options: UseMessagesOptions) {
             });
           }
         } else if (data.status === 'response' && data.content) {
-          // Lead communicates via reply_to_user tool only — skip raw assistant responses
+          // Legacy: Lead communicates via reply_to_user tool only — skip raw assistant responses
           const isLead = participantMapRef.current.some(
             (p) => p.id === agentId && p.role === 'lead'
           );
@@ -608,6 +632,34 @@ export function useMessages(options: UseMessagesOptions) {
               ]);
             });
           }
+        } else if (data.status === 'bubble' && data.content) {
+          // Lead's normal output — show as bubble message
+          const bubbleId = data.entry_id || `bubble-${agentId}-${Date.now()}`;
+          const bubbleContent = data.content;
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === bubbleId)) {
+              return prev;
+            }
+            return sortMessages([
+              ...prev,
+              {
+                id: bubbleId,
+                sessionId: sessionId || '',
+                type: 'text' as const,
+                content: bubbleContent,
+                sender: {
+                  id: agentId,
+                  type: 'agent' as const,
+                  name: data.agent_name,
+                },
+                status: 'received' as const,
+                createdAt: new Date().toISOString(),
+                metadata: {
+                  activityType: 'bubble',
+                },
+              },
+            ]);
+          });
         } else if (data.status === 'end') {
           const current = newMap.get(agentId);
           if (current) {

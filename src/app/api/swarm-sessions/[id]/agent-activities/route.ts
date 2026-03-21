@@ -9,7 +9,7 @@ export interface AgentActivityItem {
   agentName: string
   agentRole: 'lead' | 'teammate'
   agentKind: string
-  activityType: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response'
+  activityType: 'thinking' | 'tool_call' | 'tool_result' | 'assistant_response' | 'bubble'
   content: string
   metadata?: {
     toolName?: string
@@ -52,7 +52,7 @@ export async function GET(
       where: {
         swarmSessionId: id,
         entryType: {
-          in: ['thinking', 'tool_call', 'tool_result', 'assistant_response', 'progress_update'],
+          in: ['thinking', 'tool_call', 'tool_result', 'assistant_response', 'bubble', 'progress_update'],
         },
       },
       orderBy: { createdAt: 'asc' },
@@ -85,6 +85,12 @@ export async function GET(
         items.push({
           ...baseItem,
           activityType: 'assistant_response' as const,
+          content: entry.content,
+        })
+      } else if (entry.entryType === 'bubble') {
+        items.push({
+          ...baseItem,
+          activityType: 'bubble' as const,
           content: entry.content,
         })
       } else if (entry.entryType === 'tool_call') {
