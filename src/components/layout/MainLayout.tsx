@@ -24,7 +24,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <div
         className={`
           shrink-0 overflow-hidden transition-all duration-300 ease-in-out
-          ${sidebarOpen ? 'w-72 opacity-100' : 'w-0 opacity-0'}
+          ${sidebarOpen ? 'w-64 opacity-100' : 'w-0 opacity-0'}
         `}
       >
         <Sidebar />

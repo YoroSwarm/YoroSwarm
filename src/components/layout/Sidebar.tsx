@@ -180,7 +180,7 @@ export function Sidebar() {
       <aside
         className={cn(
           'h-screen bg-card border-r border-border flex flex-col transition-all duration-300 relative z-20 shrink-0',
-          'w-72 transition-colors duration-200',
+          'w-64 transition-colors duration-200',
           glassEffect && 'backdrop-blur'
         )}
       >

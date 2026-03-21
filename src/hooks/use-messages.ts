@@ -885,6 +885,9 @@ export function useMessages(options: UseMessagesOptions) {
 
   useEffect(() => {
     if (autoLoad && sessionId) {
+      // Clear old messages immediately to avoid showing stale content during load
+      setMessages([]);
+      setStreamingStateMap(new Map());
       void loadMessagesRef.current();
     }
   }, [autoLoad, sessionId]); // Only re-run on sessionId change, not loadMessages recreation

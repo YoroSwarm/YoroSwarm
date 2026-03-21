@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import { formatMessageGroup } from '@/lib/utils/date';
 import { MessageItem } from './MessageItem';
 import { ThinkingIndicator } from './ThinkingIndicator';
+import { SwarmLoader } from '@/components/ui/swarm-loader';
 import { Loader2 } from 'lucide-react';
 import type { Message, Agent } from '@/types/chat';
 import type { StreamingState, AgentStreamingState } from '@/hooks/use-messages';
@@ -22,7 +23,7 @@ interface MessageListProps {
   className?: string;
 }
 
-export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], className }: MessageListProps) {
+export const MessageList = memo(function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
   const isUserScrolling = useRef(false);
@@ -115,6 +116,10 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           <span className="ml-2 text-sm text-muted-foreground">加载历史消息...</span>
         </div>
+      )}
+
+      {isLoading && messages.length === 0 && (
+        <SwarmLoader text="加载消息..." className="h-full" />
       )}
 
       <div className="space-y-6">
@@ -238,4 +243,4 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
       <div className="h-4" />
     </div>
   );
-}
+});

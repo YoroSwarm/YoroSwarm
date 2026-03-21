@@ -20,9 +20,9 @@ export default function DashboardLayout({
       <div
         className={`
           shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out
-          ${sidebarOpen ? 'ml-0' : '-ml-72'}
+          ${sidebarOpen ? 'ml-0' : '-ml-64'}
         `}
-        style={{ width: '18rem' }}
+        style={{ width: '16rem' }}
       >
         <Sidebar />
       </div>
@@ -33,7 +33,7 @@ export default function DashboardLayout({
           onToggleSidebar={() => setSidebarOpen(true)}
           onSearchClick={() => setSearchOpen(true)}
         />
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden">
           {children}
         </main>
       </div>
