@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, MessageSquare, Settings, User, ArrowRight, MessagesSquare } from 'lucide-react';
+import { Search, MessageSquare, Settings, User, ArrowRight, MessagesSquare, HelpCircle } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ const staticPages: SearchResult[] = [
   { id: 'dashboard', type: 'page', title: '仪表盘', description: '查看概览和统计', icon: <ArrowRight className="w-4 h-4" />, href: '/' },
   { id: 'settings', type: 'page', title: '偏好设置', description: '外观和通知', icon: <Settings className="w-4 h-4" />, href: '/settings' },
   { id: 'profile', type: 'page', title: '个人资料', description: '头像、昵称和密码', icon: <User className="w-4 h-4" />, href: '/profile' },
+  { id: 'help', type: 'page', title: '帮助文档', description: '使用指南和常见问题', icon: <HelpCircle className="w-4 h-4" />, href: '/help' },
 ];
 
 const typeLabels: Record<string, string> = {

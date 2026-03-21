@@ -30,9 +30,8 @@ export function StoreProvider({ children }: StoreProviderProps) {
   if (!isHydrated || showSplash) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="animate-pulse flex flex-col items-center gap-4">
+        <div className="animate-pulse flex items-center justify-center">
           <img src="/icon.svg" alt="Swarm" className="w-20 h-20" />
-          <span className="text-2xl font-bold text-muted-foreground tracking-[0.35em]">SWARM</span>
         </div>
       </div>
     );

@@ -1,8 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { Search, PanelLeft, Settings, User, LogOut } from 'lucide-react';
+import { Search, PanelLeft, Settings, User, LogOut, HelpCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
@@ -26,6 +27,13 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
   const { user, logout } = useAuthStore();
   const { glassEffect } = useLeadPreferencesStore();
   const router = useRouter();
+  const pathname = usePathname();
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
+  // Close popover on route change
+  useEffect(() => {
+    setPopoverOpen(false);
+  }, [pathname]);
 
   return (
     <header className={`h-16 bg-card border-b border-border flex items-center justify-between px-6 sticky top-0 z-50 transition-colors duration-200${glassEffect ? ' backdrop-blur' : ''}`}>
@@ -60,7 +68,7 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
         <ThemeToggle />
 
         {/* 用户头像 */}
-        <Popover>
+        <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
           <PopoverTrigger asChild>
             <button className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-accent transition-colors">
               <Avatar className="h-8 w-8 border border-border">
@@ -83,16 +91,20 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
             </div>
             <Separator className="my-1" />
             <div className="space-y-0.5">
-              <Button variant="ghost" className="w-full justify-start font-medium text-sm h-9" onClick={() => router.push('/profile')}>
+              <Button variant="ghost" className="w-full justify-start font-medium text-sm h-9" onClick={() => { setPopoverOpen(false); router.push('/profile'); }}>
                 <User className="w-4 h-4 mr-2" />
                 个人资料
               </Button>
-              <Button variant="ghost" className="w-full justify-start font-medium text-sm h-9" onClick={() => router.push('/settings')}>
+              <Button variant="ghost" className="w-full justify-start font-medium text-sm h-9" onClick={() => { setPopoverOpen(false); router.push('/settings'); }}>
                 <Settings className="w-4 h-4 mr-2" />
                 偏好设置
               </Button>
+              <Button variant="ghost" className="w-full justify-start font-medium text-sm h-9" onClick={() => { setPopoverOpen(false); router.push('/help'); }}>
+                <HelpCircle className="w-4 h-4 mr-2" />
+                帮助文档
+              </Button>
               <Separator className="my-1" />
-              <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive font-medium text-sm h-9" onClick={logout}>
+              <Button variant="ghost" className="w-full justify-start text-destructive hover:text-destructive font-medium text-sm h-9" onClick={async () => { setPopoverOpen(false); await logout(); router.push('/login'); }}>
                 <LogOut className="w-4 h-4 mr-2" />
                 退出登录
               </Button>
