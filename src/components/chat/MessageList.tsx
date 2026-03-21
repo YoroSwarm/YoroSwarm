@@ -159,7 +159,7 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                     }
                     
                     elements.push(
-                      <div key={`compact-group-${compactGroup[0].msg.id}`} className="flex flex-wrap gap-1 items-start ml-10">
+                      <div key={`compact-group-${compactGroup[0].msg.id}`} className="flex flex-wrap gap-1 items-start ml-10 animate-slide-up">
                         {compactGroup.map(({ msg, idx }) => {
                           const prev = idx > 0 ? msgs[idx - 1] : undefined;
                           const showAvatar = !prev || prev.sender.id !== msg.sender.id;

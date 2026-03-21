@@ -16,14 +16,15 @@ export function ApprovalCards({ approvals, onDecision, onAlwaysAllow, className 
 
   return (
     <div className={cn('space-y-3', className)}>
-      {approvals.map((approval) => (
-        <ApprovalCard
-          key={approval.id}
-          approval={approval}
-          onApprove={() => onDecision(approval.id, 'approve')}
-          onReject={() => onDecision(approval.id, 'reject')}
-          onAlwaysAllow={onAlwaysAllow}
-        />
+      {approvals.map((approval, index) => (
+        <div key={approval.id} className="animate-slide-up" style={{ animationDelay: `${index * 50}ms` }}>
+          <ApprovalCard
+            approval={approval}
+            onApprove={() => onDecision(approval.id, 'approve')}
+            onReject={() => onDecision(approval.id, 'reject')}
+            onAlwaysAllow={onAlwaysAllow}
+          />
+        </div>
       ))}
     </div>
   )

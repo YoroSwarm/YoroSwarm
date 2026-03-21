@@ -35,8 +35,20 @@ import {
 /**
  * 构建带有时间戳的 Lead 系统提示
  */
-function buildLeadSystemPrompt(createdAt: Date, timezone: string): string {
-  return LEAD_SYSTEM_PROMPT_BASE + buildTimeInfoSection(createdAt, timezone)
+function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null): string {
+  let prompt = LEAD_SYSTEM_PROMPT_BASE
+
+  // 如果用户配置了 Lead 昵称，注入到系统提示词中
+  if (leadNickname && leadNickname.trim().length > 0) {
+    prompt += `
+
+## 你的身份
+- 你的昵称是「${leadNickname.trim()}」
+- 在回复用户时，你可以使用这个昵称来自我介绍`
+
+  }
+
+  return prompt + buildTimeInfoSection(createdAt, timezone)
 }
 
 const LEAD_SYSTEM_PROMPT_BASE = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
@@ -187,6 +199,9 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
 
   const timezone = await getUserTimezone(userId)
 
+  // 获取 Lead 昵称（用于系统提示词注入）
+  const leadNickname = (await getLeadPreferences(userId)).leadNickname
+
   // 如果已经初始化，先清理
   if (leadProcessors.has(key)) {
     const existing = leadProcessors.get(key)!
@@ -212,7 +227,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
     userId,
     llmConfig: {
-      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone),
+      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone, leadNickname),
       agentName: 'Team Lead',
       tools: leadTools,
       executeTool: buildLeadToolExecutor(input),
@@ -458,7 +473,7 @@ ${messageSummary}
   // 执行LLM循环
   const communicationToolCounts = new Map<string, number>()
   const result = await runAgentLoop({
-    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone),
+    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone, preferences.leadNickname),
     agentId: leadAgentId,
     agentName: 'Team Lead',
     swarmSessionId,

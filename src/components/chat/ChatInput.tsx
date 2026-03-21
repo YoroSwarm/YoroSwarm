@@ -371,7 +371,10 @@ export function ChatInput({
         </button>
       </div>
 
-      <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground px-1">
+      <div className={cn(
+        "flex items-center justify-between text-xs text-muted-foreground px-1 overflow-hidden transition-all duration-300",
+        isFocused ? "mt-2 opacity-100 max-h-5" : "mt-0 opacity-0 max-h-0"
+      )}>
         <span>Shift + Enter 换行</span>
         <span>@ 提及Agent</span>
       </div>

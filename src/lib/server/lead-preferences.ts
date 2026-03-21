@@ -3,6 +3,7 @@ import prisma from '@/lib/db'
 export interface LeadPreferences {
   agentsMd?: string | null
   soulMd?: string | null
+  leadNickname?: string | null
 }
 
 /**
@@ -17,12 +18,13 @@ export async function getLeadPreferences(userId: string): Promise<LeadPreference
       select: {
         leadAgentsMd: true,
         leadSoulMd: true,
+        leadNickname: true,
       },
     })
 
     if (!user) {
       // console.log('[LeadPreferences] User not found, returning null preferences')
-      return { agentsMd: null, soulMd: null }
+      return { agentsMd: null, soulMd: null, leadNickname: null }
     }
 
     // 检查是否有自定义配置（非 null 且非空字符串）
@@ -38,10 +40,11 @@ export async function getLeadPreferences(userId: string): Promise<LeadPreference
     // })
 
     // 只有当至少有一个自定义配置时才返回
-    if (hasCustomAgents || hasCustomSoul) {
+    if (hasCustomAgents || hasCustomSoul || user.leadNickname) {
       const result = {
         agentsMd: hasCustomAgents ? user.leadAgentsMd! : null,
         soulMd: hasCustomSoul ? user.leadSoulMd! : null,
+        leadNickname: user.leadNickname || null,
       }
       // console.log('[LeadPreferences] 返回配置:', {
       //   agentsMd: result.agentsMd?.substring(0, 50),
@@ -52,9 +55,9 @@ export async function getLeadPreferences(userId: string): Promise<LeadPreference
 
     // 没有自定义配置
     // console.log('[LeadPreferences] 无自定义配置，返回 null')
-    return { agentsMd: null, soulMd: null }
+    return { agentsMd: null, soulMd: null, leadNickname: null }
   } catch (error) {
     console.error('[LeadPreferences] Failed to load from database:', error)
-    return { agentsMd: null, soulMd: null }
+    return { agentsMd: null, soulMd: null, leadNickname: null }
   }
 }

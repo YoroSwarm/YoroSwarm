@@ -508,10 +508,12 @@ export function useMessages(options: UseMessagesOptions) {
         const existing = newMap.get(agentId);
 
         if (data.status === 'start') {
+          // Determine role from participants if not already set
+          const role = existing?.role || (participantMapRef.current.find(p => p.id === agentId)?.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate';
           newMap.set(agentId, {
             agentId,
             agentName: data.agent_name,
-            role: existing?.role || 'teammate',
+            role: role as 'lead' | 'teammate',
             isThinking: true,
             thinkingContent: [],
             toolCalls: existing?.toolCalls || [],
@@ -529,10 +531,12 @@ export function useMessages(options: UseMessagesOptions) {
               });
             }
           } else {
+            // Determine role from participants
+            const role = (participantMapRef.current.find(p => p.id === agentId)?.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate';
             newMap.set(agentId, {
               agentId,
               agentName: data.agent_name,
-              role: 'teammate',
+              role: role as 'lead' | 'teammate',
               isThinking: true,
               thinkingContent: [data.content],
               toolCalls: [],
@@ -651,7 +655,7 @@ export function useMessages(options: UseMessagesOptions) {
         newMap.set(agentId, {
           agentId,
           agentName: data.agent_name,
-          role: existing?.role || 'teammate',
+          role: existing?.role || (participantMapRef.current.find(p => p.id === agentId)?.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate',
           isThinking: true,
           thinkingContent: existing?.thinkingContent || [],
           toolCalls: existing?.toolCalls || [],
@@ -670,10 +674,12 @@ export function useMessages(options: UseMessagesOptions) {
 
         if (data.status === 'calling') {
           const currentToolCalls = existing?.toolCalls || [];
+          // Determine role from participants if not already set
+          const role = existing?.role || (participantMapRef.current.find(p => p.id === agentId)?.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate';
           newMap.set(agentId, {
             agentId,
             agentName: data.agent_name,
-            role: existing?.role || 'teammate',
+            role: role as 'lead' | 'teammate',
             isThinking: existing?.isThinking ?? true,
             thinkingContent: existing?.thinkingContent || [],
             toolCalls: [

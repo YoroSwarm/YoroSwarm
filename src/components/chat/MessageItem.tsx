@@ -28,7 +28,6 @@ import {
   Paperclip,
   X,
   Loader2,
-  EyeOff,
 } from 'lucide-react';
 import type { Message } from '@/types/chat';
 import { FilePreviewDialog } from './FilePreviewDialog';
@@ -776,12 +775,19 @@ export function MessageItem({
       <Popover>
         <PopoverTrigger asChild>
           <button
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer animate-pop-in"
           >
             <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{displayName}</span>
 
+            {/* Model provider badge */}
+            {message.metadata?.model && (
+              <span className="text-[9px] px-1 py-0.5 bg-muted rounded text-muted-foreground/70 font-medium animate-fade-in">
+                {message.metadata.model}
+              </span>
+            )}
+
             {isThinking ? (
-              <span className="inline-flex items-center gap-1 text-purple-600/60">
+              <span className="inline-flex items-center gap-1 text-purple-600/60 animate-pulse-soft">
                 <Brain className="h-3 w-3" />
               </span>
             ) : isToolCall ? (
@@ -792,7 +798,7 @@ export function MessageItem({
                   : "text-amber-600"
               )}>
                 {hasResult ? (
-                  isError ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />
+                  <span className="animate-scale-in">{isError ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}</span>
                 ) : (
                   <Loader2 className="h-3 w-3 animate-spin" />
                 )}
@@ -1003,7 +1009,7 @@ export function MessageItem({
 
         <div
           className={cn(
-            'relative px-4 py-2.5 border shadow-sm',
+            'relative px-4 py-2.5 border shadow-sm animate-fade-in',
             isUser
               ? 'bg-primary text-primary-foreground border-primary'
               : 'bg-card text-foreground border-border',
