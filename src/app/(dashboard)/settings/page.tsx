@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { cn } from "@/lib/utils";
 import { useThemeStore, useLeadPreferencesStore } from "@/stores";
 import {
   Bell,
@@ -15,6 +16,9 @@ import {
   Terminal,
   Globe,
   Camera,
+  Image as ImageIcon,
+  Sparkles,
+  Trash2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -30,12 +34,16 @@ import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 export default function SettingsPage() {
   const { theme, setTheme } = useThemeStore();
   const {
+    agentsMd,
+    soulMd,
     isCustomized,
     lastUpdated,
     isLoading,
     timezone,
     leadNickname,
     leadAvatarUrl,
+    glassEffect,
+    backgroundImage,
     loadPreferences,
     savePreferences,
     setAgentsMd,
@@ -43,12 +51,17 @@ export default function SettingsPage() {
     setTimezone,
     setLeadNickname,
     setLeadAvatarUrl,
+    setGlassEffect,
+    setBackgroundImage,
     resetToDefaults,
     getDisplayAgentsMd,
     getDisplaySoulMd,
   } = useLeadPreferencesStore();
   const [activeTab, setActiveTab] = useState("appearance");
   const leadAvatarInputRef = useRef<HTMLInputElement>(null);
+  const backgroundImageInputRef = useRef<HTMLInputElement>(null);
+  const lastSavedSnapshotRef = useRef<string | null>(null);
+  const autoSaveInitializedRef = useRef(false);
 
   // 确认对话框
   const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
@@ -57,6 +70,43 @@ export default function SettingsPage() {
   useEffect(() => {
     loadPreferences();
   }, [loadPreferences]);
+
+  const preferenceSnapshot = JSON.stringify({
+    agentsMd,
+    soulMd,
+    timezone,
+    leadNickname,
+    leadAvatarUrl,
+    glassEffect,
+    backgroundImage,
+  });
+
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (!autoSaveInitializedRef.current) {
+      autoSaveInitializedRef.current = true;
+      lastSavedSnapshotRef.current = preferenceSnapshot;
+      return;
+    }
+
+    if (preferenceSnapshot === lastSavedSnapshotRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(async () => {
+      try {
+        await savePreferences();
+        lastSavedSnapshotRef.current = preferenceSnapshot;
+      } catch (error) {
+        console.error("Failed to auto-save preferences:", error);
+      }
+    }, 500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [isLoading, preferenceSnapshot, savePreferences]);
 
   const handleLeadAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,11 +130,37 @@ export default function SettingsPage() {
     if (leadAvatarInputRef.current) leadAvatarInputRef.current.value = '';
   };
 
-  const handleSave = async () => {
+  const handleBackgroundImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 5 * 1024 * 1024) return;
+
+    const formData = new FormData();
+    formData.append('image', file);
+
     try {
-      await savePreferences();
+      const res = await fetch('/api/lead/background-image', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (json.success) {
+        setBackgroundImage(json.data.backgroundImage);
+      }
     } catch (error) {
-      console.error("Failed to save preferences:", error);
+      console.error('Failed to upload background image:', error);
+    }
+
+    if (backgroundImageInputRef.current) backgroundImageInputRef.current.value = '';
+  };
+
+  const handleBackgroundImageRemove = async () => {
+    try {
+      const res = await fetch('/api/lead/background-image', { method: 'DELETE' });
+      const json = await res.json();
+      if (json.success) {
+        setBackgroundImage(null);
+      }
+    } catch (error) {
+      console.error('Failed to remove background image:', error);
     }
   };
 
@@ -98,7 +174,6 @@ export default function SettingsPage() {
     });
     if (confirmed) {
       resetToDefaults();
-      await savePreferences();
     }
   };
 
@@ -123,7 +198,7 @@ export default function SettingsPage() {
 
       <div className="flex flex-col lg:flex-row gap-6 min-w-0">
         <div className="w-full lg:w-64 shrink-0">
-          <div className="rounded-xl border bg-card p-2">
+          <div className={cn("rounded-xl border bg-card p-2", glassEffect && "backdrop-blur-sm")}>
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -148,8 +223,8 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle className="text-lg">主题设置</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
+              <CardContent className="space-y-6">
+                <div className="flex items-center justify-between gap-4">
                   <div>
                     <p className="font-medium">主题模式</p>
                     <p className="text-sm text-muted-foreground">
@@ -190,6 +265,88 @@ export default function SettingsPage() {
                       <Monitor className="h-4 w-4" />
                       系统
                     </button>
+                  </div>
+                </div>
+
+                <Separator />
+
+                <div className="flex items-center justify-between gap-4">
+                  <div className="pr-4">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-muted-foreground" />
+                      <p className="font-medium">玻璃拟态</p>
+                    </div>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      提升界面层次感和质感，占用系统资源较多，请根据设备性能选择性启用
+                    </p>
+                  </div>
+                  <Switch
+                    checked={glassEffect}
+                    onCheckedChange={(checked) => setGlassEffect(Boolean(checked))}
+                  />
+                </div>
+
+                <Separator />
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="pr-4">
+                      <div className="flex items-center gap-2">
+                        <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                        <p className="font-medium">背景图片</p>
+                      </div>
+                      <p className="mt-1 text-sm text-muted-foreground">
+                        上传图片作为整个页面背景。该选项在设备间同步。
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => backgroundImageInputRef.current?.click()}
+                      >
+                        上传图片
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleBackgroundImageRemove}
+                        disabled={!backgroundImage}
+                      >
+                        <Trash2 className="mr-1 h-4 w-4" />
+                        移除
+                      </Button>
+                    </div>
+                  </div>
+
+                  <input
+                    ref={backgroundImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleBackgroundImageUpload}
+                  />
+
+                  <div className="rounded-xl border bg-muted/40 p-3">
+                    {backgroundImage ? (
+                      <div className="space-y-3">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={backgroundImage}
+                          alt="Background preview"
+                          className="h-36 w-full rounded-lg object-cover"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          当前已设置页面背景图片。
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        当前未设置背景图片。
+                      </p>
+                    )}
                   </div>
                 </div>
               </CardContent>
@@ -247,20 +404,6 @@ export default function SettingsPage() {
                         <option value="UTC">UTC (协调世界时)</option>
                       </optgroup>
                     </select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={async () => {
-                        try {
-                          await savePreferences();
-                        } catch (error) {
-                          console.error("Failed to save timezone:", error);
-                        }
-                      }}
-                      disabled={isLoading}
-                    >
-                      {isLoading ? "保存中..." : "保存"}
-                    </Button>
                   </div>
                   {timezone && (
                     <p className="text-xs text-muted-foreground mt-2">
@@ -346,16 +489,6 @@ export default function SettingsPage() {
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Team Lead 配置</CardTitle>
                   <div className="flex items-center gap-2">
-                    {isCustomized && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleSave}
-                        disabled={isLoading}
-                      >
-                        {isLoading ? "保存中..." : "保存"}
-                      </Button>
-                    )}
                     <Button
                       variant="outline"
                       size="sm"

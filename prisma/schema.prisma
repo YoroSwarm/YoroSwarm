@@ -26,6 +26,9 @@ model User {
   leadSoulMd     String?   @map("lead_soul_md")
   leadNickname   String?   @map("lead_nickname")     // Custom display name for Team Lead
   leadAvatarUrl  String?   @map("lead_avatar_url")   // Custom avatar URL for Team Lead
+  // Appearance preferences (persisted on server; independent from theme)
+  glassEffect    Boolean   @default(false) @map("glass_effect")
+  backgroundImage String?  @map("background_image")
   timezone       String?   @map("timezone")        // IANA timezone, e.g. "Asia/Shanghai"; null = server local
   envVarsJson    String?   @map("env_vars_json")   // JSON: { "KEY": "value", ... }
   createdAt      DateTime  @default(now()) @map("created_at")

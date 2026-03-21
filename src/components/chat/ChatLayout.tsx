@@ -321,7 +321,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   };
 
   const { sidebarOpen: _sidebarOpen, toggleSidebar } = useSidebar();
-  const { leadNickname, leadAvatarUrl, loadPreferences } = useLeadPreferencesStore();
+  const { leadNickname, leadAvatarUrl, glassEffect, loadPreferences } = useLeadPreferencesStore();
 
   // 自动加载 Lead 偏好设置（头像和昵称）
   useEffect(() => {
@@ -329,9 +329,9 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   }, [loadPreferences]);
   
   return (
-    <div className={cn('flex h-full w-full bg-background', className)}>
+    <div className={cn('chat-glass-root flex h-full w-full bg-background', glassEffect && 'backdrop-blur-sm', className)}>
       <main className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/50 px-4 backdrop-blur-sm shadow-sm">
+        <header className={cn("chat-glass-surface flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/50 px-4 shadow-sm", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
           <div className="flex items-center gap-3 overflow-hidden">
             <button
               onClick={toggleSidebar}
@@ -412,7 +412,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
         {/* Mobile Tabs (Visible only on small screens) */}
         {resolvedSessionId && (
-          <div className="flex md:hidden items-center justify-around border-b border-border bg-card p-2 overflow-x-auto shadow-sm">
+          <div className={cn("chat-glass-surface flex md:hidden items-center justify-around border-b border-border bg-card p-2 overflow-x-auto shadow-sm", glassEffect && 'backdrop-blur')}>
              {[
                 { id: 'chat', label: '对话', icon: MessageSquare },
                 { id: 'files', label: '文件', icon: FolderOpen },
@@ -440,7 +440,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           </div>
         )}
 
-        <div className="flex-1 overflow-hidden bg-background relative">
+        <div className={cn("chat-glass-panel flex-1 overflow-hidden bg-background relative", glassEffect && 'backdrop-blur-sm')}>
           {resolvedSessionId ? (
             <>
               {activeTab === 'chat' && (
@@ -459,7 +459,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         participants={visibleParticipants}
                         />
                     </div>
-                    <div className="border-t border-border bg-card/50 p-4 backdrop-blur-sm">
+                    <div className={cn("chat-glass-surface border-t border-border bg-card/50 p-4", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
                         {/* 工具审批卡片堆叠区 */}
                         <ApprovalCards
                             approvals={toolApprovals}
@@ -520,7 +520,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
       <aside
         className={cn(
-          'fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto shadow-lg md:shadow-none',
+          'chat-glass-surface fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto shadow-lg md:shadow-none',
+          glassEffect && 'backdrop-blur',
           isRightPanelOpen ? 'w-80 translate-x-0 border-l' : 'w-0 translate-x-full border-l-0 overflow-hidden opacity-0 md:translate-x-0'
         )}
       >

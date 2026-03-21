@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useUIStore, useLlmConfigsStore } from '@/stores';
+import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { useSessions } from '@/hooks/use-sessions';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ const SHOW_ARCHIVED_STORAGE_KEY = 'show_archived';
 
 export function Sidebar() {
   const setSidebarOpen = useUIStore((state) => state.setSidebarOpen);
+  const { glassEffect } = useLeadPreferencesStore();
   const router = useRouter();
   const searchParams = useSearchParams();
   const currentSessionId = searchParams.get('sessionId');
@@ -177,7 +179,8 @@ export function Sidebar() {
       <aside
         className={cn(
           'h-screen bg-card border-r border-border flex flex-col transition-all duration-300 relative z-20 shrink-0',
-          'w-72 transition-colors duration-200'
+          'w-72 transition-colors duration-200',
+          glassEffect && 'backdrop-blur'
         )}
       >
       {/* 1. Logo (Return to Dashboard) + Close Button */}

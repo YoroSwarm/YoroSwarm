@@ -16,6 +16,8 @@ interface LeadPreferencesState {
   soulMd: string | null;
   leadNickname: string | null;
   leadAvatarUrl: string | null;
+  glassEffect: boolean;
+  backgroundImage: string | null;
   timezone: string | null;
   isCustomized: boolean;
   isLoading: boolean;
@@ -26,6 +28,8 @@ interface LeadPreferencesState {
   setSoulMd: (content: string) => void;
   setLeadNickname: (name: string | null) => void;
   setLeadAvatarUrl: (url: string | null) => void;
+  setGlassEffect: (value: boolean) => void;
+  setBackgroundImage: (value: string | null) => void;
   setTimezone: (tz: string | null) => void;
   resetToDefaults: () => void;
   // 用于 UI 显示的默认值
@@ -38,6 +42,8 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   soulMd: null,
   leadNickname: null,
   leadAvatarUrl: null,
+  glassEffect: false,
+  backgroundImage: null,
   timezone: null,
   isCustomized: false,
   isLoading: false,
@@ -46,7 +52,15 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   loadPreferences: async () => {
     set({ isLoading: true });
     try {
-      const response = await api.get<{ agentsMd: string | null; soulMd: string | null; leadNickname: string | null; leadAvatarUrl: string | null; timezone: string | null }>('/lead/preferences');
+      const response = await api.get<{
+        agentsMd: string | null;
+        soulMd: string | null;
+        leadNickname: string | null;
+        leadAvatarUrl: string | null;
+        glassEffect: boolean;
+        backgroundImage: string | null;
+        timezone: string | null;
+      }>('/lead/preferences');
 
       console.log('[LeadPreferencesStore] 加载配置:', {
         agentsMd: response.agentsMd?.substring(0, 50),
@@ -58,6 +72,8 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
         soulMd: response.soulMd,
         leadNickname: response.leadNickname,
         leadAvatarUrl: response.leadAvatarUrl,
+        glassEffect: Boolean(response.glassEffect),
+        backgroundImage: response.backgroundImage,
         timezone: response.timezone,
         isCustomized: !isUsingDefaults(response.agentsMd, response.soulMd),
         isLoading: false,
@@ -69,7 +85,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   },
 
   savePreferences: async () => {
-    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl } = get();
+    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage } = get();
     console.log('[LeadPreferencesStore] 保存配置:', {
       agentsMd: agentsMd?.substring(0, 50) || null,
       soulMd: soulMd?.substring(0, 50) || null,
@@ -87,6 +103,8 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
         timezone,
         leadNickname,
         leadAvatarUrl,
+        glassEffect,
+        backgroundImage,
       });
       set({
         isLoading: false,
@@ -133,10 +151,20 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
     set({ leadAvatarUrl: url, isCustomized: true });
   },
 
+  setGlassEffect: (value) => {
+    set({ glassEffect: value });
+  },
+
+  setBackgroundImage: (value) => {
+    set({ backgroundImage: value });
+  },
+
   resetToDefaults: () => {
     set({
       agentsMd: DEFAULT_LEAD_AGENTS_MD,
       soulMd: DEFAULT_LEAD_SOUL_MD,
+      glassEffect: false,
+      backgroundImage: null,
       isCustomized: false,
     });
   },

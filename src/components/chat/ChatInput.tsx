@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Loader2,
 } from 'lucide-react';
+import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { MentionSuggestion } from '@/types/chat';
 
 interface ChatInputProps {
@@ -28,6 +29,7 @@ export function ChatInput({
   placeholder = '输入消息...',
   onSend,
 }: ChatInputProps) {
+  const { glassEffect } = useLeadPreferencesStore();
   const [content, setContent] = useState('');
   const [isFocused, setIsFocused] = useState(false);
   const [attachments, setAttachments] = useState<File[]>([]);
@@ -273,7 +275,8 @@ export function ChatInput({
 
       <div
         className={cn(
-          'relative flex items-center gap-2 rounded-2xl border bg-background p-2 shadow-sm transition-all',
+          'chat-glass-surface relative flex items-center gap-2 rounded-2xl border bg-background p-2 shadow-sm transition-all',
+          glassEffect && 'backdrop-blur',
           isFocused && 'border-primary ring-2 ring-primary/20',
           disabled && 'opacity-50 cursor-not-allowed'
         )}

@@ -53,5 +53,6 @@ next-env.d.ts
 /log.txt
 /session-workspaces
 /public/avatars/
+/public/backgrounds/
 # User-installed skills (per-user data)
 skills/users/

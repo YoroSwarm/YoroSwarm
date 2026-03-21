@@ -2,9 +2,11 @@
 
 import { useEffect } from 'react';
 import { useThemeStore } from '@/stores/themeStore';
+import { useAuthStore, useLeadPreferencesStore } from '@/stores';
 import { StoreProvider } from '@/components/providers/StoreProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
+import { GlobalBackground } from '@/components/layout/GlobalBackground';
 
 function ThemeInit() {
   const { initTheme } = useThemeStore();
@@ -16,10 +18,24 @@ function ThemeInit() {
   return null;
 }
 
+function LeadPreferencesInit() {
+  const { isAuthenticated } = useAuthStore();
+  const { loadPreferences } = useLeadPreferencesStore();
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    void loadPreferences();
+  }, [isAuthenticated, loadPreferences]);
+
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <StoreProvider>
       <ThemeInit />
+      <LeadPreferencesInit />
+      <GlobalBackground />
       <TooltipProvider>
         {children}
       </TooltipProvider>

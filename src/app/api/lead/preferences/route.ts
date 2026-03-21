@@ -14,6 +14,8 @@ export async function GET(_request: NextRequest) {
         leadSoulMd: true,
         leadNickname: true,
         leadAvatarUrl: true,
+        glassEffect: true,
+        backgroundImage: true,
         timezone: true,
       },
     });
@@ -27,6 +29,8 @@ export async function GET(_request: NextRequest) {
       soulMd: user.leadSoulMd || null,
       leadNickname: user.leadNickname || null,
       leadAvatarUrl: user.leadAvatarUrl || null,
+      glassEffect: Boolean(user.glassEffect),
+      backgroundImage: user.backgroundImage || null,
       timezone: user.timezone || null,
     });
   } catch (error) {
@@ -44,18 +48,20 @@ export async function PUT(request: NextRequest) {
     const payload = await requireTokenPayload();
     const body = await request.json();
 
-    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl } = body;
+    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage } = body;
 
-    console.log('[API/LeadPreferences] PUT 收到:', {
-      userId: payload.userId,
-      agentsMd: agentsMd?.substring(0, 50) || null,
-      soulMd: soulMd?.substring(0, 50) || null,
-      timezone,
-      leadNickname,
-      leadAvatarUrl,
-      agentsMdType: typeof agentsMd,
-      soulMdType: typeof soulMd,
-    })
+    // console.log('[API/LeadPreferences] PUT 收到:', {
+    //   userId: payload.userId,
+    //   agentsMd: agentsMd?.substring(0, 50) || null,
+    //   soulMd: soulMd?.substring(0, 50) || null,
+    //   timezone,
+    //   leadNickname,
+    //   leadAvatarUrl,
+    //   glassEffect,
+    //   backgroundImage,
+    //   agentsMdType: typeof agentsMd,
+    //   soulMdType: typeof soulMd,
+    // })
 
     if (typeof agentsMd !== 'string' && agentsMd !== null && agentsMd !== undefined) {
       return errorResponse('Invalid agentsMd', 400);
@@ -69,6 +75,14 @@ export async function PUT(request: NextRequest) {
       return errorResponse('Invalid timezone', 400);
     }
 
+    if (glassEffect !== undefined && typeof glassEffect !== 'boolean') {
+      return errorResponse('Invalid glassEffect', 400);
+    }
+
+    if (backgroundImage !== undefined && backgroundImage !== null && typeof backgroundImage !== 'string') {
+      return errorResponse('Invalid backgroundImage', 400);
+    }
+
     // Validate IANA timezone if provided
     if (typeof timezone === 'string') {
       try {
@@ -78,12 +92,14 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const data: Record<string, string | null> = {}
+    const data: Record<string, string | null | boolean> = {}
     if (agentsMd !== undefined) data.leadAgentsMd = agentsMd
     if (soulMd !== undefined) data.leadSoulMd = soulMd
     if (timezone !== undefined) data.timezone = timezone
     if (leadNickname !== undefined) data.leadNickname = leadNickname
     if (leadAvatarUrl !== undefined) data.leadAvatarUrl = leadAvatarUrl
+    if (glassEffect !== undefined) data.glassEffect = glassEffect
+    if (backgroundImage !== undefined) data.backgroundImage = backgroundImage
 
     const user = await prisma.user.update({
       where: { id: payload.userId },
@@ -93,23 +109,29 @@ export async function PUT(request: NextRequest) {
         leadSoulMd: true,
         leadNickname: true,
         leadAvatarUrl: true,
+        glassEffect: true,
+        backgroundImage: true,
         timezone: true,
       },
     });
 
-    console.log('[API/LeadPreferences] PUT 保存后:', {
-      leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
-      leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
-      timezone: user.timezone,
-      leadNickname: user.leadNickname,
-      leadAvatarUrl: user.leadAvatarUrl,
-    })
+    // console.log('[API/LeadPreferences] PUT 保存后:', {
+    //   leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
+    //   leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
+    //   timezone: user.timezone,
+    //   leadNickname: user.leadNickname,
+    //   leadAvatarUrl: user.leadAvatarUrl,
+    //   glassEffect: user.glassEffect,
+    //   backgroundImage: user.backgroundImage,
+    // })
 
     return successResponse({
       agentsMd: user.leadAgentsMd || null,
       soulMd: user.leadSoulMd || null,
       leadNickname: user.leadNickname || null,
       leadAvatarUrl: user.leadAvatarUrl || null,
+      glassEffect: Boolean(user.glassEffect),
+      backgroundImage: user.backgroundImage || null,
       timezone: user.timezone || null,
     });
   } catch (error) {

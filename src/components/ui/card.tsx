@@ -1,18 +1,21 @@
 import * as React from "react"
 
 import { cn } from "@/lib/utils"
+import { useLeadPreferencesStore } from "@/stores/leadPreferencesStore"
 
 function Card({
   className,
   size = "default",
   ...props
 }: React.ComponentProps<"div"> & { size?: "default" | "sm" }) {
+  const { glassEffect } = useLeadPreferencesStore();
   return (
     <div
       data-slot="card"
       data-size={size}
       className={cn(
         "group/card flex flex-col gap-4 overflow-hidden bg-card text-card-foreground card-hand p-4 data-[size=sm]:p-3",
+        glassEffect && 'backdrop-blur-sm',
         className
       )}
       {...props}
