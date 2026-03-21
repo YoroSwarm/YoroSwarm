@@ -111,7 +111,7 @@ export function SessionTasks({ sessionId }: SessionTasksProps) {
           ) : (
             <div className="space-y-3">
               {filteredTasks.map((task) => (
-                <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between hover:shadow-md transition-all">
+                <div key={task.id} className="card-hand p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between shadow-sm hover:shadow-md transition-all">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="font-semibold text-lg truncate">{task.title}</p>

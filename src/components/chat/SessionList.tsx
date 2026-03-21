@@ -199,7 +199,7 @@ export function SessionList({
                 key={session.id}
                 onClick={() => onSessionSelect(session.id)}
                 className={cn(
-                  'group relative flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-accent/50',
+                  'group relative flex cursor-pointer items-start gap-3 p-3 transition-colors hover:bg-accent/50 active:bg-accent/70',
                   currentSessionId === session.id && 'bg-accent'
                 )}
               >

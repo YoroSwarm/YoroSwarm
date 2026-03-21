@@ -12,6 +12,8 @@ export async function GET(_request: NextRequest) {
       select: {
         leadAgentsMd: true,
         leadSoulMd: true,
+        leadNickname: true,
+        leadAvatarUrl: true,
         timezone: true,
       },
     });
@@ -23,6 +25,8 @@ export async function GET(_request: NextRequest) {
     return successResponse({
       agentsMd: user.leadAgentsMd || null,
       soulMd: user.leadSoulMd || null,
+      leadNickname: user.leadNickname || null,
+      leadAvatarUrl: user.leadAvatarUrl || null,
       timezone: user.timezone || null,
     });
   } catch (error) {
@@ -40,13 +44,15 @@ export async function PUT(request: NextRequest) {
     const payload = await requireTokenPayload();
     const body = await request.json();
 
-    const { agentsMd, soulMd, timezone } = body;
+    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl } = body;
 
     console.log('[API/LeadPreferences] PUT 收到:', {
       userId: payload.userId,
       agentsMd: agentsMd?.substring(0, 50) || null,
       soulMd: soulMd?.substring(0, 50) || null,
       timezone,
+      leadNickname,
+      leadAvatarUrl,
       agentsMdType: typeof agentsMd,
       soulMdType: typeof soulMd,
     })
@@ -76,6 +82,8 @@ export async function PUT(request: NextRequest) {
     if (agentsMd !== undefined) data.leadAgentsMd = agentsMd
     if (soulMd !== undefined) data.leadSoulMd = soulMd
     if (timezone !== undefined) data.timezone = timezone
+    if (leadNickname !== undefined) data.leadNickname = leadNickname
+    if (leadAvatarUrl !== undefined) data.leadAvatarUrl = leadAvatarUrl
 
     const user = await prisma.user.update({
       where: { id: payload.userId },
@@ -83,6 +91,8 @@ export async function PUT(request: NextRequest) {
       select: {
         leadAgentsMd: true,
         leadSoulMd: true,
+        leadNickname: true,
+        leadAvatarUrl: true,
         timezone: true,
       },
     });
@@ -91,11 +101,15 @@ export async function PUT(request: NextRequest) {
       leadAgentsMd: user.leadAgentsMd?.substring(0, 50) || null,
       leadSoulMd: user.leadSoulMd?.substring(0, 50) || null,
       timezone: user.timezone,
+      leadNickname: user.leadNickname,
+      leadAvatarUrl: user.leadAvatarUrl,
     })
 
     return successResponse({
       agentsMd: user.leadAgentsMd || null,
       soulMd: user.leadSoulMd || null,
+      leadNickname: user.leadNickname || null,
+      leadAvatarUrl: user.leadAvatarUrl || null,
       timezone: user.timezone || null,
     });
   } catch (error) {

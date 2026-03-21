@@ -217,7 +217,7 @@ export function ApprovalCard({ approval, onApprove, onReject, onAlwaysAllow }: A
           disabled={isProcessing !== null}
           className={cn(
             'flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-            'border border-border hover:bg-accent hover:text-accent-foreground',
+            'border border-border hover:bg-accent hover:text-accent-foreground active:bg-accent/80',
             'disabled:opacity-50 disabled:cursor-not-allowed'
           )}
         >

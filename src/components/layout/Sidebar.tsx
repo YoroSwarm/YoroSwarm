@@ -192,7 +192,7 @@ export function Sidebar() {
           variant="ghost"
           size="icon"
           onClick={() => setSidebarOpen(false)}
-          className="h-8 w-8 rounded-lg hover:bg-accent"
+          className="h-8 w-8 rounded-lg hover:bg-accent active:bg-accent/80"
         >
           <PanelLeftClose className="h-4 w-4" />
         </Button>
@@ -255,7 +255,7 @@ export function Sidebar() {
                 key={session.id}
                 onClick={() => router.push(`/chat?sessionId=${session.id}`)}
                 className={cn(
-                  'group relative flex items-center gap-2 px-3 py-2 cursor-pointer transition-all border border-border rounded-lg hover:bg-accent/30',
+                  'group relative flex items-center gap-2 px-3 py-2 cursor-pointer transition-all border border-border rounded-lg hover:bg-accent/30 active:bg-accent/50',
                   currentSessionId === session.id && 'bg-primary/10 border-primary/30 shadow-sm'
                 )}
               >
@@ -279,7 +279,7 @@ export function Sidebar() {
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button 
-                      className="p-1 hover:bg-background rounded-full transition-opacity opacity-50 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 focus:opacity-100"
+                      className="p-1 hover:bg-background active:bg-accent/50 rounded-full transition-opacity opacity-50 group-hover:opacity-100 absolute right-2 top-1/2 -translate-y-1/2 focus:opacity-100"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />

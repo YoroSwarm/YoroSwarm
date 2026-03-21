@@ -17,6 +17,7 @@ import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
 import { useSidebar } from '@/stores';
+import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
 import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings } from 'lucide-react';
@@ -267,6 +268,11 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     return Array.from(deduped.values());
   }, [currentSession?.participants]);
 
+  const leadAgentId = useMemo(() => {
+    return stats?.llm_usage.lead_agent_id
+      || currentSession?.participants.find((p) => p.role === 'lead')?.id;
+  }, [currentSession?.participants, stats?.llm_usage.lead_agent_id]);
+
   const usageByParticipantId = useMemo(() => {
     const map = new Map<string, {
       input_tokens: number;
@@ -280,10 +286,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }>();
 
     const lead = stats?.llm_usage.lead;
-    const leadId = stats?.llm_usage.lead_agent_id
-      || currentSession?.participants.find((participant) => participant.role === 'lead')?.id;
-    if (lead && leadId) {
-      map.set(leadId, { ...lead, last_call_context_tokens: stats?.llm_usage.lead_last_call_context_tokens || 0 });
+    if (lead && leadAgentId) {
+      map.set(leadAgentId, { ...lead, last_call_context_tokens: stats?.llm_usage.lead_last_call_context_tokens || 0 });
     }
 
     for (const teammate of stats?.llm_usage.teammates || []) {
@@ -291,7 +295,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }
 
     return map;
-  }, [currentSession?.participants, stats?.llm_usage]);
+  }, [leadAgentId, stats?.llm_usage]);
 
   const leadTodos = useMemo(() => {
     const todos = stats?.lead_self_todos || [];
@@ -317,15 +321,16 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   };
 
   const { sidebarOpen: _sidebarOpen, toggleSidebar } = useSidebar();
+  const { leadNickname, leadAvatarUrl } = useLeadPreferencesStore();
   
   return (
     <div className={cn('flex h-full w-full bg-background', className)}>
       <main className="flex min-w-0 flex-1 flex-col h-full overflow-hidden">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/50 px-4 backdrop-blur-sm">
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-card/50 px-4 backdrop-blur-sm shadow-sm">
           <div className="flex items-center gap-3 overflow-hidden">
             <button
               onClick={toggleSidebar}
-              className="lg:hidden -ml-2 rounded-md p-2 hover:bg-accent"
+              className="lg:hidden -ml-2 rounded-md p-2 hover:bg-accent active:bg-accent/80"
             >
                <Menu className="h-5 w-5" />
             </button>
@@ -351,7 +356,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         "flex items-center gap-1.5 px-3 py-1.5 text-sm font-bold transition-all border",
                         isActive 
                           ? "bg-accent text-accent-foreground border-border shadow-sm" 
-                          : "bg-transparent text-muted-foreground border-transparent hover:bg-accent/20 hover:text-foreground hover:border-border/50"
+                          : "bg-transparent text-muted-foreground border-transparent hover:bg-accent/20 hover:text-foreground hover:border-border/50 active:bg-accent/30"
                       )}
                       style={{
                         borderRadius: "8px",
@@ -371,7 +376,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               currentSession.status === 'paused' ? (
                 <button
                   onClick={() => resumeSession(resolvedSessionId)}
-                  className="flex items-center rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950 border border-emerald-200 dark:border-emerald-800 transition-all"
+                  className="flex items-center rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 active:bg-emerald-100 dark:text-emerald-400 dark:hover:bg-emerald-950 dark:active:bg-emerald-900 border border-emerald-200 dark:border-emerald-800 transition-all"
                   title="恢复会话"
                 >
                   <Play className="h-4 w-4" />
@@ -379,7 +384,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               ) : currentSession.status === 'active' ? (
                 <button
                   onClick={() => pauseSession(resolvedSessionId)}
-                  className="flex items-center rounded-lg p-2 text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950 border border-amber-200 dark:border-amber-800 transition-all"
+                  className="flex items-center rounded-lg p-2 text-amber-600 hover:bg-amber-50 active:bg-amber-100 dark:text-amber-400 dark:hover:bg-amber-950 dark:active:bg-amber-900 border border-amber-200 dark:border-amber-800 transition-all"
                   title="暂停会话"
                 >
                   <Pause className="h-4 w-4" />
@@ -388,7 +393,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
             )}
             <button
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
-              className="hidden rounded-lg p-2 hover:bg-accent md:flex border border-transparent hover:border-border transition-all"
+              className="hidden rounded-lg p-2 hover:bg-accent active:bg-accent/80 md:flex border border-transparent hover:border-border transition-all"
               title={isRightPanelOpen ? '关闭右侧面板' : '打开右侧面板'}
             >
               {isRightPanelOpen ? (
@@ -402,7 +407,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
         {/* Mobile Tabs (Visible only on small screens) */}
         {resolvedSessionId && (
-          <div className="flex md:hidden items-center justify-around border-b border-border bg-card p-2 overflow-x-auto">
+          <div className="flex md:hidden items-center justify-around border-b border-border bg-card p-2 overflow-x-auto shadow-sm">
              {[
                 { id: 'chat', label: '对话', icon: MessageSquare },
                 { id: 'files', label: '文件', icon: FolderOpen },
@@ -510,7 +515,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
       <aside
         className={cn(
-          'fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto',
+          'fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto shadow-lg md:shadow-none',
           isRightPanelOpen ? 'w-80 translate-x-0 border-l' : 'w-0 translate-x-full border-l-0 overflow-hidden opacity-0 md:translate-x-0'
         )}
       >
@@ -522,7 +527,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
             <h2 className="font-semibold">详情</h2>
             <button
               onClick={() => setIsRightPanelOpen(false)}
-              className="rounded-md p-2 hover:bg-accent"
+              className="rounded-md p-2 hover:bg-accent active:bg-accent/80"
             >
               <X className="h-5 w-5" />
             </button>
@@ -563,11 +568,15 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                   <h3 className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">会话团队</h3>
                   <div className="space-y-1">
                     {visibleParticipants.map((participant) => {
-                      const participantName = typeof participant.name === 'string' && participant.name.trim().length > 0
-                        ? participant.name.trim()
-                        : typeof participant.role === 'string' && participant.role.trim().length > 0
-                          ? participant.role.trim()
-                          : 'Unknown';
+                      const isLeadParticipant = participant.id === leadAgentId;
+                      const participantName = (isLeadParticipant && leadNickname)
+                        ? leadNickname
+                        : typeof participant.name === 'string' && participant.name.trim().length > 0
+                          ? participant.name.trim()
+                          : typeof participant.role === 'string' && participant.role.trim().length > 0
+                            ? participant.role.trim()
+                            : 'Unknown';
+                      const participantAvatar = (isLeadParticipant && leadAvatarUrl) ? leadAvatarUrl : null;
                       const participantInitial = participantName.charAt(0).toUpperCase();
                       const participantRole = typeof participant.role === 'string' && participant.role.trim().length > 0
                         ? participant.role.trim()
@@ -584,9 +593,14 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       return (
                         <Popover key={participant.id}>
                           <PopoverTrigger asChild>
-                            <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50 border border-transparent hover:border-border/20 cursor-default" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
-                              <div className="flex h-6 w-6 items-center justify-center bg-primary/10 text-xs font-bold border border-border/20" style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}>
-                                {participantInitial}
+                            <div className="flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-accent/50 active:bg-accent/70 border border-transparent hover:border-border/20 cursor-default" style={{ borderRadius: "10px 15px 10px 15px / 15px 10px 15px 10px" }}>
+                              <div className="flex h-6 w-6 items-center justify-center bg-primary/10 text-xs font-bold border border-border/20 rounded-full overflow-hidden" style={!participantAvatar ? { borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" } : undefined}>
+                                {participantAvatar ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img src={participantAvatar} alt={participantName} className="h-full w-full object-cover" />
+                                ) : (
+                                  participantInitial
+                                )}
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-xs font-bold">{participantName}</p>

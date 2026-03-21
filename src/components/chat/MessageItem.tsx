@@ -9,6 +9,7 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { cn } from '@/lib/utils';
 import { formatMessageTime } from '@/lib/utils/date';
 import { useThemeStore } from '@/stores/themeStore';
+import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import {
   Check,
@@ -486,9 +487,14 @@ export function MessageItem({
   isLead = true,
 }: MessageItemProps) {
   const { resolvedTheme } = useThemeStore();
+  const { leadNickname, leadAvatarUrl } = useLeadPreferencesStore();
   const isUser = message.sender.type === 'user';
   const isSystem = message.sender.type === 'system';
   const isAgent = message.sender.type === 'agent';
+
+  // Use custom Lead display name/avatar if configured
+  const displayName = (isAgent && isLead && leadNickname) ? leadNickname : message.sender.name;
+  const displayAvatar = (isAgent && isLead && leadAvatarUrl) ? leadAvatarUrl : message.sender.avatar;
   const [copied, setCopied] = useState(false);
   const [showActions, setShowActions] = useState(false);
 
@@ -543,7 +549,7 @@ export function MessageItem({
               </div>
               <button
                 onClick={() => handleCopy(message.content)}
-                className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-accent transition-colors"
+                className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-accent active:bg-accent/80 transition-colors"
               >
                 {copied ? (
                   <>
@@ -649,7 +655,7 @@ export function MessageItem({
               <a
                 href={`${fileUrl}?download=1`}
                 download={fileName as string}
-                className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 text-primary-foreground" : "hover:bg-accent")}
+                className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 active:bg-primary-foreground/30 text-primary-foreground" : "hover:bg-accent active:bg-accent/80")}
                 title="下载文件"
                 onClick={(e) => e.stopPropagation()}
               >
@@ -683,7 +689,7 @@ export function MessageItem({
                 code({ _node, inline, className, children, ...props }: { _node?: unknown; inline?: boolean; className?: string; children?: React.ReactNode }) {
                   const match = /language-(\w+)/.exec(className || '');
                   return !inline && match ? (
-                    <div className="overflow-x-auto rounded-lg my-2 border border-border/50">
+                    <div className="overflow-x-auto rounded-lg my-2 border border-border/50 shadow-sm">
                       <SyntaxHighlighter
                         style={resolvedTheme === 'dark' ? vscDarkPlus : vs}
                         language={match[1]}
@@ -770,9 +776,9 @@ export function MessageItem({
       <Popover>
         <PopoverTrigger asChild>
           <button
-            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 transition-all cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer"
           >
-            <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{message.sender.name}</span>
+            <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{displayName}</span>
 
             {isThinking ? (
               <span className="inline-flex items-center gap-1 text-purple-600/60">
@@ -799,6 +805,15 @@ export function MessageItem({
 
         {hasExpandableContent && (
           <PopoverContent align="start" side="bottom" className="w-auto max-w-md p-0">
+            {/* Model provider badge */}
+            {message.metadata?.model && (
+              <div className="px-2.5 pt-2 pb-0">
+                <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground/70">
+                  {message.metadata.model}
+                </span>
+              </div>
+            )}
+
             {isThinking && (
               <div className="p-2.5 text-xs text-muted-foreground max-h-48 overflow-y-auto">
                 <div className="pl-2 border-l-2 border-purple-500/30 italic">
@@ -940,16 +955,16 @@ export function MessageItem({
               : 'bg-secondary text-secondary-foreground'
           )}
         >
-          {message.sender.avatar ? (
+          {displayAvatar ? (
             <Image
-              src={message.sender.avatar}
-              alt={message.sender.name}
+              src={displayAvatar}
+              alt={displayName}
               width={32}
               height={32}
               className="h-full w-full rounded-full object-cover"
             />
           ) : isUser ? (
-            message.sender.name.charAt(0).toUpperCase()
+            displayName.charAt(0).toUpperCase()
           ) : (
             <Image
               src="/icon.svg"
@@ -972,7 +987,7 @@ export function MessageItem({
       >
         {showAvatar && !isUser && (
           <span className="mb-1 text-xs text-muted-foreground flex items-center gap-1.5">
-            Swarm
+            {isAgent && isLead && leadNickname ? leadNickname : 'Swarm'}
             {isAgent && !isLead && (
               <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground/70">
                 Teammate
@@ -988,7 +1003,7 @@ export function MessageItem({
 
         <div
           className={cn(
-            'relative px-4 py-2.5 border',
+            'relative px-4 py-2.5 border shadow-sm',
             isUser
               ? 'bg-primary text-primary-foreground border-primary'
               : 'bg-card text-foreground border-border',
@@ -1025,13 +1040,13 @@ export function MessageItem({
         )}
       >
         <button
-          className="p-1.5 rounded-full hover:bg-accent transition-colors"
+          className="p-1.5 rounded-full hover:bg-accent active:bg-accent/80 transition-colors"
           title="回复"
         >
           <CornerUpLeft className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
         <button
-          className="p-1.5 rounded-full hover:bg-accent transition-colors"
+          className="p-1.5 rounded-full hover:bg-accent active:bg-accent/80 transition-colors"
           title="更多"
         >
           <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />

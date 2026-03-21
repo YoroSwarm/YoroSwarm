@@ -70,7 +70,7 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
           </div>
 
           <div className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700/60">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-700/60">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-300">当前会话总计</div>
               <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{formatTokenCount(sessionUsage.total_tokens)}</div>
               <div className="mt-3 space-y-1 text-sm text-gray-600 dark:text-gray-300">
@@ -82,7 +82,7 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
             </div>
 
             {leadUsage ? (
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700/60">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-700/60">
                 <div className="text-sm font-medium text-gray-500 dark:text-gray-300">Lead</div>
                 <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{formatTokenCount(leadUsage.total_tokens)}</div>
                 <div className="mt-3 space-y-1 text-sm text-gray-600 dark:text-gray-300">
@@ -94,7 +94,7 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 dark:border-gray-700 dark:bg-gray-700/60">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 shadow-sm dark:border-gray-700 dark:bg-gray-700/60">
               <div className="text-sm font-medium text-gray-500 dark:text-gray-300">Top Teammates</div>
               <div className="mt-3 space-y-3">
                 {teammateUsage.length === 0 ? (

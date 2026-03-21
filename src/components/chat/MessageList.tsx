@@ -181,7 +181,9 @@ export function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMor
                       </div>
                     );
                   } else {
-                    const showAvatar = !prevMessage || prevMessage.sender.id !== message.sender.id;
+                    // After a compact group (badges), always show avatar for the next normal message
+                    const prevWasCompact = prevMessage && isCompactMessage(prevMessage);
+                    const showAvatar = !prevMessage || prevWasCompact || prevMessage.sender.id !== message.sender.id;
                     const showTime = !prevMessage ||
                       new Date(message.createdAt).getTime() - new Date(prevMessage.createdAt).getTime() > 5 * 60 * 1000;
                     const isLead = message.sender.type === 'user' ||

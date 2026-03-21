@@ -61,7 +61,7 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
             </div>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground">
+          <div className="mt-6 rounded-2xl border border-border bg-muted/50 px-4 py-2.5 text-sm text-muted-foreground shadow-sm">
             该抽屉仅用于监控当前 agent 在该 SwarmSession 内的状态、活动与摘要。用户外部沟通统一通过该会话的 Lead 完成。
           </div>
         </SheetHeader>
@@ -90,11 +90,11 @@ export const AgentDetailDrawer: React.FC<AgentDetailDrawerProps> = ({
               </section>
 
               <section className="grid grid-cols-2 gap-4">
-                <div className="rounded-2xl border border-border bg-primary p-5 text-primary-foreground">
+                <div className="rounded-2xl border border-border bg-primary p-5 text-primary-foreground shadow-sm">
                   <div className="text-3xl font-semibold">{agent.messageCount}</div>
                   <div className="mt-2 text-sm text-primary-foreground/70">消息数</div>
                 </div>
-                <div className="rounded-2xl border border-border bg-muted p-5">
+                <div className="rounded-2xl border border-border bg-muted p-5 shadow-sm">
                   <div className="text-3xl font-semibold text-foreground">{agent.completedTasks}</div>
                   <div className="mt-2 text-sm text-muted-foreground">完成任务</div>
                 </div>

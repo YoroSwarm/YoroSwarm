@@ -262,7 +262,7 @@ export function ChatInput({
               </span>
               <button
                 onClick={() => removeAttachment(index)}
-                className="p-0.5 rounded hover:bg-accent transition-colors"
+                className="p-0.5 rounded hover:bg-accent active:bg-accent/80 transition-colors"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -273,7 +273,7 @@ export function ChatInput({
 
       <div
         className={cn(
-          'relative flex items-center gap-2 rounded-2xl border bg-background p-2 transition-all',
+          'relative flex items-center gap-2 rounded-2xl border bg-background p-2 shadow-sm transition-all',
           isFocused && 'border-primary ring-2 ring-primary/20',
           disabled && 'opacity-50 cursor-not-allowed'
         )}
@@ -281,7 +281,7 @@ export function ChatInput({
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={disabled}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent/80 disabled:opacity-50"
           title="上传文件"
         >
           <Paperclip className="h-5 w-5" />
@@ -321,8 +321,8 @@ export function ChatInput({
                   key={agent.id}
                   onClick={() => insertMention(agent)}
                   className={cn(
-                    'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent',
-                    index === selectedMentionIndex && 'bg-accent'
+                    'flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-accent/50 active:bg-accent/70',
+                    index === selectedMentionIndex && 'bg-accent/50'
                   )}
                 >
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-medium">
@@ -346,7 +346,7 @@ export function ChatInput({
             textareaRef.current?.focus();
           }}
           disabled={disabled}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:bg-accent/80 disabled:opacity-50"
           title="@提及"
         >
           <AtSign className="h-5 w-5" />

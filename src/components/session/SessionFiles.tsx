@@ -220,7 +220,7 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
         </div>
       </div>
 
-      <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-lg px-3 py-2 bg-muted/30">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground border rounded-lg px-3 py-2 bg-muted/30 shadow-sm">
         <FolderTree className="h-4 w-4" />
         <button className="hover:underline" onClick={() => setCurrentDir("")}>工作区</button>
         {breadcrumbs.map((part, index) => {

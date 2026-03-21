@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useThemeStore, useLeadPreferencesStore } from "@/stores";
 import {
   Bell,
@@ -14,12 +14,14 @@ import {
   Puzzle,
   Terminal,
   Globe,
+  Camera,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { LlmApiConfigList } from "@/components/settings/LlmApiConfigList";
 import { SkillsManager } from "@/components/settings/SkillsManager";
 import { EnvVarsManager } from "@/components/settings/EnvVarsManager";
@@ -32,16 +34,21 @@ export default function SettingsPage() {
     lastUpdated,
     isLoading,
     timezone,
+    leadNickname,
+    leadAvatarUrl,
     loadPreferences,
     savePreferences,
     setAgentsMd,
     setSoulMd,
     setTimezone,
+    setLeadNickname,
+    setLeadAvatarUrl,
     resetToDefaults,
     getDisplayAgentsMd,
     getDisplaySoulMd,
   } = useLeadPreferencesStore();
   const [activeTab, setActiveTab] = useState("appearance");
+  const leadAvatarInputRef = useRef<HTMLInputElement>(null);
 
   // 确认对话框
   const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
@@ -50,6 +57,28 @@ export default function SettingsPage() {
   useEffect(() => {
     loadPreferences();
   }, [loadPreferences]);
+
+  const handleLeadAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return;
+    if (file.size > 2 * 1024 * 1024) return;
+
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res = await fetch('/api/lead/avatar', { method: 'POST', body: formData });
+      const json = await res.json();
+      if (json.success) {
+        setLeadAvatarUrl(json.data.leadAvatarUrl);
+      }
+    } catch (error) {
+      console.error('Failed to upload lead avatar:', error);
+    }
+    // Reset input
+    if (leadAvatarInputRef.current) leadAvatarInputRef.current.value = '';
+  };
 
   const handleSave = async () => {
     try {
@@ -342,6 +371,55 @@ export default function SettingsPage() {
                 </p>
               </CardHeader>
               <CardContent className="space-y-6">
+                {/* Lead 昵称和头像 */}
+                <div className="flex items-start gap-6">
+                  {/* Avatar upload */}
+                  <div className="shrink-0">
+                    <label className="text-sm font-medium block mb-2">头像</label>
+                    <div 
+                      className="relative h-16 w-16 rounded-full overflow-hidden border-2 border-border shadow-sm cursor-pointer group"
+                      onClick={() => leadAvatarInputRef.current?.click()}
+                    >
+                      {leadAvatarUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={leadAvatarUrl} alt="Lead Avatar" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary">
+                          {leadNickname ? leadNickname.charAt(0).toUpperCase() : 'L'}
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Camera className="h-5 w-5 text-white" />
+                      </div>
+                    </div>
+                    <input
+                      ref={leadAvatarInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleLeadAvatarUpload}
+                    />
+                  </div>
+                  {/* Nickname */}
+                  <div className="flex-1">
+                    <label className="text-sm font-medium">
+                      显示昵称
+                      <span className="text-muted-foreground font-normal ml-2">
+                        - 前端消息中的 Lead 名称
+                      </span>
+                    </label>
+                    <Input
+                      value={leadNickname || ''}
+                      onChange={(e) => setLeadNickname(e.target.value || null)}
+                      placeholder="Team Lead"
+                      className="mt-2"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">留空则使用默认名称「Team Lead」</p>
+                  </div>
+                </div>
+
+                <Separator />
+
                 {/* AGENTS.md 编辑器 */}
                 <div>
                   <label className="text-sm font-medium">

@@ -129,7 +129,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
         </div>
 
         {/* 内置规则说明 */}
-        <div className="rounded-lg border border-border bg-muted/30 p-4">
+        <div className="rounded-lg border border-border bg-muted/30 p-4 shadow-sm">
           <div className="flex items-start gap-2">
             <Info className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
             <div className="text-xs text-muted-foreground space-y-1">
@@ -170,7 +170,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
           {rules.map((rule) => (
             <div
               key={rule.id}
-              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 hover:bg-accent/3 transition-colors"
+              className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-sm hover:bg-accent/3 transition-colors"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">
@@ -202,7 +202,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
 
         {/* 添加规则表单 */}
         {showAddForm ? (
-          <div className="rounded-lg border border-border bg-card p-4 space-y-4">
+          <div className="rounded-lg border border-border bg-card p-4 shadow-sm space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-sm font-semibold">添加审批规则</h3>
               <button
@@ -241,7 +241,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
                 <select
                   value={newMatchValue}
                   onChange={e => setNewMatchValue(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm"
                 >
                   <option value="">选择命令类别...</option>
                   {CATEGORY_PRESETS.map(preset => (
@@ -252,7 +252,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
                 <select
                   value={newMatchValue}
                   onChange={e => setNewMatchValue(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm"
                 >
                   <option value="">选择风险等级...</option>
                   {RISK_LEVEL_OPTIONS.map(opt => (
@@ -265,7 +265,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
                   value={newMatchValue}
                   onChange={e => setNewMatchValue(e.target.value)}
                   placeholder={MATCH_TYPE_OPTIONS.find(o => o.value === newMatchType)?.placeholder}
-                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm"
                 />
               )}
             </div>
@@ -309,7 +309,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
                 value={newDescription}
                 onChange={e => setNewDescription(e.target.value)}
                 placeholder="规则用途说明"
-                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm shadow-sm"
               />
             </div>
 
