@@ -12,29 +12,29 @@ export async function POST(request: NextRequest) {
 
     // Validate required fields
     if (!username || !email || !password) {
-      return errorResponse('Username, email, and password are required', 400)
+      return errorResponse('请填写用户名、邮箱和密码', 400)
     }
 
     // Verify access code
     if (!access_code || !verifyAccessCode(access_code)) {
-      return errorResponse('Invalid or expired access code', 403)
+      return errorResponse('邀请码无效或已过期', 403)
     }
 
     // Validate username
     if (!/^[a-zA-Z0-9_-]{3,50}$/.test(username)) {
-      return errorResponse('Username must be 3-50 characters, alphanumeric, underscore, or hyphen only', 400)
+      return errorResponse('用户名必须是3-50个字符，只能包含字母、数字、下划线或连字符', 400)
     }
 
     // Validate email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(email)) {
-      return errorResponse('Invalid email address', 400)
+      return errorResponse('请输入有效的邮箱地址', 400)
     }
 
     // Validate password
     const passwordValidation = validatePassword(password)
     if (!passwordValidation.valid) {
-      return errorResponse(passwordValidation.message || 'Invalid password', 400)
+      return errorResponse(passwordValidation.message || '密码格式不正确', 400)
     }
 
     // Check if username exists
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       where: { username },
     })
     if (existingUsername) {
-      return errorResponse('Username already exists', 409)
+      return errorResponse('该用户名已被注册', 409)
     }
 
     // Check if email exists
@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
       where: { email },
     })
     if (existingEmail) {
-      return errorResponse('Email already registered', 409)
+      return errorResponse('该邮箱已被注册', 409)
     }
 
     // Hash password
@@ -76,9 +76,9 @@ export async function POST(request: NextRequest) {
       isActive: user.isActive,
       isSuperuser: user.isSuperuser,
       createdAt: user.createdAt,
-    }, 'User registered successfully')
+    }, '注册成功')
   } catch (error) {
     console.error('Registration error:', error)
-    return errorResponse('Internal server error', 500)
+    return errorResponse('服务器内部错误，请稍后重试', 500)
   }
 }

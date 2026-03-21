@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
     const { username, password } = body
 
     if (!username || !password) {
-      return errorResponse('Username and password are required', 400)
+      return errorResponse('请输入用户名和密码', 400)
     }
 
     // Find user
@@ -20,13 +20,13 @@ export async function POST(request: NextRequest) {
     })
 
     if (!user || !user.isActive) {
-      return errorResponse('Invalid username or password', 401)
+      return errorResponse('用户名或密码错误', 401)
     }
 
     // Verify password
     const isValid = await verifyPassword(password, user.hashedPassword)
     if (!isValid) {
-      return errorResponse('Invalid username or password', 401)
+      return errorResponse('用户名或密码错误', 401)
     }
 
     // Create session
@@ -97,6 +97,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('Login error:', error)
-    return errorResponse('Internal server error', 500)
+    return errorResponse('服务器内部错误，请稍后重试', 500)
   }
 }

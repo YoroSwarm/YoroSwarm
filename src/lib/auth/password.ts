@@ -12,20 +12,20 @@ export async function verifyPassword(password: string, hashedPassword: string): 
 
 export function validatePassword(password: string): { valid: boolean; message?: string } {
   if (password.length < 8) {
-    return { valid: false, message: 'Password must be at least 8 characters long' }
+    return { valid: false, message: '密码至少需要 8 个字符' }
   }
-  
+
   if (!/[a-z]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one lowercase letter' }
+    return { valid: false, message: '密码必须包含至少一个小写字母' }
   }
-  
+
   if (!/[A-Z]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one uppercase letter' }
+    return { valid: false, message: '密码必须包含至少一个大写字母' }
   }
-  
+
   if (!/[0-9]/.test(password)) {
-    return { valid: false, message: 'Password must contain at least one digit' }
+    return { valid: false, message: '密码必须包含至少一个数字' }
   }
-  
+
   return { valid: true }
 }
