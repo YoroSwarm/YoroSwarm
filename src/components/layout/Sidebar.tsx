@@ -401,7 +401,7 @@ export function Sidebar() {
 
     {/* Delete confirmation dialog */}
     <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
-      <AlertDialogContent className="max-w-[95vw] sm:max-w-md rounded-lg">
+      <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>删除会话</AlertDialogTitle>
           <AlertDialogDescription asChild>
