@@ -7,6 +7,17 @@ import { recordToolCall, getSessionToolCallCount } from './parallel-scheduler'
 const MAX_ITERATIONS = 25
 const MAX_SESSION_TOOL_CALLS = 2000
 
+/**
+ * 检测文本是否是纯标签（如 <end_turn>），没有实际内容
+ * 纯标签应该被过滤掉，不显示给用户
+ */
+function isPureTagMessage(text: string): boolean {
+  const trimmed = text.trim()
+  // 检查是否整个文本就是单个XML标签
+  // 匹配 <tag> 或 </tag> 格式，但不能有其他内容
+  return /^<\/?[a-zA-Z_][a-zA-Z0-9_]*\s*\/?>$/.test(trimmed)
+}
+
 export type ToolExecutor = (
   name: string,
   input: Record<string, unknown>,
@@ -276,7 +287,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       messages.push({ role: 'assistant', content: response.content })
 
       // Record Lead's text output alongside tool calls as bubble message
-      if (textContent && agentType === 'lead') {
+      // Filter out pure tag messages (e.g., <end_turn>)
+      if (textContent && agentType === 'lead' && !isPureTagMessage(textContent)) {
         const bubbleEntry = await appendAgentContextEntry({
           swarmSessionId,
           agentId,
@@ -599,7 +611,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         messages.push({ role: 'assistant', content: textContent })
 
         // Record as bubble message for Lead only; discard for non-Lead
-        if (agentType === 'lead') {
+        // Filter out pure tag messages (e.g., <end_turn>)
+        if (textContent && agentType === 'lead' && !isPureTagMessage(textContent)) {
           const entry = await appendAgentContextEntry({
             swarmSessionId,
             agentId,
@@ -637,7 +650,8 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     } else {
       // LLM returned text without tool calls — loop ends
       // Record as bubble message for Lead only; discard for non-Lead
-      if (textContent && agentType === 'lead') {
+      // Filter out pure tag messages (e.g., <end_turn>)
+      if (textContent && agentType === 'lead' && !isPureTagMessage(textContent)) {
         const entry = await appendAgentContextEntry({
           swarmSessionId,
           agentId,
