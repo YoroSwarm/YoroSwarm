@@ -5,7 +5,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { useThemeStore, useLeadPreferencesStore } from "@/stores";
 import {
-  Bell,
   Palette,
   ChevronRight,
   Moon,
@@ -206,7 +205,6 @@ export default function SettingsPage() {
   const tabs = [
     { id: "appearance", label: "外观", icon: Palette },
     { id: "general", label: "通用", icon: Globe },
-    { id: "notifications", label: "通知", icon: Bell },
     { id: "llm-api", label: "LLM API", icon: Key },
     { id: "skills", label: "Skills", icon: Puzzle },
     { id: "env-vars", label: "环境变量", icon: Terminal },
@@ -451,35 +449,6 @@ export default function SettingsPage() {
                     </p>
                   )}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          {activeTab === "notifications" && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">通知设置</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {[
-                  { label: "任务完成通知", desc: "当任务完成时接收通知" },
-                  { label: "Agent 消息", desc: "当 Agent 发送消息时通知" },
-                  { label: "系统公告", desc: "接收系统更新和公告" },
-                  { label: "邮件通知", desc: "通过邮件接收重要通知" },
-                ].map((item, index, arr) => (
-                  <div key={index}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="font-medium">{item.label}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {item.desc}
-                        </p>
-                      </div>
-                      <Switch defaultChecked={index < 2} />
-                    </div>
-                    {index < arr.length - 1 && <Separator className="mt-4" />}
-                  </div>
-                ))}
               </CardContent>
             </Card>
           )}
