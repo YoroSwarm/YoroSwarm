@@ -36,7 +36,8 @@ import {
  * 构建带有时间戳的 Lead 系统提示
  */
 function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null): string {
-  let prompt = LEAD_SYSTEM_PROMPT_BASE
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Swarm'
+  let prompt = LEAD_SYSTEM_PROMPT_BASE.replace(/\{APP_NAME\}/g, appName)
 
   // 如果用户配置了 Lead 昵称，注入到系统提示词中
   if (leadNickname && leadNickname.trim().length > 0) {
@@ -51,7 +52,7 @@ function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?:
   return prompt + buildTimeInfoSection(createdAt, timezone)
 }
 
-const LEAD_SYSTEM_PROMPT_BASE = `你是 Swarm 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
+const LEAD_SYSTEM_PROMPT_BASE = `你是 {APP_NAME} 团队的 Team Lead（团队领导）。你的核心职责是规划、协调和决策，**绝不执行具体工作**。
 
 ## 核心工作流（严格遵循此顺序）
 

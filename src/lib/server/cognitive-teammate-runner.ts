@@ -43,7 +43,7 @@ import { buildTeammateSkillsPromptSection, ensureTeammateSkillsMounted } from '.
 // 时间信息
 import { getUserTimezone, buildTimeInfoSection } from './agent-time'
 
-const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 Swarm 团队的成员 **{{name}}**。
+const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 {{APP_NAME}} 团队的成员 **{{name}}**。
 
 ## 你的角色
 - 角色：{{role}}
@@ -782,11 +782,13 @@ function buildTeammateSystemPrompt(
   skillsSection?: string | null,
   timezone?: string
 ): string {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Swarm'
   const caps = teammate.capabilities
     ? (() => { try { return JSON.parse(teammate.capabilities) } catch { return [] } })()
     : []
 
   let prompt = TEAMMATE_SYSTEM_PROMPT_TEMPLATE
+    .replace('{{APP_NAME}}', appName)
     .replace('{{name}}', teammate.name)
     .replace('{{role}}', teammate.role)
     .replace('{{description}}', teammate.description || '团队成员')

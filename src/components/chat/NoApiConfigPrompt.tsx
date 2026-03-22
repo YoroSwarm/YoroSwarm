@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Key, ArrowRight, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { appConfig } from '@/lib/config/app';
 
 interface NoApiConfigPromptProps {
   onNavigateToSettings?: () => void;
@@ -31,7 +32,7 @@ export function NoApiConfigPrompt({ onNavigateToSettings }: NoApiConfigPromptPro
             </div>
             <h2 className="text-2xl font-bold mb-2">需要配置 LLM API</h2>
             <p className="text-muted-foreground">
-              在使用 Swarm 之前，您需要配置至少一个 LLM API 提供商
+              在使用 {appConfig.name} 之前，您需要配置至少一个 LLM API 提供商
             </p>
           </div>
 

@@ -8,6 +8,7 @@ import { RealTimeMonitor } from './RealTimeMonitor';
 import { TaskAssignment } from './TaskAssignment';
 import { SessionOverview } from './TeamOverview';
 import { useSwarmTeam } from '@/hooks/use-swarm-team';
+import { appConfig } from '@/lib/config/app';
 import { useTasks } from '@/hooks/use-tasks';
 import { useAgentWebSocket } from '@/hooks/use-agent-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
@@ -29,7 +30,7 @@ const defaultMessages: AgentMessage[] = [
     id: 'message-1',
     agentId: 'team-lead',
     agentName: 'Team Lead',
-    content: 'Swarm 已初始化。Lead 会根据目标动态拆解任务并调用合适队友。',
+    content: `${appConfig.name} 已初始化。Lead 会根据目标动态拆解任务并调用合适队友。`,
     type: 'system',
     timestamp: new Date().toISOString(),
   },
@@ -235,7 +236,7 @@ export const MonitorDashboard: React.FC = () => {
           <div className="flex flex-col gap-6 px-6 py-6 lg:flex-row lg:items-end lg:justify-between lg:px-8">
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white/70 px-4 py-1.5 text-xs font-medium uppercase tracking-[0.26em] text-neutral-500">
-                Swarm Control Surface
+                {appConfig.name} Control Surface
               </div>
               <div>
                 <h1 className="text-3xl font-semibold tracking-tight text-neutral-950 lg:text-4xl">Team Lead 驱动的 Agent 集群</h1>

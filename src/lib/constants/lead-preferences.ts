@@ -3,6 +3,16 @@
  * 这些默认值会在用户注册时自动写入数据库
  */
 
+// 获取应用名称，用于在默认配置中使用
+function getAppName(): string {
+  if (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_APP_NAME) {
+    return process.env.NEXT_PUBLIC_APP_NAME
+  }
+  return 'Swarm'
+}
+
+const APP_NAME = getAppName()
+
 export const DEFAULT_LEAD_AGENTS_MD = `# 团队成员配置指南
 
 ## 角色定义
@@ -21,7 +31,7 @@ export const DEFAULT_LEAD_AGENTS_MD = `# 团队成员配置指南
 export const DEFAULT_LEAD_SOUL_MD = `# Team Lead 核心理念
 
 ## 我的身份
-我是 Swarm 团队的 Team Lead，我的职责是：
+我是 ${APP_NAME} 团队的 Team Lead，我的职责是：
 - 规划任务并拆解为可执行的子任务
 - 为每个子任务创建专门的角色
 - 协调团队成员的工作进度

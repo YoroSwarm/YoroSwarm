@@ -20,6 +20,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { appConfig } from '@/lib/config/app';
 import { useUIStore, useLlmConfigsStore } from '@/stores';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { useSessions } from '@/hooks/use-sessions';
@@ -231,9 +232,9 @@ export function Sidebar() {
       <div className="h-16 flex items-center justify-between border-b border-border px-4 shrink-0">
         <Link href="/dashboard" className="flex items-center gap-3 group">
           <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <Image src="/icon.svg" alt="Swarm" width={32} height={32} />
+            <Image src="/icon.svg" alt={appConfig.name} width={32} height={32} />
           </div>
-          <span className="font-semibold text-xl text-foreground group-hover:text-primary/80 transition-colors">Swarm</span>
+          <span className="font-semibold text-xl text-foreground group-hover:text-primary/80 transition-colors">{appConfig.name}</span>
         </Link>
         <Button
           variant="ghost"

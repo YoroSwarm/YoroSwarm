@@ -9,6 +9,8 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { appConfig } from '@/lib/config/app';
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 
@@ -40,7 +42,7 @@ export const CreateSwarmSessionModal: React.FC<CreateSwarmSessionModalProps> = (
         className="max-w-2xl gap-0 overflow-hidden rounded-[28px] border border-white/30 bg-white/80 p-0 shadow-2xl shadow-black/10 ring-0 backdrop-blur-2xl"
       >
         <DialogHeader className="gap-0 border-b border-black/10 bg-linear-to-br from-white via-white to-neutral-100 px-7 py-6">
-          <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-500">Swarm Session</p>
+          <p className="text-xs font-medium uppercase tracking-[0.32em] text-neutral-500">{appConfig.name} Session</p>
           <DialogTitle className="mt-2 text-2xl font-semibold text-neutral-950">
             开始一个新对话
           </DialogTitle>

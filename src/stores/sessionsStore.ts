@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import type { Session, Agent } from '@/types/chat';
 import { swarmSessionsApi, type SwarmSessionResponse } from '@/lib/api/swarm-sessions';
+import { appConfig } from '@/lib/config/app';
 
 function normalizeParticipantName(name: string | null | undefined, fallbackRole: string): string {
   const normalizedName = typeof name === 'string' ? name.trim() : '';
@@ -47,7 +48,7 @@ function convertSession(session: SwarmSessionResponse): Session {
           sender: {
             id: session.last_message.sender_id || lead?.id || 'lead',
             type: session.last_message.sender_type === 'user' ? 'user' : 'agent',
-            name: session.last_message.sender_type === 'user' ? '我' : lead?.name || 'Swarm',
+            name: session.last_message.sender_type === 'user' ? '我' : lead?.name || appConfig.name,
           },
           status: 'received',
           createdAt: session.last_message.created_at,

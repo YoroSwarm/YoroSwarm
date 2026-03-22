@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuthStore } from "@/stores";
+import { appConfig } from "@/lib/config/app";
 import { Loader2 } from "lucide-react";
 
 export default function LoginPage() {
@@ -40,15 +41,15 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl grid md:grid-cols-2 gap-8 items-center">
         {/* 左侧 Logo 区域 */}
         <div className={`hidden md:flex flex-col justify-center items-center p-12 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
-          <Image src="/icon.svg" alt="Swarm" width={256} height={256} />
+          <Image src="/icon.svg" alt={appConfig.name} width={256} height={256} />
         </div>
 
         {/* 右侧表单区域 */}
         <div className={`w-full max-w-md mx-auto space-y-6 rounded-xl border bg-card p-8 shadow-lg transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
           {/* 移动端 Logo */}
           <div className="md:hidden text-center">
-            <Image src="/icon.svg" alt="Swarm" width={64} height={64} className="mx-auto mb-4" />
-            <h1 className="text-2xl font-bold">Swarm</h1>
+            <Image src="/icon.svg" alt={appConfig.name} width={64} height={64} className="mx-auto mb-4" />
+            <h1 className="text-2xl font-bold">{appConfig.name}</h1>
             <p className="text-muted-foreground mt-2">登录到您的账户</p>
           </div>
 

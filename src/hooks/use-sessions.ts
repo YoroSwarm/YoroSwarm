@@ -3,6 +3,7 @@
 import { useCallback, useEffect } from 'react';
 import { useSessionsStore } from '@/stores';
 import { storage } from '@/utils/storage';
+import { appConfig } from '@/lib/config/app';
 
 export const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
@@ -48,7 +49,7 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const ensureLeadSession = useCallback(async ({ leadAgentId, leadAgentName }: { leadAgentId: string; leadAgentName?: string }) => {
     const existing = sessions.find((session) => session.participants.some((participant) => participant.id === leadAgentId));
     if (existing) return existing;
-    return createSessionWithStorage(leadAgentName ? `${leadAgentName} 会话` : 'Swarm 会话');
+    return createSessionWithStorage(leadAgentName ? `${leadAgentName} 会话` : `${appConfig.name} 会话`);
   }, [createSessionWithStorage, sessions]);
 
   const openDirectSessionForAgent = useCallback(async (_agentId: string, _agentName?: string) => {

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft, FileText } from "lucide-react";
+import { appConfig } from "@/lib/config/app";
 
 export default function TermsPage() {
   return (
@@ -36,7 +37,7 @@ export default function TermsPage() {
             <section className="space-y-4">
               <h2 className="text-2xl font-bold">1. 服务概述</h2>
               <p>
-                Swarm（以下简称&ldquo;本服务&rdquo;）是一个多 Agent AI 协作平台，采用 Lead Agent（主导 Agent）与 Teammate Agent（协作 Agent）的架构，为用户提供 AI Agent 集群的创建、编排、任务分配和协同工作能力。本服务允许用户通过自然语言与 AI Agent 团队交互，由 Agent 自主拆解任务、调用技能（Skill）并生成产出物。
+                {appConfig.name}（以下简称&ldquo;本服务&rdquo;）是一个多 Agent AI 协作平台，采用 Lead Agent（主导 Agent）与 Teammate Agent（协作 Agent）的架构，为用户提供 AI Agent 集群的创建、编排、任务分配和协同工作能力。本服务允许用户通过自然语言与 AI Agent 团队交互，由 Agent 自主拆解任务、调用技能（Skill）并生成产出物。
               </p>
               <p>
                 使用本服务即表示您已阅读、理解并同意遵守本服务条款。如果您不同意本条款的任何部分，请勿使用本服务。

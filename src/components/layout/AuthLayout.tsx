@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { appConfig } from '@/lib/config/app';
 import { useThemeStore } from '@/stores';
 
 interface AuthLayoutProps {
@@ -20,9 +21,9 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-12 h-12 rounded-xl bg-black/30 flex items-center justify-center shadow-lg border border-border/50">
-            <img src="/icon.svg" alt="Swarm" className="w-8 h-8" />
+            <img src="/icon.svg" alt={appConfig.name} className="w-8 h-8" />
           </div>
-          <span className="text-2xl font-bold text-foreground">Swarm</span>
+          <span className="text-2xl font-bold text-foreground">{appConfig.name}</span>
         </div>
 
         {/* 内容区域 */}
@@ -32,7 +33,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
 
         {/* 底部版权 */}
         <p className="text-center text-sm text-muted-foreground mt-6">
-          © 2026 Swarm. All rights reserved.
+          © 2026 {appConfig.name}. All rights reserved.
         </p>
       </div>
     </div>

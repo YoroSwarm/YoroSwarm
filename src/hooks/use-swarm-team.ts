@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { swarmSessionsApi, type SwarmSessionResponse } from '@/lib/api/swarm-sessions';
 import type { Agent, SessionSummary } from '@/types/agent';
 import { storage } from '@/utils/storage';
+import { appConfig } from '@/lib/config/app';
 
 const CURRENT_SESSION_STORAGE_KEY = 'current_swarm_session_id';
 
@@ -42,7 +43,7 @@ function convertSessionToSummary(session: ApiSession): SessionSummary {
   return {
     id: session.id,
     name: session.title,
-    description: session.goal || 'Swarm 工作会话',
+    description: session.goal || `${appConfig.name} 工作会话`,
     agentCount: session.agents.length,
     activeAgents: session.agents.filter((agent) => agent.status !== 'offline').length,
     totalTasks: session.tasks.length,
@@ -85,7 +86,7 @@ export function useSwarmTeam() {
         return fallbackSessionId;
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : '加载 Swarm 会话失败');
+      setError(err instanceof Error ? err.message : `加载 ${appConfig.name} 会话失败`);
     } finally {
       setIsLoading(false);
     }
@@ -104,7 +105,7 @@ export function useSwarmTeam() {
       setCurrentTeamId(created.id);
       return created;
     } catch (err) {
-      const message = err instanceof Error ? err.message : '创建 Swarm 会话失败';
+      const message = err instanceof Error ? err.message : `创建 ${appConfig.name} 会话失败`;
       setError(message);
       throw err;
     } finally {

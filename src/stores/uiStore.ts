@@ -3,6 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { storage } from '@/utils/storage';
+import { appConfig } from '@/lib/config/app';
 
 interface Notification {
   id: string;
@@ -85,7 +86,7 @@ export const useUIStore = create<UIStore>()(
     set({ pageTitle: title });
     // Update document title
     if (typeof document !== 'undefined') {
-      document.title = title ? `${title} - Swarm` : 'Swarm';
+      document.title = title ? `${title} - ${appConfig.name}` : appConfig.name;
     }
   },
 

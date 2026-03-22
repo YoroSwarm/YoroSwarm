@@ -13,8 +13,9 @@ import {
   File,
   ChevronRight,
   FolderTree,
-  Eye,
+  Eye
 } from "lucide-react";
+import { appConfig } from "@/lib/config/app";
 import { filesApi, type UploadedFileResponse, type WorkspaceDirectoryEntry } from "@/lib/api/files";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -249,7 +250,7 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
           <div className="flex flex-col items-center justify-center py-12 text-muted-foreground border border-border rounded-xl">
             <FolderOpen className="h-12 w-12 mb-3 opacity-50" />
             <p className="font-medium">当前目录为空</p>
-            <p className="text-sm mt-1">您可上传或等待 Swarm 创建文件</p>
+            <p className="text-sm mt-1">您可上传或等待 {appConfig.name} 创建文件</p>
           </div>
         ) : (
           <div className="flex flex-col gap-2">

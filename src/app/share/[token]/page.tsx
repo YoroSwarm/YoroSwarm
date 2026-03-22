@@ -7,6 +7,7 @@ import { SwarmLoader } from '@/components/ui/swarm-loader'
 import { formatMessageGroup } from '@/lib/utils/date'
 import type { Message } from '@/types/chat'
 import { Share2, AlertCircle } from 'lucide-react'
+import { appConfig } from '@/lib/config/app'
 
 interface SnapshotMessage {
   id: string
@@ -259,7 +260,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
       {/* Header */}
       <header className="shrink-0 border-b border-border bg-card/80 backdrop-blur-sm px-4 py-3 shadow-sm">
         <div className="mx-auto max-w-3xl flex items-center gap-3">
-          <Image src="/icon.svg" alt="Swarm" width={24} height={24} />
+          <Image src="/icon.svg" alt={appConfig.name} width={24} height={24} />
           <div className="min-w-0 flex-1">
             <h1 className="truncate text-base font-semibold">{data.title}</h1>
             <p className="text-xs text-muted-foreground">

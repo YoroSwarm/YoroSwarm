@@ -8,6 +8,7 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '@/lib/utils';
 import { formatMessageTime } from '@/lib/utils/date';
+import { appConfig } from '@/lib/config/app';
 import { useThemeStore } from '@/stores/themeStore';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -967,7 +968,7 @@ export const MessageItem = memo(function MessageItem({
           ) : (
             <Image
               src="/icon.svg"
-              alt="Swarm"
+              alt={appConfig.name}
               width={20}
               height={20}
               className="opacity-70"

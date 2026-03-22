@@ -6,6 +6,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useAuthStore } from "@/stores";
+import { appConfig } from "@/lib/config/app";
 
 interface RegisterFormState {
   username: string;
@@ -99,22 +100,22 @@ export default function RegisterPage() {
       <div className="w-full max-w-6xl grid md:grid-cols-2 gap-8 items-center">
         {/* 左侧 Logo 区域 */}
         <div className={`hidden md:flex flex-col justify-center items-center p-12 transition-all duration-500 ${isVisible ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-8'}`}>
-          <Image src="/icon.svg" alt="Swarm" width={256} height={256} />
+          <Image src="/icon.svg" alt={appConfig.name} width={256} height={256} />
         </div>
 
         {/* 右侧表单区域 */}
         <div className={`w-full max-w-md mx-auto space-y-5 rounded-xl border bg-card p-6 shadow-lg transition-all duration-500 ${isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'}`}>
           {/* 移动端 Logo */}
           <div className="md:hidden text-center">
-            <Image src="/icon.svg" alt="Swarm" width={64} height={64} className="mx-auto mb-4" />
+            <Image src="/icon.svg" alt={appConfig.name} width={64} height={64} className="mx-auto mb-4" />
             <h1 className="text-2xl font-bold">创建账户</h1>
-            <p className="mt-2 text-muted-foreground">加入 Swarm Agent 集群系统</p>
+            <p className="mt-2 text-muted-foreground">加入 {appConfig.name} Agent 集群系统</p>
           </div>
 
           {/* 桌面端标题 */}
           <div className="hidden md:block">
             <h2 className="text-2xl font-bold">创建账户</h2>
-            <p className="text-muted-foreground mt-1">加入 Swarm Agent 集群系统</p>
+            <p className="text-muted-foreground mt-1">加入 {appConfig.name} Agent 集群系统</p>
           </div>
 
           {/* 错误提示 */}

@@ -19,6 +19,7 @@ import {
   Heart,
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { appConfig } from '@/lib/config/app';
 
 interface HelpSection {
   id: string;
@@ -33,11 +34,11 @@ const helpSections: HelpSection[] = [
     id: 'getting-started',
     icon: Lightbulb,
     title: '快速开始',
-    description: '了解 Swarm 的基本概念和使用方法',
+    description: `了解 ${appConfig.name} 的基本概念和使用方法`,
     items: [
       {
-        q: '什么是 Swarm？',
-        a: 'Swarm 是一个多智能体协作平台。您发送一条消息后，Lead（主智能体）会自动分析您的需求，并在必要时将任务分配给多个 Teammate（协作智能体），它们并行工作后汇总结果返回给您。',
+        q: `什么是 ${appConfig.name}？`,
+        a: `${appConfig.name} 是一个多智能体协作平台。您发送一条消息后，Lead（主智能体）会自动分析您的需求，并在必要时将任务分配给多个 Teammate（协作智能体），它们并行工作后汇总结果返回给您。`,
       },
       {
         q: '如何创建一个新会话？',
@@ -153,7 +154,7 @@ const helpSections: HelpSection[] = [
     items: [
       {
         q: '我的数据安全吗？',
-        a: 'Swarm 是自托管平台，所有数据存储在您自己的服务器上。对话内容、文件和配置信息不会发送到除您配置的 LLM API 以外的任何第三方服务。',
+        a: `${appConfig.name} 是自托管平台，所有数据存储在您自己的服务器上。对话内容、文件和配置信息不会发送到除您配置的 LLM API 以外的任何第三方服务。`,
       },
       {
         q: '工具审批机制如何保障安全？',
@@ -211,7 +212,7 @@ export default function HelpPage() {
           帮助文档
         </h1>
         <p className="text-muted-foreground mt-1">
-          了解 Swarm 的功能和使用方法
+          了解 {appConfig.name} 的功能和使用方法
         </p>
       </div>
 
@@ -371,7 +372,7 @@ export default function HelpPage() {
         </div>
         <div className="border-t border-border px-4 py-3">
           <p className="text-xs text-muted-foreground mb-3">
-            Swarm 的构建离不开以下优秀的开源项目：
+            {appConfig.name} 的构建离不开以下优秀的开源项目：
           </p>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {openSourceDeps.map((dep) => (
@@ -398,7 +399,7 @@ export default function HelpPage() {
       <div className="rounded-lg border border-border bg-card p-4">
         <h3 className="text-sm font-semibold mb-2">许可证</h3>
         <p className="text-xs text-muted-foreground leading-relaxed">
-          Swarm 以 MIT 许可证发布。您可以自由使用、修改和分发本软件，但需保留原始版权声明和许可证副本。
+          {appConfig.name} 以 MIT 许可证发布。您可以自由使用、修改和分发本软件，但需保留原始版权声明和许可证副本。
           本软件按「原样」提供，不附带任何明示或暗示的保证。详见项目根目录下的 LICENSE 文件。
         </p>
       </div>

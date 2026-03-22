@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react';
 import { useAuthStore } from '@/stores';
+import { appConfig } from '@/lib/config/app';
 
 interface StoreProviderProps {
   children: ReactNode;
@@ -31,7 +32,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse flex items-center justify-center">
-          <img src="/icon.svg" alt="Swarm" className="w-20 h-20" />
+          <img src="/icon.svg" alt={appConfig.name} className="w-20 h-20" />
         </div>
       </div>
     );

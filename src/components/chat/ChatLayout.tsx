@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { SessionFiles } from '@/components/session/SessionFiles';
+import { appConfig } from '@/lib/config/app';
 import { SessionTasks } from '@/components/session/SessionTasks';
 import { SessionSettings } from '@/components/session/SessionSettings';
 import { ApprovalCards } from '@/components/tool-approval/ApprovalCards';
@@ -189,7 +190,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                 sender: {
                   id: chatPayload.sender_id,
                   type: isUserMsg ? 'user' as const : 'agent' as const,
-                  name: isUserMsg ? '我' : chatPayload.sender_name || 'Swarm',
+                  name: isUserMsg ? '我' : chatPayload.sender_name || appConfig.name,
                 },
                 status: 'received' as const,
                 createdAt: chatPayload.created_at || chatPayload.timestamp || new Date().toISOString(),

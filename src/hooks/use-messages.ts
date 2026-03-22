@@ -6,6 +6,7 @@ import { filesApi } from '@/lib/api/files';
 import type { Agent, Message, ToolCall } from '@/types/chat';
 import type { ChatMessagePayload, AgentThinkingPayload, ToolActivityPayload, ExecutionStatusUpdate } from '@/types/websocket';
 import { useAuthStore } from '@/stores/authStore';
+import { appConfig } from '@/lib/config/app';
 
 export interface ToolCallState {
   toolName: string;
@@ -97,7 +98,7 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
     sender: {
       id: message.sender_id || (isUser ? 'user' : lead?.id || 'lead'),
       type: isUser ? 'user' : 'agent',
-      name: isUser ? '我' : lead?.name || 'Swarm',
+      name: isUser ? '我' : lead?.name || appConfig.name,
       avatar: isUser ? userAvatar : undefined,
     },
     status: 'received',
@@ -391,7 +392,7 @@ export function useMessages(options: UseMessagesOptions) {
         type: incoming.sender_type === 'user' ? 'user' : 'agent',
         name: incoming.sender_type === 'user'
           ? '我'
-          : participantMapRef.current.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || 'Swarm',
+          : participantMapRef.current.find((participant) => participant.role === 'lead')?.name || incoming.sender_name || appConfig.name,
         avatar: incoming.sender_type === 'user' ? userAvatarRef.current : undefined,
       },
       status: 'received',
