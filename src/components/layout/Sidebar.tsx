@@ -401,7 +401,7 @@ export function Sidebar() {
 
     {/* Delete confirmation dialog */}
     <AlertDialog open={!!deleteConfirm} onOpenChange={(open) => !open && setDeleteConfirm(null)}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-[95vw] sm:max-w-md rounded-lg">
         <AlertDialogHeader>
           <AlertDialogTitle>删除会话</AlertDialogTitle>
           <AlertDialogDescription asChild>
@@ -413,9 +413,9 @@ export function Sidebar() {
                   <span className="text-xs">检查分享链接...</span>
                 </div>
               ) : deleteConfirm && deleteConfirm.shareCount > 0 ? (
-                <div className="flex items-start gap-2 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/30 p-2.5 text-amber-700 dark:text-amber-400">
+                <div className="flex items-start gap-2 text-destructive text-xs py-1">
                   <Share2 className="h-4 w-4 shrink-0 mt-0.5" />
-                  <span className="text-xs">
+                  <span>
                     该会话有 <strong>{deleteConfirm.shareCount}</strong> 个分享链接，删除后所有分享链接将失效。
                   </span>
                 </div>

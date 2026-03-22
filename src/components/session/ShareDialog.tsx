@@ -59,7 +59,7 @@ export function ShareDialog({ open, onOpenChange, sessionId, onShareCreated }: S
 
   return (
     <AlertDialog open={open} onOpenChange={handleClose}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-[95vw] sm:max-w-md rounded-lg">
         <AlertDialogHeader>
           <AlertDialogTitle>
             {createdShare ? '分享链接已创建' : '创建分享链接'}
@@ -69,13 +69,14 @@ export function ShareDialog({ open, onOpenChange, sessionId, onShareCreated }: S
               {createdShare ? (
                 <>
                   <p>分享链接已复制到剪贴板。任何拥有此链接的人都可以查看对话记录。</p>
-                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 min-w-0 overflow-hidden">
+                  <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 px-3 py-2 overflow-hidden">
                     <code className="min-w-0 flex-1 text-xs truncate text-foreground select-all">
                       {createdShare.url}
                     </code>
                     <button
                       onClick={handleCopy}
-                      className="shrink-0 p-1 rounded hover:bg-accent transition-colors"
+                      className="shrink-0 p-1 rounded hover:bg-accent transition-colors ml-1"
+                      title={copied ? '已复制' : '复制链接'}
                     >
                       {copied ? (
                         <Check className="h-4 w-4 text-emerald-500" />
