@@ -986,7 +986,7 @@ export const MessageItem = memo(function MessageItem({
       >
         {showAvatar && !isUser && (
           <span className="mb-1 text-xs text-muted-foreground flex items-center gap-1.5">
-            {isAgent && isLead && leadNickname ? leadNickname : 'Swarm'}
+            {displayName}
             {isAgent && !isLead && (
               <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded text-muted-foreground/70">
                 Teammate

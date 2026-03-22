@@ -114,8 +114,11 @@ export async function POST(_request: NextRequest, context: RouteContext) {
 
       for (const file of files) {
         try {
-          const srcPath = path.resolve(file.path)
-          const destPath = path.join(snapshotDir, file.id + '_' + file.filename)
+          // file.path can be absolute or relative - handle both cases
+          const srcPath = path.isAbsolute(file.path)
+            ? file.path
+            : path.join(getSessionWorkspaceRoot(id), file.path)
+          const destPath = path.join(snapshotDir, file.id + '_' + file.originalName)
           await copyFile(srcPath, destPath)
           copiedFileIds.push(file.id)
         } catch (err) {

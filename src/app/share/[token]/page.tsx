@@ -71,13 +71,27 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
       mimeType: a.mimeType,
     }))
 
+    // Determine message type based on attachments
+    let messageType: 'text' | 'image' | 'file' = 'text'
+    if (messageAttachments && messageAttachments.length > 0) {
+      const firstAttachment = messageAttachments[0]
+      if (firstAttachment.type === 'image') {
+        messageType = 'image'
+      } else if (firstAttachment.type === 'file') {
+        messageType = 'file'
+      }
+    }
+
+    // For Lead messages, ensure sender.id matches meta.leadAgentId for proper isLead detection
+    const senderId = isUser ? (msg.senderId || 'user') : (msg.senderId || meta?.leadAgentId || 'lead')
+
     msgs.push({
       id: msg.id,
       sessionId: '',
-      type: 'text',
+      type: messageType,
       content: msg.content,
       sender: {
-        id: msg.senderId || (isUser ? 'user' : 'lead'),
+        id: senderId,
         type: isUser ? 'user' : 'agent',
         name: isUser ? (meta?.userName || '用户') : (meta?.leadName || 'Team Lead'),
         avatar: isUser ? (meta?.userAvatar || undefined) : (meta?.leadAvatar || undefined),
