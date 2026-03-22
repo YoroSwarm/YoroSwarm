@@ -16,6 +16,7 @@ export interface AgentActivityItem {
     toolInput?: string
     isError?: boolean
     toolCallId?: string
+    model?: string
   }
   createdAt: string
 }
@@ -76,26 +77,37 @@ export async function GET(
       }
 
       if (entry.entryType === 'thinking') {
+        const metadata = entry.metadata ? JSON.parse(entry.metadata) : null
         items.push({
           ...baseItem,
           activityType: 'thinking' as const,
           content: entry.content,
+          metadata: {
+            ...(metadata?.model ? { model: metadata.model } : {}),
+          },
         })
       } else if (entry.entryType === 'assistant_response') {
+        const metadata = entry.metadata ? JSON.parse(entry.metadata) : null
         items.push({
           ...baseItem,
           activityType: 'assistant_response' as const,
           content: entry.content,
+          metadata: {
+            ...(metadata?.model ? { model: metadata.model } : {}),
+          },
         })
       } else if (entry.entryType === 'bubble') {
+        const metadata = entry.metadata ? JSON.parse(entry.metadata) : null
         items.push({
           ...baseItem,
           activityType: 'bubble' as const,
           content: entry.content,
+          metadata: {
+            ...(metadata?.model ? { model: metadata.model } : {}),
+          },
         })
       } else if (entry.entryType === 'tool_call') {
         const metadata = entry.metadata ? JSON.parse(entry.metadata) : null
-        // Use stored toolCallId or generate one for backward compatibility
         const toolCallId = metadata?.toolCallId || metadata?.tool_call_id || `tc-${entry.agentId}-${entry.createdAt.getTime()}`
         items.push({
           ...baseItem,
@@ -105,13 +117,12 @@ export async function GET(
             toolName: metadata?.toolName || 'unknown',
             toolInput: metadata?.toolInput ? JSON.stringify(metadata.toolInput).slice(0, 200) : undefined,
             toolCallId,
+            ...(metadata?.model ? { model: metadata.model } : {}),
           },
         })
       } else if (entry.entryType === 'tool_result') {
         const metadata = entry.metadata ? JSON.parse(entry.metadata) : null
-        // Try to find the associated tool name from metadata
         const toolName = metadata?.toolName || metadata?.tool_name || 'unknown'
-        // Use stored toolCallId or fallback to entry.sourceId (if tool_result references tool_call entry)
         const toolCallId = metadata?.toolCallId || metadata?.tool_call_id || entry.sourceId || undefined
         items.push({
           ...baseItem,
@@ -121,6 +132,7 @@ export async function GET(
             isError: metadata?.isError || false,
             toolName,
             toolCallId,
+            ...(metadata?.model ? { model: metadata.model } : {}),
           },
         })
       }

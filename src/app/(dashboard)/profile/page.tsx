@@ -99,9 +99,9 @@ export default function ProfilePage() {
   const initials = (user?.displayName || user?.username || "U").slice(0, 1).toUpperCase();
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
+    <div className="max-w-2xl mx-auto p-4 md:p-6 space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">个人资料</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">个人资料</h1>
         <p className="text-muted-foreground mt-1">管理您的头像、昵称和密码</p>
       </div>
 
@@ -112,7 +112,7 @@ export default function ProfilePage() {
         </CardHeader>
         <CardContent className="space-y-6">
           {/* Avatar */}
-          <div className="flex items-center gap-6">
+          <div className="flex flex-col sm:flex-row items-center gap-6">
             <div className="relative group">
               <Avatar className="h-20 w-20 border-2 border-border">
                 {avatarSrc ? (

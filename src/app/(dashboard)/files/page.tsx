@@ -106,21 +106,22 @@ export default function FilesPage() {
   };
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6">
       {/* 页面标题 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">文件管理</h1>
-          <p className="text-muted-foreground mt-1">上传、管理和共享文件</p>
+          <h1 className="text-2xl md:text-3xl font-bold">文件管理</h1>
+          <p className="text-muted-foreground mt-1 text-sm md:text-base">上传、管理和共享文件</p>
         </div>
-        <button className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors">
+        <button className="flex items-center gap-2 px-3 md:px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors text-sm">
           <Upload className="h-4 w-4" />
-          上传文件
+          <span className="hidden sm:inline">上传文件</span>
+          <span className="sm:hidden">上传</span>
         </button>
       </div>
 
       {/* 统计 */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <div className="rounded-xl border bg-card p-4">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -205,11 +206,11 @@ export default function FilesPage() {
             <table className="w-full">
               <thead>
                 <tr className="border-b bg-muted/50">
-                  <th className="px-4 py-3 text-left text-sm font-medium">文件名</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">类型</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">大小</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">上传时间</th>
-                  <th className="px-4 py-3 text-left text-sm font-medium">操作</th>
+                  <th className="px-3 md:px-4 py-3 text-left text-sm font-medium">文件名</th>
+                  <th className="px-3 md:px-4 py-3 text-left text-sm font-medium hidden md:table-cell">类型</th>
+                  <th className="px-3 md:px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">大小</th>
+                  <th className="px-3 md:px-4 py-3 text-left text-sm font-medium hidden sm:table-cell">上传时间</th>
+                  <th className="px-3 md:px-4 py-3 text-left text-sm font-medium">操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -222,24 +223,24 @@ export default function FilesPage() {
                 ) : (
                   filteredFiles.map((file) => (
                     <tr key={file.id} className="border-b last:border-b-0 hover:bg-muted/50">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
+                      <td className="px-3 md:px-4 py-3">
+                        <div className="flex items-center gap-2 md:gap-3">
                           {getFileIcon(file.mimeType)}
-                          <span className="font-medium">{file.originalName}</span>
+                          <span className="font-medium text-sm md:text-base truncate max-w-[150px] sm:max-w-none">{file.originalName}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 md:px-4 py-3 hidden md:table-cell">
                         <span className="text-sm text-muted-foreground">{file.mimeType}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 md:px-4 py-3 hidden sm:table-cell">
                         <span className="text-sm text-muted-foreground">{formatFileSize(file.size)}</span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 md:px-4 py-3 hidden sm:table-cell">
                         <span className="text-sm text-muted-foreground">
                           {new Date(file.createdAt).toLocaleDateString("zh-CN")}
                         </span>
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="px-3 md:px-4 py-3">
                         <div className="flex items-center gap-1">
                           <a
                             href={`/api/files/${file.id}?download=1`}

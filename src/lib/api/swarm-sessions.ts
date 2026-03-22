@@ -14,6 +14,7 @@ export interface AgentActivityItem {
     toolInput?: string;
     isError?: boolean;
     toolCallId?: string; // For matching tool_call with tool_result
+    model?: string;
   };
   createdAt: string;
 }
@@ -168,6 +169,7 @@ export interface AgentActivityItem {
     toolInput?: string;
     isError?: boolean;
     toolCallId?: string;
+    model?: string;
   };
   createdAt: string;
 }

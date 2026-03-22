@@ -21,7 +21,7 @@ import { useSidebar } from '@/stores';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
-import { PanelRightClose, PanelRightOpen, Menu, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings } from 'lucide-react';
 
 const RIGHT_PANEL_STORAGE_KEY = 'right_panel_open';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -359,7 +359,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }
   };
 
-  const { sidebarOpen: _sidebarOpen, toggleSidebar } = useSidebar();
+  const { sidebarOpen: _sidebarOpen } = useSidebar();
   const { leadNickname, leadAvatarUrl, glassEffect, loadPreferences } = useLeadPreferencesStore();
 
   // 自动加载 Lead 偏好设置（头像和昵称）
@@ -374,12 +374,6 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           {/* First row: title + panel toggle */}
           <div className="flex h-12 items-center justify-between">
             <div className="flex items-center gap-3 overflow-hidden">
-              <button
-                onClick={toggleSidebar}
-                className="lg:hidden -ml-2 rounded-md p-2 hover:bg-accent active:bg-accent/80"
-              >
-                 <Menu className="h-5 w-5" />
-              </button>
               <h1 className="truncate text-lg font-bold font-heading">
                 {currentSessionTitle || '新对话'}
               </h1>
@@ -387,8 +381,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
             <button
               onClick={() => setIsRightPanelOpen(!isRightPanelOpen)}
-              className="hidden rounded-md p-1.5 hover:bg-accent active:bg-accent/80 md:flex border border-transparent hover:border-border transition-all"
-              title={isRightPanelOpen ? '关闭右侧面板' : '打开右侧面板'}
+              className="rounded-md p-1.5 hover:bg-accent active:bg-accent/80 border border-transparent hover:border-border transition-all shrink-0"
+              title={isRightPanelOpen ? '关闭详情面板' : '打开详情面板'}
             >
               {isRightPanelOpen ? (
                 <PanelRightClose className="h-4 w-4" />
@@ -493,7 +487,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
               {/* Chat input - only on chat tab */}
               {activeTab === 'chat' && (
-                <div className={cn("chat-glass-surface border-t border-border bg-card/50 p-4", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
+                <div className={cn("chat-glass-surface border-t border-border bg-card/50 p-2 md:p-4", glassEffect ? 'backdrop-blur' : 'backdrop-blur-sm')}>
                   <ApprovalCards
                     approvals={toolApprovals}
                     onDecision={(id, decision) => handleToolApprovalDecision(id, decision)}
@@ -520,7 +514,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               )}
             </div>
           ) : (
-            <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+            <div className="flex h-full flex-col items-center justify-center p-4 md:p-8 text-center">
               <div className="mb-8 relative">
                 <Image src="/icon.svg" alt="" width={96} height={96} className="opacity-40" />
                 <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -547,11 +541,18 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
         </div>
       </main>
 
+      {/* Mobile backdrop for right panel */}
+      {isRightPanelOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setIsRightPanelOpen(false)}
+        />
+      )}
       <aside
         className={cn(
-          'chat-glass-surface fixed inset-y-0 right-0 z-30 border-border bg-card transition-all duration-300 ease-in-out md:static md:inset-auto shadow-lg md:shadow-none',
-          glassEffect && 'backdrop-blur',
-          isRightPanelOpen ? 'w-80 translate-x-0 border-l' : 'w-0 translate-x-full border-l-0 overflow-hidden opacity-0 md:translate-x-0'
+          'fixed inset-y-0 right-0 z-40 w-80 border-border bg-card backdrop-blur transition-transform duration-300 ease-in-out shadow-lg',
+          'md:chat-glass-surface md:static md:inset-auto md:z-auto md:transition-all md:shadow-none',
+          isRightPanelOpen ? 'translate-x-0 md:w-80 border-l' : 'translate-x-full md:translate-x-0 md:w-0 md:border-l-0 md:overflow-hidden md:opacity-0'
         )}
       >
         <div className={cn(
@@ -668,7 +669,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                               )} style={{ borderRadius: "50% 50% 50% 50% / 60% 40% 60% 40%" }} />
                             </div>
                           </PopoverTrigger>
-                          <PopoverContent align="start" side="left" className="w-72">
+                          <PopoverContent align="start" side="bottom" collisionPadding={16} className="w-72 max-w-[calc(100vw-2rem)]">
                             <div className="space-y-3">
                               <div>
                                 <div className="text-sm font-semibold">{participantName}</div>

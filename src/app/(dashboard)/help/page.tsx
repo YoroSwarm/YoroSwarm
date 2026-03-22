@@ -203,10 +203,10 @@ export default function HelpPage() {
   }, [searchQuery]);
 
   return (
-    <div className="flex flex-col gap-6 p-6 max-w-4xl mx-auto">
+    <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6 max-w-4xl mx-auto">
       {/* 页面标题 */}
       <div>
-        <h1 className="text-3xl font-semibold flex items-center gap-3">
+        <h1 className="text-2xl md:text-3xl font-semibold flex items-center gap-3">
           <BookOpen className="w-8 h-8 text-primary" />
           帮助文档
         </h1>

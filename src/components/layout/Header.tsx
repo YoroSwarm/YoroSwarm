@@ -36,18 +36,19 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
   }, [pathname]);
 
   return (
-    <header className={`h-16 bg-card border-b border-border flex items-center justify-between px-6 sticky top-0 z-50 transition-colors duration-200${glassEffect ? ' backdrop-blur' : ''}`}>
-      {/* 左侧展开按钮 */}
-      {showToggleButton && (
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onToggleSidebar}
-          className="h-9 w-9 mr-4 rounded-lg border border-border hover:bg-accent"
-        >
-          <PanelLeft className="h-5 w-5" />
-        </Button>
-      )}
+    <header className={`h-16 bg-card border-b border-border flex items-center justify-between px-4 md:px-6 sticky top-0 z-50 transition-colors duration-200${glassEffect ? ' backdrop-blur' : ''}`}>
+      {/* 左侧展开按钮 - 移动端始终显示，桌面端根据侧边栏状态 */}
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onToggleSidebar}
+        className={cn(
+          "h-9 w-9 mr-2 md:mr-4 rounded-lg border border-border hover:bg-accent shrink-0",
+          showToggleButton ? 'flex' : 'flex md:hidden'
+        )}
+      >
+        <PanelLeft className="h-5 w-5" />
+      </Button>
 
       {/* 搜索栏 */}
       <div className="flex-1 max-w-xl">

@@ -220,6 +220,7 @@ export function useMessages(options: UseMessagesOptions) {
             createdAt: activity.createdAt,
             metadata: {
               activityType: 'thinking',
+              ...(activity.metadata?.model ? { model: activity.metadata.model } : {}),
             },
           });
         } else if (activity.activityType === 'assistant_response') {
@@ -242,6 +243,7 @@ export function useMessages(options: UseMessagesOptions) {
               createdAt: activity.createdAt,
               metadata: {
                 activityType: 'assistant_response',
+                ...(activity.metadata?.model ? { model: activity.metadata.model } : {}),
               },
             });
           }
@@ -261,6 +263,7 @@ export function useMessages(options: UseMessagesOptions) {
             createdAt: activity.createdAt,
             metadata: {
               activityType: 'bubble',
+              ...(activity.metadata?.model ? { model: activity.metadata.model } : {}),
             },
           });
         } else if (isToolCall) {
@@ -281,6 +284,7 @@ export function useMessages(options: UseMessagesOptions) {
               activityType: 'tool_call',
               toolName: activity.metadata?.toolName || 'unknown',
               toolCallId: activity.metadata?.toolCallId,
+              ...(activity.metadata?.model ? { model: activity.metadata.model } : {}),
             },
             toolCalls: [{
               toolName: activity.metadata?.toolName || 'unknown',
@@ -591,6 +595,7 @@ export function useMessages(options: UseMessagesOptions) {
                   createdAt: new Date().toISOString(),
                   metadata: {
                     activityType: 'thinking',
+                    ...(data.model ? { model: data.model } : {}),
                   },
                 },
               ]);
@@ -627,6 +632,7 @@ export function useMessages(options: UseMessagesOptions) {
                   createdAt: new Date().toISOString(),
                   metadata: {
                     activityType: 'assistant_response',
+                    ...(data.model ? { model: data.model } : {}),
                   },
                 },
               ]);
@@ -656,6 +662,7 @@ export function useMessages(options: UseMessagesOptions) {
                 createdAt: new Date().toISOString(),
                 metadata: {
                   activityType: 'bubble',
+                  ...(data.model ? { model: data.model } : {}),
                 },
               },
             ]);
@@ -793,6 +800,7 @@ export function useMessages(options: UseMessagesOptions) {
             toolName: data.tool_name,
             toolCallId: data.tool_call_id,
             seq: data.seq,
+            ...(data.model ? { model: data.model } : {}),
           },
           toolCalls: [{
             toolName: data.tool_name,

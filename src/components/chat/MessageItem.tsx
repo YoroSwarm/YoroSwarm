@@ -771,7 +771,7 @@ export const MessageItem = memo(function MessageItem({
     const isError = message.metadata?.isError;
     const tc = toolCalls?.[0];
 
-    const hasExpandableContent = (isThinking && message.content) || (isToolCall && tc && (tc.inputSummary || tc.resultSummary));
+    const hasExpandableContent = (isThinking && message.content) || (isToolCall && tc && (tc.inputSummary || tc.resultSummary)) || message.metadata?.model;
 
     return (
       <Popover>
@@ -780,13 +780,6 @@ export const MessageItem = memo(function MessageItem({
             className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground/60 bg-muted/30 px-2 py-0.5 rounded-lg border border-border/30 shadow-sm hover:bg-muted/60 hover:text-muted-foreground hover:border-border/50 active:bg-muted/80 transition-all cursor-pointer"
           >
             <span className="font-medium text-foreground/60 hover:text-foreground transition-colors">{displayName}</span>
-
-            {/* Model provider badge */}
-            {message.metadata?.model && (
-              <span className="text-[9px] px-1 py-0.5 bg-muted rounded text-muted-foreground/70 font-medium">
-                {message.metadata.model}
-              </span>
-            )}
 
             {isThinking ? (
               <span className="inline-flex items-center gap-1 text-purple-600/60 animate-pulse-soft">

@@ -216,28 +216,28 @@ export default function SettingsPage() {
   return (
     <>
       <ConfirmDialogComponent />
-      <div className="flex flex-col gap-6 p-6">
+      <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6">
       <div>
-        <h1 className="text-3xl font-bold">设置</h1>
+        <h1 className="text-2xl md:text-3xl font-bold">设置</h1>
         <p className="text-muted-foreground mt-1">管理您的系统偏好</p>
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-6 min-w-0">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6 min-w-0">
         <div className="w-full lg:w-64 shrink-0">
-          <div className={cn("rounded-xl border bg-card p-2", glassEffect && "backdrop-blur-sm")}>
+          <div className={cn("rounded-xl border bg-card p-1.5 lg:p-2 flex lg:flex-col gap-1 overflow-x-auto", glassEffect && "backdrop-blur-sm")}>
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 lg:gap-3 px-3 py-2 lg:py-2.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap lg:w-full ${
                   activeTab === tab.id
                     ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-accent/30"
                 }`}
               >
-                <tab.icon className="h-4 w-4" />
-                <span className="flex-1 text-left">{tab.label}</span>
-                <ChevronRight className="h-4 w-4 opacity-50" />
+                <tab.icon className="h-4 w-4 shrink-0" />
+                <span className="lg:flex-1 lg:text-left">{tab.label}</span>
+                <ChevronRight className="h-4 w-4 opacity-50 hidden lg:block" />
               </button>
             ))}
           </div>
@@ -265,39 +265,42 @@ export default function SettingsPage() {
                       选择您喜欢的界面主题
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2">
                     <button
                       onClick={() => setTheme("light")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "light"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
+                      title="浅色模式"
                     >
                       <Sun className="h-4 w-4" />
-                      浅色
+                      <span className="hidden sm:inline">浅色</span>
                     </button>
                     <button
                       onClick={() => setTheme("dark")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "dark"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
+                      title="深色模式"
                     >
                       <Moon className="h-4 w-4" />
-                      深色
+                      <span className="hidden sm:inline">深色</span>
                     </button>
                     <button
                       onClick={() => setTheme("system")}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${
                         theme === "system"
                           ? "border-primary bg-primary/10 text-primary"
                           : "border-border text-muted-foreground hover:bg-accent/30"
                       }`}
+                      title="跟随系统"
                     >
                       <Monitor className="h-4 w-4" />
-                      系统
+                      <span className="hidden sm:inline">系统</span>
                     </button>
                   </div>
                 </div>
@@ -339,8 +342,10 @@ export default function SettingsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => backgroundImageInputRef.current?.click()}
+                        title="上传图片"
                       >
-                        上传图片
+                        <Camera className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">上传图片</span>
                       </Button>
                       <Button
                         type="button"
@@ -348,9 +353,10 @@ export default function SettingsPage() {
                         size="sm"
                         onClick={handleBackgroundImageRemove}
                         disabled={!backgroundImage}
+                        title="移除背景"
                       >
-                        <Trash2 className="mr-1 h-4 w-4" />
-                        移除
+                        <Trash2 className="h-4 w-4 sm:mr-1" />
+                        <span className="hidden sm:inline">移除</span>
                       </Button>
                     </div>
                   </div>
@@ -528,8 +534,10 @@ export default function SettingsPage() {
                       size="sm"
                       onClick={handleResetToDefaults}
                       disabled={isLoading}
+                      title="恢复默认配置"
                     >
-                      恢复默认
+                      <Sparkles className="h-4 w-4 sm:mr-1" />
+                      <span className="hidden sm:inline">恢复默认</span>
                     </Button>
                   </div>
                 </div>

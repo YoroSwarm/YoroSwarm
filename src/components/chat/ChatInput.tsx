@@ -315,7 +315,7 @@ export function ChatInput({
           />
 
           {showMentions && filteredMentions.length > 0 && (
-            <div className="absolute bottom-full left-0 mb-2 w-64 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg animate-fade-in">
+            <div className="absolute bottom-full left-0 mb-2 w-[calc(100vw-2rem)] sm:w-64 max-h-48 overflow-y-auto rounded-lg border bg-popover shadow-lg animate-fade-in">
               <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b">
                 选择Agent ({filteredMentions.length})
               </div>

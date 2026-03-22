@@ -130,11 +130,11 @@ export default function DashboardPage() {
     }));
 
   return (
-    <div className="flex flex-col gap-6 p-6">
+    <div className="flex flex-col gap-4 md:gap-6 p-4 md:p-6">
       {/* 页面标题 + 一言 */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-semibold">概览</h1>
+          <h1 className="text-2xl md:text-3xl font-semibold">概览</h1>
           <p className="text-muted-foreground mt-1">
             {quote || "…"}
           </p>
@@ -149,7 +149,7 @@ export default function DashboardPage() {
 
       {/* 统计卡片 */}
       <motion.div
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4"
         initial="hidden"
         animate="visible"
         variants={{

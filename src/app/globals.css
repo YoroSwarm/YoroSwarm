@@ -224,8 +224,8 @@ body {
  * Make generic bg-background layers fully transparent when glass is active,
  * since the background overlay handles the global tint.
  */
-:root[data-glass-effect] .bg-background:not([data-slot="switch-thumb"]),
-:root[data-glass-effect] [class*="bg-background/"]:not([data-slot="switch-thumb"]) {
+:root[data-glass-effect] .bg-background:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]),
+:root[data-glass-effect] [class*="bg-background/"]:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]) {
   background-color: transparent;
 }
 

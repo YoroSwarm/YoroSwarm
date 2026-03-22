@@ -128,6 +128,7 @@ export interface AgentThinkingPayload {
   entry_id?: string;
   timestamp: string;
   seq?: number;
+  model?: string;
 }
 
 export interface ToolActivityPayload {
@@ -141,6 +142,7 @@ export interface ToolActivityPayload {
   result_summary?: string;
   timestamp: string;
   seq?: number;
+  model?: string;
 }
 
 export interface WebSocketSubscription {

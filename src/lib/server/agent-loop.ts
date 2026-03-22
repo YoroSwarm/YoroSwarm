@@ -248,6 +248,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         sourceType: 'llm',
         entryType: 'thinking',
         content: response.reasoningContent,
+        metadata: { model: currentModel },
       })
 
       publishRealtimeMessage(
@@ -262,6 +263,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             entry_id: thinkingEntry?.id,
             timestamp: new Date().toISOString(),
             seq: messageSeq++,
+            model: currentModel,
           },
         },
         { sessionId: swarmSessionId }
@@ -281,6 +283,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           sourceType: 'llm',
           entryType: 'bubble',
           content: textContent,
+          metadata: { model: currentModel },
         })
 
         publishRealtimeMessage(
@@ -295,6 +298,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               entry_id: bubbleEntry?.id,
               timestamp: new Date().toISOString(),
               seq: messageSeq++,
+              model: currentModel,
             },
           },
           { sessionId: swarmSessionId }
@@ -377,6 +381,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               input_summary: inputSummary,
               timestamp: new Date().toISOString(),
               seq: messageSeq++,
+              model: currentModel,
             },
           },
           { sessionId: swarmSessionId }
@@ -486,6 +491,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               status: isError ? 'error' : 'completed',
               result_summary: result.slice(0, 100),
               timestamp: new Date().toISOString(),
+              model: currentModel,
             },
           },
           { sessionId: swarmSessionId }
@@ -560,6 +566,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             toolName: toolUse.name,
             toolInput: toolUse.input,
             toolCallId, // Store for matching with tool_result
+            model: currentModel,
           },
         })
         await appendAgentContextEntry({
@@ -575,6 +582,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             isError,
             resultContent: result.slice(0, 2000),
             toolCallId, // Store for matching with tool_call
+            model: currentModel,
           },
         })
       }
@@ -636,6 +644,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           sourceType: 'llm',
           entryType: 'bubble',
           content: textContent,
+          metadata: { model: currentModel },
         })
 
         publishRealtimeMessage(
@@ -649,6 +658,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               content: textContent,
               entry_id: entry?.id,
               timestamp: new Date().toISOString(),
+              model: currentModel,
             },
           },
           { sessionId: swarmSessionId }

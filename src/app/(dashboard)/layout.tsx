@@ -16,11 +16,20 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-background">
-      {/* 侧边栏容器 - translateX 滑入/滑出 */}
+      {/* Mobile overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-black/40 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - fixed overlay on mobile, inline on desktop */}
       <div
         className={`
-          shrink-0 overflow-hidden transition-[margin] duration-300 ease-in-out
-          ${sidebarOpen ? 'ml-0' : '-ml-64'}
+          fixed inset-y-0 left-0 z-40 w-64 transition-transform duration-300 ease-in-out
+          md:static md:z-auto md:transition-[margin] md:translate-x-0
+          ${sidebarOpen ? 'translate-x-0 md:ml-0' : '-translate-x-full md:-ml-64'}
         `}
         style={{ width: '16rem' }}
       >
