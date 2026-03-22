@@ -19,7 +19,7 @@ interface SheetData {
 
 const MAX_PREVIEW_ROWS = 500;
 
-export function XlsxPreview({ url, fileName }: XlsxPreviewProps) {
+export function XlsxPreview({ url }: XlsxPreviewProps) {
   const [sheets, setSheets] = useState<SheetData[]>([]);
   const [activeSheet, setActiveSheet] = useState(0);
   const [loading, setLoading] = useState(true);

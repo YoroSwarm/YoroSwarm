@@ -1,4 +1,3 @@
-import { NextRequest } from 'next/server';
 import prisma from '@/lib/db';
 import { errorResponse, successResponse, unauthorizedResponse } from '@/lib/api/response';
 import { requireTokenPayload } from '@/lib/server/swarm';

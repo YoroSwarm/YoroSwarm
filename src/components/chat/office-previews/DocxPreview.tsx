@@ -8,7 +8,7 @@ interface DocxPreviewProps {
   fileName: string;
 }
 
-export function DocxPreview({ url, fileName }: DocxPreviewProps) {
+export function DocxPreview({ url }: DocxPreviewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

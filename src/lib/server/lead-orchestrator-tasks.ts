@@ -456,14 +456,17 @@ export async function assignTaskToTeammate(
   } else {
     // 前置依赖未完成，仅预创建协调线程，不向 teammate 投递任何消息。
     // 等到所有依赖完成后，由 unlockDependentTasks → activateAssignedTask 投递。
-    await prisma.internalThread.findFirst({
+    const existingThread = await prisma.internalThread.findFirst({
       where: { swarmSessionId, relatedTaskId: task.id },
-    }) || await createInternalThread({
-      swarmSessionId,
-      threadType: 'task_coordination',
-      subject: `任务: ${task.title}`,
-      relatedTaskId: task.id,
     })
+    if (!existingThread) {
+      await createInternalThread({
+        swarmSessionId,
+        threadType: 'task_coordination',
+        subject: `任务: ${task.title}`,
+        relatedTaskId: task.id,
+      })
+    }
   }
 
   return {

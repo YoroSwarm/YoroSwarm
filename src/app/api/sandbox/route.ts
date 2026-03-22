@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server'
-import { getSandboxStatus, isSandboxAvailable } from '@/lib/server/sandbox-exec'
+import { getSandboxStatus } from '@/lib/server/sandbox-exec'
 import { successResponse } from '@/lib/api/response'
 
 /**

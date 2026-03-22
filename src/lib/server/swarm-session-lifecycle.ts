@@ -19,7 +19,6 @@ import {
   getCognitiveLeadProcessor,
 } from './cognitive-lead-runner'
 import {
-  getTeammateProcessor,
   cleanupCognitiveTeammate,
   resumeTeammateTask,
 } from './cognitive-teammate-runner'

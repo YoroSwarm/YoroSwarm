@@ -115,19 +115,20 @@ export const SessionOverview: React.FC<SessionOverviewProps> = ({
                         }}
                         className="rounded-lg bg-white/80 px-3 py-2 dark:bg-gray-800/70"
                       >
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-white">{item.agent_name}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400">{item.role}</div>
-                      </div>
-                      <div className="text-sm font-semibold text-gray-900 dark:text-white">{formatTokenCount(item.usage.total_tokens)}</div>
-                    </div>
-                    <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      输入 {formatTokenCount(item.usage.input_tokens)} / 输出 {formatTokenCount(item.usage.output_tokens)} / 缓存率 {formatPercent(item.usage.cache_hit_rate)}
-                    </div>
-                  </motion.div>
-                ))}
-                </AnimatePresence>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900 dark:text-white">{item.agent_name}</div>
+                            <div className="text-xs text-gray-500 dark:text-gray-400">{item.role}</div>
+                          </div>
+                          <div className="text-sm font-semibold text-gray-900 dark:text-white">{formatTokenCount(item.usage.total_tokens)}</div>
+                        </div>
+                        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                          输入 {formatTokenCount(item.usage.input_tokens)} / 输出 {formatTokenCount(item.usage.output_tokens)} / 缓存率 {formatPercent(item.usage.cache_hit_rate)}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+                )}
               </div>
             </div>
           </div>

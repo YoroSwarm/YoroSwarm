@@ -18,6 +18,20 @@ export interface ToolApproval {
   riskCategory?: string
 }
 
+interface ApprovalApiResponse {
+  id: string
+  type: string
+  tool_name: string
+  description: string
+  input_params: Record<string, unknown>
+  working_dir?: string
+  created_at: string
+  expires_at: string
+  risk_level?: RiskLevel
+  risk_reason?: string
+  risk_category?: string
+}
+
 export function useToolApprovals(sessionId: string | null) {
   const [approvals, setApprovals] = useState<ToolApproval[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -40,7 +54,7 @@ export function useToolApprovals(sessionId: string | null) {
 
       const data = await response.json()
       if (data.success && data.data?.approvals) {
-        setApprovals(data.data.approvals.map((a: any) => ({ ...a, status: 'PENDING' as const })))
+        setApprovals(data.data.approvals.map((a: ApprovalApiResponse) => ({ ...a, status: 'PENDING' as const })))
       }
     } catch (error) {
       console.error('[useToolApprovals] Failed to fetch approvals:', error)

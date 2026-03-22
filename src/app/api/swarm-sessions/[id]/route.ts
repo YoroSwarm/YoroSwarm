@@ -6,10 +6,8 @@ import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
 import { deleteSessionWorkspace } from '@/lib/server/session-workspace';
 import {
   cleanupCognitiveLead,
-  getCognitiveLeadProcessor,
 } from '@/lib/server/cognitive-lead-runner';
 import {
-  getTeammateProcessor,
   cleanupCognitiveTeammate,
 } from '@/lib/server/cognitive-teammate-runner';
 import { destroyRuntime } from '@/lib/server/cognitive-inbox';

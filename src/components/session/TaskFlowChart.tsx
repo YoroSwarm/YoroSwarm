@@ -88,7 +88,6 @@ export function TaskFlowChart({ tasks, onTaskClick }: TaskFlowChartProps) {
     const paddingLeft = 60;
 
     levels.forEach((levelNodes, levelIndex) => {
-      const levelWidth = levelNodes.length * nodeWidth + (levelNodes.length - 1) * horizontalSpacing;
       const startX = paddingLeft;
       const startY = paddingTop + levelIndex * (nodeHeight + verticalSpacing);
 

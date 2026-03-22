@@ -3,6 +3,8 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { Agent } from '@/types/agent';
+
+interface AgentStatusPanelProps {
   agents: Agent[];
 }
 

@@ -2,9 +2,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import type {
   LLMCallOptions,
   LLMResponse,
-  LLMMessage,
   ContentBlock,
-  ToolDefinition,
   StopReason,
 } from './types'
 import type { LLMProviderConfig } from './config'
@@ -34,7 +32,7 @@ function getClient(
 
     console.log(`[Anthropic] Creating SDK client with baseUrl=${normalizedBaseUrl || 'default'}, authMode=${authMode || 'bearer_token'}, hasCustomHeaders=${!!customHeaders}`)
 
-    const clientOptions: any = {
+    const clientOptions: Anthropic.ClientOptions = {
       apiKey,
       ...(normalizedBaseUrl ? { baseURL: normalizedBaseUrl } : {}),
     }
@@ -110,7 +108,7 @@ export async function callAnthropic(options: LLMCallOptions, config: LLMProvider
     input_schema: tool.input_schema as Anthropic.Tool.InputSchema,
   })) : undefined
 
-  const params: any = {
+  const params: Anthropic.MessageCreateParams = {
     model,
     max_tokens: maxTokens,
     temperature,
@@ -122,7 +120,7 @@ export async function callAnthropic(options: LLMCallOptions, config: LLMProvider
     params.tools = tools
   }
 
-  const requestOptions: any = {}
+  const requestOptions: RequestInit = {}
   if (options.abortSignal) {
     requestOptions.signal = options.abortSignal
   }

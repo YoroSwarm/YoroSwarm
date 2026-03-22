@@ -32,6 +32,8 @@ export function Header({ showToggleButton, onToggleSidebar, onSearchClick }: Hea
 
   // Close popover on route change
   useEffect(() => {
+    // This is intentional - pathname change requires popover close
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPopoverOpen(false);
   }, [pathname]);
 

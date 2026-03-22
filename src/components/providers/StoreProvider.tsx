@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
+import Image from 'next/image';
 import { useAuthStore } from '@/stores';
 import { appConfig } from '@/lib/config/app';
 
@@ -32,7 +33,7 @@ export function StoreProvider({ children }: StoreProviderProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-pulse flex items-center justify-center">
-          <img src="/icon.svg" alt={appConfig.name} className="w-20 h-20" />
+          <Image src="/icon.svg" alt={appConfig.name} width={80} height={80} />
         </div>
       </div>
     );

@@ -214,7 +214,6 @@ export async function waitForApproval(
 ): Promise<ToolApprovalResult> {
   const checkInterval = 500 // 每500ms检查一次
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const approval = await prisma.toolApproval.findUnique({
       where: { id: approvalId },
@@ -276,11 +275,11 @@ export async function executeApprovedCommand(
   approvalId: string,
   swarmSessionId: string,
   agentId: string,
-  agentName: string
+  _agentName: string
 ): Promise<string> {
-  const { spawn } = require('child_process')
-  const path = require('path')
-  const fs = require('fs')
+  const { spawn } = await import('child_process')
+  const pathModule = await import('path')
+  const fsModule = await import('fs')
 
   const approval = await prisma.toolApproval.findUnique({
     where: { id: approvalId },
@@ -296,14 +295,14 @@ export async function executeApprovedCommand(
 
   const inputParams = JSON.parse(approval.inputParams) as { command: string; working_dir?: string; timeout?: number }
   const command = inputParams.command
-  const workingDir = inputParams.working_dir || path.join(process.cwd(), 'session-workspaces', swarmSessionId)
+  const workingDir = inputParams.working_dir || pathModule.join(process.cwd(), 'session-workspaces', swarmSessionId)
   const timeoutSec = inputParams.timeout || 30
   const timeoutMs = timeoutSec * 1000
 
   // 确保工作目录存在，如果不存在则创建
   try {
-    await fs.promises.mkdir(workingDir, { recursive: true })
-  } catch (mkdirError) {
+    await fsModule.promises.mkdir(workingDir, { recursive: true })
+  } catch {
     const errorMsg = `无法创建工作目录: ${workingDir}`
     await prisma.toolApproval.update({
       where: { id: approvalId },

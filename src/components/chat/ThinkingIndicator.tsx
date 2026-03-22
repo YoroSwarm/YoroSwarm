@@ -12,10 +12,10 @@ interface ThinkingIndicatorProps {
   thinkingContent?: string[];
 }
 
-export function ThinkingIndicator({ agentName, agentId, role, isThinking, thinkingContent }: ThinkingIndicatorProps) {
-  if (!isThinking) return null;
-
+export function ThinkingIndicator({ agentName, role, isThinking, thinkingContent }: ThinkingIndicatorProps) {
   const { leadNickname } = useLeadPreferencesStore();
+
+  if (!isThinking) return null;
 
   // Use lead nickname if this is a lead agent and nickname is set
   const displayName = (role === 'lead' && leadNickname) ? leadNickname : agentName;

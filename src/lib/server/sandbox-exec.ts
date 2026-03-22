@@ -6,7 +6,7 @@
  * - Other:  Graceful fallback — no sandbox
  */
 
-import { existsSync, writeFileSync, unlinkSync, mkdirSync } from 'fs'
+import { existsSync, writeFileSync, unlinkSync, mkdirSync, realpathSync } from 'fs'
 import { execFileSync } from 'child_process'
 import path from 'path'
 import os from 'os'
@@ -318,7 +318,7 @@ function buildMacOSSandboxArgs(opts: {
     resolvedRoots.push(root)
     // On macOS, /tmp is a symlink to /private/tmp — add both forms
     try {
-      const resolved = require('fs').realpathSync(root)
+      const resolved = realpathSync(root)
       if (resolved !== root) {
         resolvedRoots.push(resolved)
       }

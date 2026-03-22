@@ -64,10 +64,6 @@ function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
   return block.type === 'tool_result'
 }
 
-function hasToolBlock(content: string | ContentBlock[]): boolean {
-  return Array.isArray(content) && content.some(block => block.type === 'tool_use' || block.type === 'tool_result')
-}
-
 // ============================================
 // Level 1: Micro-compact（工具结果层压缩）
 // ============================================

@@ -19,7 +19,7 @@ import {
   Loader2,
   ExternalLink,
 } from 'lucide-react'
-import { useApprovalRules, type ApprovalRule, type ApprovalAction, type MatchType } from '@/hooks/use-approval-rules'
+import { useApprovalRules, type ApprovalAction, type MatchType } from '@/hooks/use-approval-rules'
 import { swarmSessionsApi, type SessionShareResponse } from '@/lib/api/swarm-sessions'
 import { ShareDialog } from '@/components/session/ShareDialog'
 
@@ -208,7 +208,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
         <div className="space-y-2">
           {rules.length === 0 && !isLoading && (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              暂无自定义规则。点击下方按钮添加，或在审批卡片上勾选"总是允许"。
+              暂无自定义规则。点击下方按钮添加，或在审批卡片上勾选&quot;总是允许&quot;。
             </div>
           )}
 

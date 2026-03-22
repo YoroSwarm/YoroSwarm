@@ -3,7 +3,6 @@ import { errorResponse, successResponse, unauthorizedResponse } from '@/lib/api/
 import { requireTokenPayload } from '@/lib/server/swarm'
 import {
   listAvailableSkills,
-  loadFullSkill,
   installFromRegistry,
   setSkillEnabled,
   uninstallSkill,

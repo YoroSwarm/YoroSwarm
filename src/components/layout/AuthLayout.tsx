@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Image from 'next/image';
 import { appConfig } from '@/lib/config/app';
 import { useThemeStore } from '@/stores';
 
@@ -21,7 +22,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
         {/* Logo */}
         <div className="flex items-center justify-center gap-3 mb-8">
           <div className="w-12 h-12 rounded-xl bg-black/30 flex items-center justify-center shadow-lg border border-border/50">
-            <img src="/icon.svg" alt={appConfig.name} className="w-8 h-8" />
+            <Image src="/icon.svg" alt={appConfig.name} width={32} height={32} />
           </div>
           <span className="text-2xl font-bold text-foreground">{appConfig.name}</span>
         </div>

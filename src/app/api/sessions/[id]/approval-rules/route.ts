@@ -5,7 +5,6 @@ import {
   removeSessionRule,
   clearSessionRules,
   getSessionApprovalStats,
-  type ApprovalRule,
 } from '@/lib/server/session-approval-rules'
 import { RISK_LEVEL_CONFIG } from '@/lib/server/command-risk'
 import { requireTokenPayload } from '@/lib/server/swarm'
