@@ -112,6 +112,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
 
       case 'provision_teammate': {
         const result = await provisionTeammate(swarmSessionId, leadAgentId, {
+          id: toolInput.id as string | undefined,
           name: toolInput.name as string,
           role: toolInput.role as string,
           description: (toolInput.description as string) || '',
@@ -134,6 +135,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       case 'decompose_task': {
         // 处理tasks参数，可能是JSON字符串或已解析的数组
         let tasks: Array<{
+          id?: string
           title: string
           description?: string
           priority?: number
@@ -206,7 +208,8 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         const now = new Date().toISOString()
 
         const parseTodoItem = (item: Record<string, unknown>) => ({
-          id: item.id as string,
+          // id 为空时使用占位符，sanitizeItem 会自动生成语义化 ID
+          id: (item.id as string | undefined) || '',
           title: item.title as string,
           details: item.details as string | undefined,
           status: item.status as 'pending' | 'in_progress' | 'completed' | 'dropped',

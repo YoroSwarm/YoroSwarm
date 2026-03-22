@@ -135,6 +135,7 @@ export async function decomposeTask(
   swarmSessionId: string,
   leadAgentId: string,
   tasks: Array<{
+    id?: string
     title: string
     description?: string
     priority?: number
@@ -191,6 +192,8 @@ export async function decomposeTask(
   // 第一阶段：先创建所有任务，不绑定 parent，避免 LLM 提供的临时 parentId 直接触发外键错误。
   const createdTasks: Array<Awaited<ReturnType<typeof prisma.teamLeadTask.create>> & { reuseSource?: 'created' | 'reused' }> = []
   const batchResolvedByTitle = new Map<string, Awaited<ReturnType<typeof prisma.teamLeadTask.create>>>()
+  const usedCustomIds = new Set<string>()
+
   for (const task of filteredTasks) {
     const normalizedTitle = normalizeTaskTitle(task.title)
     const batchResolvedTask = batchResolvedByTitle.get(normalizedTitle)
@@ -204,16 +207,31 @@ export async function decomposeTask(
       continue
     }
 
+    // 检查自定义 ID 是否已被使用
+    if (task.id) {
+      if (usedCustomIds.has(task.id)) {
+        throw new Error(`TASK_ID_CONFLICT: ID "${task.id}" 在同一批次任务中重复使用，请使用不同的 ID。`)
+      }
+      const existingWithId = existingSessionTasks.find(t => t.id === task.id)
+      if (existingWithId) {
+        throw new Error(`TASK_ID_CONFLICT: ID "${task.id}" 已被其他任务使用，请使用其他 ID。`)
+      }
+      usedCustomIds.add(task.id)
+    }
+
     try {
       const created = await prisma.teamLeadTask.create({
-        data: buildSessionTaskData({
-          swarmSessionId,
-          creatorId: leadAgentId,
-          title: task.title,
-          description: task.description || null,
-          priority: task.priority || 2,
-          parentId: null,
-        }),
+        data: {
+          id: task.id || undefined,  // 使用自定义 ID 或让 Prisma 生成
+          ...buildSessionTaskData({
+            swarmSessionId,
+            creatorId: leadAgentId,
+            title: task.title,
+            description: task.description || null,
+            priority: task.priority || 2,
+            parentId: null,
+          }),
+        },
         include: { assignee: true, parent: true, subtasks: true },
       })
       createdTasks.push({ ...created, reuseSource: 'created' })

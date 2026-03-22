@@ -15,6 +15,7 @@ export interface CreateTeammateInput {
   swarmSessionId: string
   createdById: string
 
+  id?: string  // 可选的语义化 ID
   name: string
   role: string
   description: string
@@ -87,8 +88,19 @@ export async function createTeammate(input: CreateTeammateInput) {
   const uniqueName = await generateUniqueName(input.swarmSessionId, input.name)
   const kind = input.kind || inferAgentKind(input.role)
 
+  // 检查自定义 ID 是否已被使用
+  if (input.id) {
+    const existingWithId = await prisma.agent.findFirst({
+      where: { id: input.id, swarmSessionId: input.swarmSessionId },
+    })
+    if (existingWithId) {
+      throw new Error(`TEAMMATE_ID_CONFLICT: ID "${input.id}" 已被其他队友使用，请使用其他 ID。`)
+    }
+  }
+
   const agent = await prisma.agent.create({
     data: {
+      id: input.id || undefined,  // 使用自定义 ID 或让 Prisma 生成
       swarmSessionId: input.swarmSessionId,
       name: uniqueName,
       role: input.role,
@@ -101,6 +113,7 @@ export async function createTeammate(input: CreateTeammateInput) {
         createdById: input.createdById,
         createdAt: new Date().toISOString(),
         customConfig: input.config || {},
+        customId: input.id || null,
       }),
     },
   })

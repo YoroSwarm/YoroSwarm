@@ -23,6 +23,50 @@ type LeadSelfTodoTx = Prisma.TransactionClient
 
 type LeadSelfTodoRow = Awaited<ReturnType<LeadSelfTodoTx['leadSelfTodo']['findMany']>>[number]
 
+/**
+ * 生成语义化 ID：基于标题的 slug 形式
+ * 格式: {slug}-{短ID}
+ * 例如: "todo-research-ai-a1b2"
+ */
+function generateSemanticId(title: string): string {
+  // 1. 英文/数字保留，中文按字数计算（每个汉字计为2个字符）
+  let charCount = 0
+  const slug = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5\s-]/g, '')  // 移除非法字符
+    .trim()
+    .replace(/\s+/g, '-')  // 空格转为短横线
+
+  // 计算有效字符数（汉字计2，英文数字计1）
+  for (const char of slug) {
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      charCount += 2
+    } else {
+      charCount += 1
+    }
+  }
+
+  // 2. 截取到合理长度
+  let result = ''
+  charCount = 0
+  for (const char of slug) {
+    if (/[\u4e00-\u9fa5]/.test(char)) {
+      if (charCount + 2 > 15) break
+      result += char
+      charCount += 2
+    } else {
+      if (charCount + 1 > 15) break
+      result += char
+      charCount += 1
+    }
+  }
+
+  // 3. 拼接 UUID 前4位确保唯一性
+  const shortId = randomUUID().slice(0, 4)
+
+  return `${result || 'todo'}-${shortId}`
+}
+
 function isLegacyAutoCapturedTodo(input: {
   title: string
   category: string
@@ -44,9 +88,27 @@ function normalizeText(value: string | undefined | null): string {
 
 function sanitizeItem(item: LeadSelfTodoItem): LeadSelfTodoItem | null {
   const now = new Date().toISOString()
+  const rawId = normalizeText(item.id)
+  const rawTitle = normalizeText(item.title)
+
+  // 如果没有提供 id，基于标题生成语义化 ID
+  if (!rawId && rawTitle) {
+    const generatedId = generateSemanticId(rawTitle)
+    const normalized: LeadSelfTodoItem = {
+      id: generatedId,
+      title: rawTitle,
+      details: normalizeText(item.details) || undefined,
+      status: item.status,
+      category: item.category,
+      sourceRef: normalizeText(item.sourceRef) || undefined,
+      updatedAt: item.updatedAt || now,
+    }
+    return normalized.title ? normalized : null
+  }
+
   const normalized: LeadSelfTodoItem = {
-    id: normalizeText(item.id) || randomUUID(),
-    title: normalizeText(item.title),
+    id: rawId || randomUUID(),
+    title: rawTitle,
     details: normalizeText(item.details) || undefined,
     status: item.status,
     category: item.category,

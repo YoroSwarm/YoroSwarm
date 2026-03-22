@@ -150,10 +150,14 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'provision_teammate',
-    description: '创建一个新的团队成员（Agent）。根据当前任务需要，创建具有特定角色和能力的队友。面对可并行的多方面工作时，应创建多个合适队友分担，而不是默认只用一个队友串行完成全部维度。',
+    description: '创建一个新的团队成员（Agent）。根据当前任务需要，创建具有特定角色和能力的队友。面对可并行的多方面工作时，应创建多个合适队友分担，而不是默认只用一个队友串行完成全部维度。支持指定语义化 ID（如 "researcher-1", "writer-doc"），便于后续引用。',
     input_schema: {
       type: 'object' as const,
       properties: {
+        id: {
+          type: 'string',
+          description: '可选。语义化 ID，支持字母、数字、下划线、短横线（如 "researcher-1", "writer_doc"）。不指定则由系统生成。',
+        },
         name: {
           type: 'string',
           description: '队友名称，应反映其角色（如 "研究员小明"、"文档编写者"）',
@@ -177,7 +181,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'decompose_task',
-    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。拆解时必须同时考虑并行性与逻辑关系：能并行的维度拆开，必须先做才能继续的步骤要通过 dependsOnTaskTitles / dependsOnTaskIds 明确声明前置任务。若是补充或深化已有工作，而不是第一次拆解，必须使用 dependsOnTaskTitles / dependsOnTaskIds 或 parentTitle / parentId 明确关联到现有任务，避免重复创建已完成维度。为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId。若要表达同批次层级关系，可传 parentTitle。',
+    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。支持指定语义化 ID（如 "task-research", "task-write-1"），便于后续引用和依赖声明。拆解时必须同时考虑并行性与逻辑关系：能并行的维度拆开，必须先做才能继续的步骤要通过 dependsOnTaskTitles / dependsOnTaskIds 明确声明前置任务。若是补充或深化已有工作，而不是第一次拆解，必须使用 dependsOnTaskTitles / dependsOnTaskIds 或 parentTitle / parentId 明确关联到现有任务，避免重复创建已完成维度。为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId。若要表达同批次层级关系，可传 parentTitle。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -186,6 +190,7 @@ export const leadTools: ToolDefinition[] = [
           items: {
             type: 'object',
             properties: {
+              id: { type: 'string', description: '可选。语义化 ID，支持字母、数字、下划线、短横线（如 "research", "write_doc"）。不指定则由系统生成。' },
               title: { type: 'string', description: '任务标题' },
               description: { type: 'string', description: '任务的详细描述，越详细越好' },
               priority: { type: 'number', description: '优先级 1-4（1=低, 2=中, 3=高, 4=紧急）' },
@@ -258,14 +263,14 @@ export const leadTools: ToolDefinition[] = [
           type: 'object',
           description: 'add / insert 时使用的完整待办项。',
           properties: {
-            id: { type: 'string', description: '待办项ID。新增项必须提供稳定ID。' },
+            id: { type: 'string', description: '可选。语义化 ID，支持字母、数字、下划线、短横线（如 "todo-research", "step-1"）。不指定则由系统生成。' },
             title: { type: 'string', description: '待办项标题' },
             details: { type: 'string', description: '补充说明或完成标准' },
             status: { type: 'string', enum: ['pending', 'in_progress', 'completed', 'dropped'], description: '当前状态。pending=尚未开始兑现，in_progress=已经启动但尚未完成，completed=该项承诺已全部兑现。不要提前标记 completed。' },
             category: { type: 'string', enum: ['user_request', 'deliverable', 'coordination', 'verification', 'other'], description: '待办类别' },
             sourceRef: { type: 'string', description: '来源引用，例如 external:messageId' },
           },
-          required: ['id', 'title', 'status', 'category'],
+          required: ['title', 'status', 'category'],
         },
         item_id: {
           type: 'string',
