@@ -56,3 +56,4 @@ next-env.d.ts
 /public/backgrounds/
 # User-installed skills (per-user data)
 skills/users/
+.trellis/

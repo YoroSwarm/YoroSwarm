@@ -127,8 +127,12 @@ export async function callAnthropic(options: LLMCallOptions, config: LLMProvider
     requestOptions.signal = options.abortSignal
   }
 
-  const response = await client.messages.create(params, requestOptions)
-  return convertFromAnthropicResponse(response)
+  // Use client.messages.stream() instead of client.messages.create() with stream: true
+  // This is required by Anthropic API for operations that may exceed 10 minutes
+  // The stream() method returns a MessageStream object with finalMessage() method
+  const messageStream = client.messages.stream(params, requestOptions)
+  const fullMessage = await messageStream.finalMessage()
+  return convertFromAnthropicResponse(fullMessage)
 }
 
 // ============================================
