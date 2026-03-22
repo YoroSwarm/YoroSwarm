@@ -43,6 +43,7 @@ model User {
   llmUsageEvents LlmUsageEvent[]
   llmApiConfigs LlmApiConfig[]
   skills        UserSkill[]
+  sessionShares SessionShare[]
 
   @@map("users")
 }
@@ -95,6 +96,7 @@ model SwarmSession {
   sharedKnowledgeEntries SharedKnowledgeEntry[]
   toolApprovals         ToolApproval[]
   skillAssignments      AgentSkillAssignment[]
+  sessionShares         SessionShare[]
 
   @@map("swarm_sessions")
 }
@@ -425,6 +427,30 @@ model SharedKnowledgeEntry {
   @@index([swarmSessionId, entryType])
   @@index([swarmSessionId, taskId])
   @@map("shared_knowledge_entries")
+}
+
+// ============================================
+// 会话分享 (Session Sharing)
+// ============================================
+
+model SessionShare {
+  id                 String   @id @default(uuid())
+  swarmSessionId     String   @map("swarm_session_id")
+  shareToken         String   @unique @map("share_token")
+  creatorId          String   @map("creator_id")
+  snapshotTitle      String   @map("snapshot_title")
+  snapshotMessages   String   @map("snapshot_messages")    // JSON: serialized ExternalMessage[]
+  snapshotActivities String   @map("snapshot_activities")  // JSON: serialized AgentActivity[]
+  snapshotFileIds    String   @map("snapshot_file_ids")    // JSON: string[] of file IDs copied to snapshot dir
+  snapshotFilesPath  String?  @map("snapshot_files_path")  // Directory path for copied files
+  snapshotMeta       String?  @map("snapshot_meta")        // JSON: { leadName, leadAvatar, userName, userAvatar }
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  creator      User         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+
+  @@index([swarmSessionId])
+  @@map("session_shares")
 }
 
 

@@ -242,4 +242,24 @@ export const swarmSessionsApi = {
   resumeSession: async (sessionId: string): Promise<{ resumedAgents: number; pendingTasks: number; message: string }> => {
     return api.post<{ resumedAgents: number; pendingTasks: number; message: string }>(`/swarm-sessions/${sessionId}/resume`);
   },
+
+  // Share management
+  createShare: async (sessionId: string): Promise<SessionShareResponse> => {
+    return api.post<SessionShareResponse>(`/swarm-sessions/${sessionId}/shares`);
+  },
+
+  listShares: async (sessionId: string): Promise<{ items: SessionShareResponse[]; total: number }> => {
+    return api.get<{ items: SessionShareResponse[]; total: number }>(`/swarm-sessions/${sessionId}/shares`);
+  },
+
+  deleteShare: async (sessionId: string, shareId: string): Promise<{ deleted: true }> => {
+    return api.delete<{ deleted: true }>(`/swarm-sessions/${sessionId}/shares/${shareId}`);
+  },
 };
+
+export interface SessionShareResponse {
+  id: string;
+  shareToken: string;
+  snapshotTitle: string;
+  createdAt: string;
+}

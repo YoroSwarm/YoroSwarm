@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
 import {
   Shield,
@@ -12,8 +12,16 @@ import {
   X,
   Terminal,
   Info,
+  Share2,
+  Copy,
+  Check,
+  Link2,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react'
 import { useApprovalRules, type ApprovalRule, type ApprovalAction, type MatchType } from '@/hooks/use-approval-rules'
+import { swarmSessionsApi, type SessionShareResponse } from '@/lib/api/swarm-sessions'
+import { ShareDialog } from '@/components/session/ShareDialog'
 
 interface SessionSettingsProps {
   sessionId: string
@@ -63,6 +71,43 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
   const [newAction, setNewAction] = useState<ApprovalAction>('auto_approve')
   const [newDescription, setNewDescription] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Share management state
+  const [shares, setShares] = useState<SessionShareResponse[]>([])
+  const [sharesLoading, setSharesLoading] = useState(false)
+  const [showShareDialog, setShowShareDialog] = useState(false)
+  const [deletingShareId, setDeletingShareId] = useState<string | null>(null)
+  const [copiedShareId, setCopiedShareId] = useState<string | null>(null)
+
+  const loadShares = useCallback(async () => {
+    setSharesLoading(true)
+    try {
+      const res = await swarmSessionsApi.listShares(sessionId)
+      setShares(res.items)
+    } catch { /* ignore */ }
+    finally { setSharesLoading(false) }
+  }, [sessionId])
+
+  useEffect(() => { loadShares() }, [loadShares])
+
+  const handleDeleteShare = async (shareId: string) => {
+    setDeletingShareId(shareId)
+    try {
+      await swarmSessionsApi.deleteShare(sessionId, shareId)
+      setShares(prev => prev.filter(s => s.id !== shareId))
+    } catch (err) {
+      console.error('删除分享失败:', err)
+    } finally {
+      setDeletingShareId(null)
+    }
+  }
+
+  const handleCopyLink = async (token: string, shareId: string) => {
+    const url = `${window.location.origin}/share/${token}`
+    await navigator.clipboard.writeText(url)
+    setCopiedShareId(shareId)
+    setTimeout(() => setCopiedShareId(null), 2000)
+  }
 
   const handleAddRule = async () => {
     if (!newMatchValue.trim()) return
@@ -339,6 +384,93 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
             添加审批规则
           </button>
         )}
+
+        {/* 分隔线 */}
+        <div className="border-t border-border" />
+
+        {/* 分享管理 */}
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Share2 className="h-5 w-5" />
+            会话分享
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            创建公开链接，让其他人查看截止到当前的聊天记录快照。
+          </p>
+        </div>
+
+        {/* 创建分享 */}
+        <button
+          onClick={() => setShowShareDialog(true)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:text-foreground hover:border-border hover:bg-accent/5 transition-colors"
+        >
+          <Link2 className="h-4 w-4" />
+          创建分享链接
+        </button>
+
+        <ShareDialog
+          open={showShareDialog}
+          onOpenChange={setShowShareDialog}
+          sessionId={sessionId}
+          onShareCreated={(share) => setShares(prev => [share, ...prev])}
+        />
+
+        {/* 已有分享列表 */}
+        {sharesLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+          </div>
+        ) : shares.length > 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              已创建 <strong className="text-foreground">{shares.length}</strong> 个分享链接
+            </p>
+            {shares.map(share => (
+              <div
+                key={share.id}
+                className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2"
+              >
+                <Share2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-medium truncate">{share.snapshotTitle}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {new Date(share.createdAt).toLocaleString('zh-CN')}
+                  </p>
+                </div>
+                <button
+                  onClick={() => window.open(`/share/${share.shareToken}`, '_blank')}
+                  className="shrink-0 p-1 rounded hover:bg-accent transition-colors"
+                  title="在新标签页打开"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+                <button
+                  onClick={() => handleCopyLink(share.shareToken, share.id)}
+                  className="shrink-0 p-1 rounded hover:bg-accent transition-colors"
+                  title="复制链接"
+                >
+                  {copiedShareId === share.id ? (
+                    <Check className="h-3.5 w-3.5 text-emerald-500" />
+                  ) : (
+                    <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                  )}
+                </button>
+                <button
+                  onClick={() => handleDeleteShare(share.id)}
+                  disabled={deletingShareId === share.id}
+                  className="shrink-0 p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                  title="删除分享"
+                >
+                  {deletingShareId === share.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <Trash2 className="h-3.5 w-3.5 text-destructive/70" />
+                  )}
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   )
