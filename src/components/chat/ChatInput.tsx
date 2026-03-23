@@ -43,6 +43,7 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mentionStartRef = useRef<number>(-1);
   const sendingRef = useRef(false);
+  const dragCounterRef = useRef(0);
 
   const { agents } = useAgents({
     swarmSessionId: sessionId || undefined,
@@ -189,18 +190,30 @@ export function ChatInput({
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(true);
+  }, []);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounterRef.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
   }, []);
 
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    dragCounterRef.current--;
+    if (dragCounterRef.current === 0) {
+      setIsDragging(false);
+    }
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    dragCounterRef.current = 0;
     setIsDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
@@ -225,6 +238,7 @@ export function ChatInput({
   return (
     <div
       className="relative"
+      onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
