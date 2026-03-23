@@ -150,7 +150,7 @@ export async function finalizeTaskCompletion(
     data: {
       status: 'COMPLETED',
       completedAt: new Date(),
-      resultSummary: input.resultSummary || input.report.slice(0, 500),
+      resultSummary: input.resultSummary || input.report,
     },
   })
 
@@ -389,14 +389,14 @@ export function buildTeammateToolExecutor(
 
           const occurrences = modified.split(old_str).length - 1
           if (occurrences === 0) {
-            results.push({ index: i, status: 'not_found', old_str: old_str.slice(0, 80) })
+            results.push({ index: i, status: 'not_found', old_str })
           } else if (occurrences > 1) {
             // Replace only the first occurrence to be safe, but warn
             modified = modified.replace(old_str, new_str)
-            results.push({ index: i, status: 'ambiguous', old_str: old_str.slice(0, 80), count: occurrences })
+            results.push({ index: i, status: 'ambiguous', old_str, count: occurrences })
           } else {
             modified = modified.replace(old_str, new_str)
-            results.push({ index: i, status: 'ok', old_str: old_str.slice(0, 80) })
+            results.push({ index: i, status: 'ok', old_str })
           }
         }
 
@@ -506,7 +506,7 @@ export function buildTeammateToolExecutor(
               agent_name: teammate.name,
               action: 'message_sent',
               recipient: 'Lead',
-              content: content.slice(0, 200),
+              content: content,
               swarm_session_id: swarmSessionId,
               timestamp: new Date().toISOString(),
             },

@@ -115,7 +115,7 @@ export async function GET(
           content: entry.content,
           metadata: {
             toolName: metadata?.toolName || 'unknown',
-            toolInput: metadata?.toolInput ? JSON.stringify(metadata.toolInput).slice(0, 200) : undefined,
+            toolInput: metadata?.toolInput ? JSON.stringify(metadata.toolInput) : undefined,
             toolCallId,
             ...(metadata?.model ? { model: metadata.model } : {}),
           },
@@ -127,7 +127,7 @@ export async function GET(
         items.push({
           ...baseItem,
           activityType: 'tool_result' as const,
-          content: entry.content.slice(0, 500),
+          content: entry.content,
           metadata: {
             isError: metadata?.isError || false,
             toolName,

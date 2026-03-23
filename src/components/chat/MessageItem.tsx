@@ -67,7 +67,7 @@ function formatJsonReadable(jsonStr: string | undefined): { key: string; value: 
 
     return Object.entries(parsed).map(([key, value]) => {
       let displayValue: string;
-      let nested = false;
+      const nested = false;
       if (typeof value === 'string') {
         displayValue = value;
       } else if (typeof value === 'number' || typeof value === 'boolean') {
@@ -77,24 +77,16 @@ function formatJsonReadable(jsonStr: string | undefined): { key: string; value: 
       } else if (Array.isArray(value)) {
         if (value.length === 0) {
           displayValue = '[]';
-        } else if (value.length <= 3) {
-          displayValue = value.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(', ');
         } else {
-          const preview = value.slice(0, 2).map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(', ');
-          displayValue = `${preview}, ... (+${value.length - 2})`;
+          displayValue = value.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(', ');
         }
-        nested = value.length > 3;
       } else {
         const entries = Object.entries(value as Record<string, unknown>);
         if (entries.length === 0) {
           displayValue = '{}';
-        } else if (entries.length <= 3) {
-          displayValue = entries.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ');
         } else {
-          const preview = entries.slice(0, 2).map(([k, v]) => `${k}: ${typeof v === 'string' ? v.slice(0, 20) : JSON.stringify(v)}`).join(', ');
-          displayValue = `${preview}, ... (+${entries.length - 2})`;
+          displayValue = entries.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ');
         }
-        nested = entries.length > 3;
       }
       return { key, value: displayValue, nested };
     });
@@ -208,8 +200,8 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
         ];
         for (let i = 0; i < Math.min(repls.length, 3); i++) {
           const r = repls[i] as Record<string, unknown>;
-          const oldStr = String(r.old_str || '').slice(0, 40);
-          const newStr = String(r.new_str || '').slice(0, 40);
+          const oldStr = String(r.old_str || '');
+          const newStr = String(r.new_str || '');
           previewFields.push({ label: `#${i + 1}`, value: `${oldStr || '(开头插入)'} → ${newStr || '(删除)'}`, });
         }
         if (repls.length > 3) {
@@ -476,12 +468,55 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
       return { type: 'code', content: output, language: 'text', rawJson };
       
     case 'reply_to_user':
-    case 'send_message_to_teammate':
-    case 'send_message_to_lead':
-      if (!parsedOutput) {
-        return { type: 'text', content: output };
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).content) {
+          fields.push({ label: '内容', value: String((parsedOutput as Record<string, unknown>).content), isLong: true });
+        }
+        if ((parsedOutput as Record<string, unknown>).message_id) {
+          fields.push({ label: '消息ID', value: String((parsedOutput as Record<string, unknown>).message_id) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
       }
-      return { type: 'json', content: 'JSON 输出', rawJson };
+      return { type: 'text', content: output };
+
+    case 'send_message_to_teammate':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).teammate_id) {
+          fields.push({ label: '接收者', value: String((parsedOutput as Record<string, unknown>).teammate_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message_id) {
+          fields.push({ label: '消息ID', value: String((parsedOutput as Record<string, unknown>).message_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).status) {
+          fields.push({ label: '状态', value: String((parsedOutput as Record<string, unknown>).status) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'text', content: output };
+
+    case 'send_message_to_lead':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).message_type) {
+          fields.push({ label: '类型', value: String((parsedOutput as Record<string, unknown>).message_type) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message_id) {
+          fields.push({ label: '消息ID', value: String((parsedOutput as Record<string, unknown>).message_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).status) {
+          fields.push({ label: '状态', value: String((parsedOutput as Record<string, unknown>).status) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'text', content: output };
 
     case 'assign_skill_to_teammate':
       if (parsedOutput && typeof parsedOutput === 'object') {
@@ -495,12 +530,47 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
       return { type: 'json', content: 'JSON 输出', rawJson };
       
     case 'report_task_completion':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).task_id) {
+          fields.push({ label: '任务ID', value: String((parsedOutput as Record<string, unknown>).task_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).result_summary) {
+          fields.push({ label: '摘要', value: String((parsedOutput as Record<string, unknown>).result_summary), isLong: true });
+        }
+        if ((parsedOutput as Record<string, unknown>).report) {
+          fields.push({ label: '报告', value: String((parsedOutput as Record<string, unknown>).report), isLong: true });
+        }
+        if ((parsedOutput as Record<string, unknown>).status) {
+          fields.push({ label: '状态', value: String((parsedOutput as Record<string, unknown>).status) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
       return { type: 'success', content: output };
 
     case 'shell_exec':
       if (parsedOutput && typeof parsedOutput === 'object') {
-        const execOutput = String((parsedOutput as Record<string, unknown>).output || '');
-        return { type: 'code', content: execOutput, language: 'text', rawJson };
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).output) {
+          fields.push({ label: '输出', value: String((parsedOutput as Record<string, unknown>).output), isLong: true });
+        }
+        if ((parsedOutput as Record<string, unknown>).exit_code !== undefined) {
+          const exitCode = (parsedOutput as Record<string, unknown>).exit_code as number;
+          const isError = exitCode !== 0;
+          fields.push({ label: '退出码', value: String(exitCode), isLong: false });
+          if (isError) {
+            fields.push({ label: '状态', value: '❌ 失败', isLong: false });
+          }
+        }
+        if ((parsedOutput as Record<string, unknown>).command) {
+          fields.push({ label: '命令', value: String((parsedOutput as Record<string, unknown>).command), isLong: true });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+        return { type: 'code', content: String((parsedOutput as Record<string, unknown>).output || ''), language: 'text', rawJson };
       }
       return { type: 'code', content: output, language: 'text', rawJson };
 

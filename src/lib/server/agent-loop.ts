@@ -587,12 +587,12 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           sourceType: 'tool',
           sourceId: toolCallId, // Link to the tool_call entry
           entryType: 'tool_result',
-          content: result.slice(0, 500),
+          content: result,
           metadata: {
             toolUseId: toolUse.id,
             toolName: toolUse.name,
             isError,
-            resultContent: result.slice(0, 2000),
+            resultContent: result,
             toolCallId, // Store for matching with tool_call
             model: currentModel,
           },

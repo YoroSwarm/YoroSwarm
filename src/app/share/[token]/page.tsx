@@ -168,8 +168,8 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
         toolCalls: [{
           toolName: (actMeta?.toolName as string) || 'unknown',
           status: result ? ((resultMeta?.isError as boolean) ? 'error' : 'completed') : 'calling',
-          inputSummary: actMeta?.toolInput ? JSON.stringify(actMeta.toolInput).slice(0, 200) : undefined,
-          resultSummary: result?.content?.slice(0, 500),
+          inputSummary: actMeta?.toolInput ? JSON.stringify(actMeta.toolInput) : undefined,
+          resultSummary: result?.content,
           timestamp: act.createdAt,
         }],
       })
