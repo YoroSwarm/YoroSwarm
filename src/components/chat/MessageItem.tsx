@@ -369,13 +369,8 @@ interface ToolOutputDisplay {
 
 function formatToolOutput(toolName: string, output: string | undefined): ToolOutputDisplay | null {
   if (!output) return null;
-  
-  // Check if it's an error
-  if (output.includes('失败') || output.includes('error') || output.includes('Error')) {
-    return { type: 'error', content: output };
-  }
-  
-  // Try to parse as JSON for structured formatting
+
+  // Try to parse as JSON first for structured formatting
   let parsedOutput: unknown = null;
   let rawJson = output;
   try {
@@ -384,12 +379,55 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
   } catch {
     parsedOutput = null;
   }
-  
-  // Check if it's a success confirmation (for text output)
+
+  // If JSON parsed successfully, check success field first
+  if (parsedOutput && typeof parsedOutput === 'object') {
+    const obj = parsedOutput as Record<string, unknown>;
+    const isFailure = obj.success === false;
+
+    // For error responses (success: false)
+    if (isFailure) {
+      const fields: ToolOutputField[] = [];
+
+      // Extract error message
+      if (obj.error) {
+        fields.push({ label: '错误', value: String(obj.error), isLong: true });
+      }
+
+      // Extract stdout
+      if (obj.stdout && String(obj.stdout).trim()) {
+        fields.push({ label: 'Stdout', value: String(obj.stdout), isLong: true });
+      }
+
+      // Extract stderr
+      if (obj.stderr && String(obj.stderr).trim()) {
+        fields.push({ label: 'Stderr', value: String(obj.stderr), isLong: true });
+      }
+
+      // Extract exit code
+      if (obj.exit_code !== undefined) {
+        fields.push({ label: '退出码', value: String(obj.exit_code) });
+      }
+
+      // Extract approval_id if present
+      if (obj.approval_id) {
+        fields.push({ label: '审批ID', value: String(obj.approval_id) });
+      }
+
+      fields.push({ label: '状态', value: '❌ 失败' });
+
+      return { type: 'error', content: output, fields };
+    }
+
+    // For success responses (success: true or absent), use tool-specific formatting
+    // Continue to tool-specific switch below
+  }
+
+  // Check if it's a success confirmation (for non-JSON or text output)
   if (!parsedOutput && (output.includes('成功') || output.includes('已创建') || output.includes('已完成'))) {
     return { type: 'success', content: output };
   }
-  
+
   // Tool-specific formatting
   switch (toolName) {
     case 'provision_teammate':
@@ -1144,12 +1182,12 @@ export const MessageItem = memo(function MessageItem({
                                   </li>
                                 ))}
                               </ul>
-                            ) : outputDisplay.type === 'fields' && outputDisplay.fields ? (
+                            ) : (outputDisplay.type === 'fields' || outputDisplay.type === 'error') && outputDisplay.fields ? (
                               <div className="mt-1.5 space-y-1">
                                 {outputDisplay.fields.map(({ label, value, isLong }) => (
                                   <div key={label} className="flex gap-2 items-start min-w-0">
-                                    <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
-                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap wrap-break-word" : "whitespace-pre-wrap wrap-break-word")}>{value}</span>
+                                    <span className={cn("shrink-0 min-w-12 text-xs", outputDisplay.type === 'error' ? "text-red-500/70" : "text-muted-foreground/50")}>{label}</span>
+                                    <span className={cn("text-xs", outputDisplay.type === 'error' ? "text-red-600" : "text-foreground", isLong ? "whitespace-pre-wrap wrap-break-word" : "whitespace-pre-wrap wrap-break-word")}>{value}</span>
                                   </div>
                                 ))}
                               </div>
