@@ -52,25 +52,25 @@ Static validation requires no external tools. It works directly on the ZIP/XML s
 **Standard (human-readable) output:**
 
 ```bash
-python3 SKILL_DIR/scripts/formula_check.py /path/to/file.xlsx
+python3 SKILL_DIR/scripts/formula_check.py file.xlsx
 ```
 
 **JSON output (for programmatic processing):**
 
 ```bash
-python3 SKILL_DIR/scripts/formula_check.py /path/to/file.xlsx --json
+python3 SKILL_DIR/scripts/formula_check.py file.xlsx --json
 ```
 
 **Single-sheet mode (faster for targeted checks):**
 
 ```bash
-python3 SKILL_DIR/scripts/formula_check.py /path/to/file.xlsx --sheet Summary
+python3 SKILL_DIR/scripts/formula_check.py file.xlsx --sheet Summary
 ```
 
 **Summary mode (counts only, no per-cell detail):**
 
 ```bash
-python3 SKILL_DIR/scripts/formula_check.py /path/to/file.xlsx --summary
+python3 SKILL_DIR/scripts/formula_check.py file.xlsx --summary
 ```
 
 Exit codes:
@@ -208,7 +208,7 @@ Field reference:
 When formula_check.py reports errors, unpack the file to inspect the raw XML:
 
 ```bash
-python3 SKILL_DIR/scripts/xlsx_unpack.py /path/to/file.xlsx /tmp/xlsx_inspect/
+python3 SKILL_DIR/scripts/xlsx_unpack.py file.xlsx /tmp/xlsx_inspect/
 ```
 
 Navigate to the worksheet file for the reported sheet. The sheet-to-file mapping is in `xl/_rels/workbook.xml.rels`. For example, if `rId1` maps to `worksheets/sheet1.xml`, then sheet1.xml is the file for the sheet with `r:id="rId1"` in `xl/workbook.xml`.
@@ -308,10 +308,10 @@ Use the dedicated recalculation script. It handles binary discovery across macOS
 python3 SKILL_DIR/scripts/libreoffice_recalc.py --check
 
 # Run recalculation (default timeout: 60s)
-python3 SKILL_DIR/scripts/libreoffice_recalc.py /path/to/input.xlsx /tmp/recalculated.xlsx
+python3 SKILL_DIR/scripts/libreoffice_recalc.py input.xlsx /tmp/recalculated.xlsx
 
 # For large or complex files, extend the timeout
-python3 SKILL_DIR/scripts/libreoffice_recalc.py /path/to/input.xlsx /tmp/recalculated.xlsx --timeout 120
+python3 SKILL_DIR/scripts/libreoffice_recalc.py input.xlsx /tmp/recalculated.xlsx --timeout 120
 ```
 
 Exit codes from `libreoffice_recalc.py`:
@@ -620,7 +620,7 @@ Every validation task must produce a structured report. This report is the deliv
 ```markdown
 ## Formula Validation Report
 
-**File**: /path/to/filename.xlsx
+**File**: filename.xlsx
 **Date**: YYYY-MM-DD
 **Sheets checked**: Sheet1, Sheet2, Sheet3
 **Total formulas scanned**: N
@@ -691,10 +691,10 @@ When `create.md` workflow produces a new xlsx, run validation before any deliver
 
 ```bash
 # Step 1: Static check on the freshly written file
-python3 SKILL_DIR/scripts/formula_check.py /path/to/output.xlsx
+python3 SKILL_DIR/scripts/formula_check.py output.xlsx
 
 # Step 2: Dynamic check (if LibreOffice available)
-python3 SKILL_DIR/scripts/libreoffice_recalc.py /path/to/output.xlsx /tmp/recalculated.xlsx
+python3 SKILL_DIR/scripts/libreoffice_recalc.py output.xlsx /tmp/recalculated.xlsx
 python3 SKILL_DIR/scripts/formula_check.py /tmp/recalculated.xlsx
 ```
 
@@ -709,7 +709,7 @@ When `edit.md` workflow modifies an existing xlsx, validate only the affected sh
 ```bash
 # Targeted static check — look at specific sheet
 # (formula_check.py checks all sheets; examine only the relevant section of output)
-python3 SKILL_DIR/scripts/formula_check.py /path/to/edited.xlsx --json \
+python3 SKILL_DIR/scripts/formula_check.py edited.xlsx --json \
   | python3 -c "
 import json, sys
 r = json.load(sys.stdin)
@@ -727,13 +727,13 @@ When a user submits a file and reports wrong values or visible errors:
 
 ```bash
 # Step 1: Static scan — find all error cells
-python3 SKILL_DIR/scripts/formula_check.py /path/to/user_file.xlsx --json > /tmp/validation_results.json
+python3 SKILL_DIR/scripts/formula_check.py user_file.xlsx --json > /tmp/validation_results.json
 
 # Step 2: Unpack for manual inspection
-python3 SKILL_DIR/scripts/xlsx_unpack.py /path/to/user_file.xlsx /tmp/xlsx_inspect/
+python3 SKILL_DIR/scripts/xlsx_unpack.py user_file.xlsx /tmp/xlsx_inspect/
 
 # Step 3: Dynamic recalculation
-python3 SKILL_DIR/scripts/libreoffice_recalc.py /path/to/user_file.xlsx /tmp/user_file_recalc.xlsx
+python3 SKILL_DIR/scripts/libreoffice_recalc.py user_file.xlsx /tmp/user_file_recalc.xlsx
 
 # Step 4: Re-validate recalculated file
 python3 SKILL_DIR/scripts/formula_check.py /tmp/user_file_recalc.xlsx --json > /tmp/validation_after_recalc.json

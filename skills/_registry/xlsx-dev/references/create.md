@@ -489,7 +489,7 @@ The `$` character needs no XML escaping — write it literally.
 **Pack**:
 
 ```bash
-python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ /path/to/output.xlsx
+python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ output.xlsx
 ```
 
 `xlsx_pack.py` will:
@@ -500,7 +500,7 @@ python3 SKILL_DIR/scripts/xlsx_pack.py /tmp/xlsx_work/ /path/to/output.xlsx
 **Validate**:
 
 ```bash
-python3 SKILL_DIR/scripts/formula_check.py /path/to/output.xlsx
+python3 SKILL_DIR/scripts/formula_check.py output.xlsx
 ```
 
 `formula_check.py` will:

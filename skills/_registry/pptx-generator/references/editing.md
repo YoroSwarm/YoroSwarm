@@ -6,7 +6,7 @@ When using an existing presentation as a template:
 
 1. **Copy and analyze**:
    ```bash
-   cp /path/to/user-provided.pptx template.pptx
+   cp user-provided.pptx template.pptx
    python -m markitdown template.pptx > template.md
    ```
    Review `template.md` to see placeholder text and slide structure.
@@ -48,7 +48,7 @@ When using an existing presentation as a template:
 Copy the user-provided file to `template.pptx` in cwd. This preserves the original and gives a predictable name for all downstream operations.
 
 ```bash
-cp /path/to/user-provided.pptx template.pptx
+cp user-provided.pptx template.pptx
 ```
 
 ```text

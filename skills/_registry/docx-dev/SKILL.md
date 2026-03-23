@@ -30,7 +30,7 @@ Create, edit, and format DOCX documents via Python CLI using python-docx and lxm
 ## Setup
 
 ```bash
-cd /path/to/docx-dev/scripts
+cd docx-dev/scripts
 pip install python-docx lxml
 ```
 
