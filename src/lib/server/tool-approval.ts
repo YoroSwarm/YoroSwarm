@@ -377,7 +377,7 @@ export async function executeApprovedCommand(
     const sessionSandboxConfig = getSessionSandboxConfig(swarmSessionId)
     const writableRoots = [workingDir, ...sessionSandboxConfig.extraWritableRoots]
     // 如果 venv 目录在工作区外（通常不会），也加入可写列表
-    const venvPath = path.join(workingDir, '.venv')
+    const venvPath = pathModule.join(workingDir, '.venv')
     if (!venvPath.startsWith(workingDir)) {
       writableRoots.push(venvPath)
     }
