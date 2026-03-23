@@ -211,6 +211,14 @@ export const swarmSessionsApi = {
     return api.post<{ venvReady: boolean; workspaceReady: boolean; venvStatus: 'initializing' | 'ready' | 'error' }>(`/swarm-sessions/${sessionId}/venv/retry`);
   },
 
+  getVenvPackages: async (sessionId: string): Promise<{ packages: Array<{ name: string; version: string }> }> => {
+    return api.get<{ packages: Array<{ name: string; version: string }> }>(`/swarm-sessions/${sessionId}/venv/packages`);
+  },
+
+  venvPackageAction: async (sessionId: string, action: 'install' | 'uninstall' | 'upgrade', packages: string[]): Promise<{ success: boolean; output: string; error?: string }> => {
+    return api.post<{ success: boolean; output: string; error?: string }>(`/swarm-sessions/${sessionId}/venv/packages/action`, { action, packages });
+  },
+
   updateSession: async (sessionId: string, data: Partial<CreateSwarmSessionRequest> & { status?: string; isPinned?: boolean }): Promise<SwarmSessionResponse> => {
     return api.patch<SwarmSessionResponse>(`/swarm-sessions/${sessionId}`, data);
   },

@@ -83,6 +83,7 @@ interface SessionsActions {
   updateSessionParticipant: (sessionId: string, agent: { id: string; name: string; role?: string; status?: string }) => void;
   setSessionInitializing: (sessionId: string, initializing: boolean) => void;
   setSessionVenvError: (sessionId: string, venvError: boolean) => void;
+  refreshAllSessionsInitStatus: () => Promise<void>;
 }
 
 export const useSessionsStore = create<SessionsState & SessionsActions>((set) => ({
@@ -257,5 +258,31 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
         session.id === sessionId ? { ...session, venvError } : session
       ),
     }));
+  },
+
+  refreshAllSessionsInitStatus: async () => {
+    const state = useSessionsStore.getState();
+    const sessionIds = state.sessions.map((s) => s.id);
+
+    // 并行获取所有会话的初始化状态
+    await Promise.all(
+      sessionIds.map(async (sessionId) => {
+        try {
+          const status = await swarmSessionsApi.getSessionStatus(sessionId);
+          if (status.venvReady && status.workspaceReady) {
+            useSessionsStore.getState().setSessionInitializing(sessionId, false);
+            useSessionsStore.getState().setSessionVenvError(sessionId, false);
+          } else if (status.venvStatus === 'error') {
+            useSessionsStore.getState().setSessionInitializing(sessionId, false);
+            useSessionsStore.getState().setSessionVenvError(sessionId, true);
+          } else {
+            useSessionsStore.getState().setSessionInitializing(sessionId, true);
+            useSessionsStore.getState().setSessionVenvError(sessionId, false);
+          }
+        } catch {
+          // 忽略单个会话的错误
+        }
+      })
+    );
   },
 }));

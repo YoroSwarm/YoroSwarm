@@ -22,6 +22,12 @@ import {
   AlertTriangle,
   CheckCircle2,
   RefreshCw,
+  Package,
+  PlusCircle,
+  MinusCircle,
+  ArrowUpFromLine,
+  ChevronDown,
+  ChevronRight,
 } from 'lucide-react'
 import { useApprovalRules, type ApprovalAction, type MatchType } from '@/hooks/use-approval-rules'
 import { swarmSessionsApi, type SessionShareResponse } from '@/lib/api/swarm-sessions'
@@ -86,6 +92,12 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
   // Virtual environment state
   const [venvStatus, setVenvStatus] = useState<'initializing' | 'ready' | 'error' | null>(null)
   const [isRetryingVenv, setIsRetryingVenv] = useState(false)
+  const [packages, setPackages] = useState<Array<{ name: string; version: string }>>([])
+  const [packagesLoading, setPackagesLoading] = useState(false)
+  const [showPackages, setShowPackages] = useState(false)
+  const [packageOp, setPackageOp] = useState<{ action: string; package: string } | null>(null)
+  const [newPackage, setNewPackage] = useState('')
+  const [showAddPackage, setShowAddPackage] = useState(false)
 
   const loadVenvStatus = useCallback(async () => {
     try {
@@ -94,7 +106,30 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
     } catch { /* ignore */ }
   }, [sessionId])
 
-  useEffect(() => { loadVenvStatus() }, [loadVenvStatus])
+  // 轮询 venv 状态
+  useEffect(() => {
+    loadVenvStatus()
+    if (venvStatus === 'initializing') {
+      const interval = setInterval(loadVenvStatus, 2000)
+      return () => clearInterval(interval)
+    }
+  }, [loadVenvStatus, venvStatus])
+
+  const loadPackages = useCallback(async () => {
+    setPackagesLoading(true)
+    try {
+      const res = await swarmSessionsApi.getVenvPackages(sessionId)
+      setPackages(res.packages || [])
+    } catch { /* ignore */ }
+    finally { setPackagesLoading(false) }
+  }, [sessionId])
+
+  // 当 venv 就绪时加载包列表
+  useEffect(() => {
+    if (venvStatus === 'ready' && showPackages) {
+      loadPackages()
+    }
+  }, [venvStatus, showPackages, loadPackages])
 
   const handleRetryVenv = async () => {
     setIsRetryingVenv(true)
@@ -102,10 +137,34 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
       const status = await swarmSessionsApi.retryVenvSetup(sessionId)
       setVenvStatus(status.venvStatus)
     } catch {
-      // 重试失败，重新获取状态
       await loadVenvStatus()
     } finally {
       setIsRetryingVenv(false)
+    }
+  }
+
+  const handlePackageAction = async (action: 'install' | 'uninstall' | 'upgrade', pkg: string) => {
+    setPackageOp({ action, package: pkg })
+    try {
+      await swarmSessionsApi.venvPackageAction(sessionId, action, [pkg])
+      await loadPackages()
+    } catch { /* ignore */ }
+    finally {
+      setPackageOp(null)
+    }
+  }
+
+  const handleAddPackage = async () => {
+    if (!newPackage.trim()) return
+    setPackageOp({ action: 'install', package: newPackage.trim() })
+    setShowAddPackage(false)
+    try {
+      await swarmSessionsApi.venvPackageAction(sessionId, 'install', [newPackage.trim()])
+      setNewPackage('')
+      await loadPackages()
+    } catch { /* ignore */ }
+    finally {
+      setPackageOp(null)
     }
   }
 
@@ -461,7 +520,7 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
                   {venvStatus === null || venvStatus === 'initializing'
                     ? '正在安装 Python 依赖包'
                     : venvStatus === 'ready'
-                    ? '所有依赖包已安装完成'
+                    ? `${packages.length} 个包已安装`
                     : venvStatus === 'error'
                     ? '请尝试重新初始化'
                     : ''}
@@ -490,6 +549,131 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
             )}
           </div>
         </div>
+
+        {/* 包列表 */}
+        {venvStatus === 'ready' && (
+          <div className="rounded-lg border border-border bg-card shadow-sm overflow-hidden">
+            {/* 包列表头部 */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setShowPackages(!showPackages)}
+              onKeyDown={(e) => e.key === 'Enter' && setShowPackages(!showPackages)}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-accent/50 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">已安装的包</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowAddPackage(true)
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    e.stopPropagation()
+                    if (e.key === 'Enter') {
+                      setShowAddPackage(true)
+                    }
+                  }}
+                  className="p-1 rounded hover:bg-accent transition-colors cursor-pointer"
+                  title="安装新包"
+                >
+                  <PlusCircle className="h-4 w-4 text-muted-foreground" />
+                </span>
+                {showPackages ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </div>
+            </div>
+
+            {/* 包列表内容 */}
+            {showPackages && (
+              <div className="border-t border-border">
+                {/* 添加包输入 */}
+                {showAddPackage && (
+                  <div className="flex items-center gap-2 px-4 py-2 bg-muted/30 border-b border-border">
+                    <input
+                      type="text"
+                      value={newPackage}
+                      onChange={(e) => setNewPackage(e.target.value)}
+                      placeholder="输入包名，如 requests"
+                      className="flex-1 rounded border border-border bg-background px-2 py-1 text-sm"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddPackage()
+                        if (e.key === 'Escape') setShowAddPackage(false)
+                      }}
+                    />
+                    <button
+                      onClick={handleAddPackage}
+                      disabled={!newPackage.trim() || !!packageOp}
+                      className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90 disabled:opacity-50"
+                    >
+                      安装
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowAddPackage(false)
+                        setNewPackage('')
+                      }}
+                      className="px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
+                    >
+                      取消
+                    </button>
+                  </div>
+                )}
+
+                {/* 包列表 */}
+                {packagesLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                ) : packages.length === 0 ? (
+                  <div className="py-4 text-center text-sm text-muted-foreground">
+                    暂无已安装的包
+                  </div>
+                ) : (
+                  <div className="max-h-60 overflow-y-auto">
+                    {packages.map((pkg) => (
+                      <div
+                        key={pkg.name}
+                        className="flex items-center justify-between px-4 py-2 hover:bg-accent/30 border-b border-border/50 last:border-b-0"
+                      >
+                        <div>
+                          <span className="text-sm font-medium">{pkg.name}</span>
+                          <span className="text-xs text-muted-foreground ml-2">v{pkg.version}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handlePackageAction('upgrade', pkg.name)}
+                            disabled={!!packageOp}
+                            className="p-1 rounded hover:bg-accent transition-colors disabled:opacity-50"
+                            title="更新"
+                          >
+                            <ArrowUpFromLine className="h-3.5 w-3.5 text-muted-foreground" />
+                          </button>
+                          <button
+                            onClick={() => handlePackageAction('uninstall', pkg.name)}
+                            disabled={!!packageOp}
+                            className="p-1 rounded hover:bg-destructive/10 transition-colors disabled:opacity-50"
+                            title="卸载"
+                          >
+                            <MinusCircle className="h-3.5 w-3.5 text-destructive/70" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 分隔线（第二个） */}
         <div className="border-t border-border" />

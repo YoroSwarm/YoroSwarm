@@ -120,7 +120,7 @@ export function Sidebar() {
   // 根据开关状态决定显示的会话
   const displayedSessions = showArchived ? archivedSessions : activeSessions;
 
-  // 轮询会话初始化状态
+  // 轮询会话初始化状态（用于新创建的会话，快速反馈）
   const pollSessionInit = useCallback(async (sessionId: string) => {
     if (initializingSessionsRef.current.has(sessionId)) return;
     initializingSessionsRef.current.add(sessionId);

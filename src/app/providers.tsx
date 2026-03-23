@@ -7,6 +7,7 @@ import { StoreProvider } from '@/components/providers/StoreProvider';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Toaster } from '@/components/ui/sonner';
 import { GlobalBackground } from '@/components/layout/GlobalBackground';
+import { useSessionsInitPolling } from '@/hooks/use-sessions-init-polling';
 
 function ThemeInit() {
   const { initTheme } = useThemeStore();
@@ -30,11 +31,18 @@ function LeadPreferencesInit() {
   return null;
 }
 
+function SessionsInitPolling() {
+  useSessionsInitPolling(5000);
+
+  return null;
+}
+
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <StoreProvider>
       <ThemeInit />
       <LeadPreferencesInit />
+      <SessionsInitPolling />
       <GlobalBackground />
       <TooltipProvider>
         {children}

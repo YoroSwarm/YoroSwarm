@@ -15,14 +15,15 @@ import { ApprovalCards } from '@/components/tool-approval/ApprovalCards';
 import { useToolApprovals } from '@/hooks/use-tool-approvals';
 import { useApprovalRules } from '@/hooks/use-approval-rules';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
+import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
-import { useSidebar } from '@/stores';
+import { useSidebar, useSessionsStore } from '@/stores';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
-import { PanelRightClose, PanelRightOpen, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen, Plus, X, MessageSquare, CheckSquare, FolderOpen, Pause, Play, Settings, Loader2 } from 'lucide-react';
 
 const RIGHT_PANEL_STORAGE_KEY = 'right_panel_open';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -114,6 +115,51 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     setCurrentSessionId(nextSessionId);
     storage.set(CURRENT_SESSION_STORAGE_KEY, nextSessionId);
   }, [resolvedSessionId, sessions]);
+
+  // 检查会话初始化状态（持续轮询直到完成）
+  useEffect(() => {
+    if (!resolvedSessionId) return;
+
+    let isMounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    const checkInitStatus = async () => {
+      if (!isMounted) return;
+
+      try {
+        const status = await swarmSessionsApi.getSessionStatus(resolvedSessionId);
+        if (!isMounted) return;
+
+        if (status.venvReady && status.workspaceReady) {
+          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, false);
+          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, false);
+          // 清理轮询
+          if (pollInterval) clearInterval(pollInterval);
+        } else if (status.venvStatus === 'error') {
+          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, false);
+          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, true);
+          if (pollInterval) clearInterval(pollInterval);
+        } else {
+          // 还在初始化中，继续轮询
+          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, true);
+          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, false);
+        }
+      } catch {
+        // 忽略错误，继续轮询
+      }
+    };
+
+    // 立即检查一次
+    checkInitStatus();
+
+    // 持续轮询直到完成
+    pollInterval = setInterval(checkInitStatus, 2000);
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [resolvedSessionId]);
 
   // Sync URL when auto-selecting a session (no explicit sessionId in URL)
   const initialUrlSynced = useRef(false);
@@ -451,22 +497,32 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
           {resolvedSessionId ? (
             <div className="flex flex-col h-full">
               {/* Main content area */}
-              <div className="flex-1 overflow-hidden">
-                {/* Chat tab kept mounted (hidden) to avoid expensive re-mount */}
-                <div className={cn("h-full", activeTab !== 'chat' && 'hidden')}>
-                  <MessageList
-                    sessionId={resolvedSessionId}
-                    messages={messages}
-                    isLoading={isMessagesLoading}
-                    hasMore={hasMore}
-                    onLoadMore={() => {
-                      void loadMessages(true);
-                    }}
-                    streamingState={streamingState}
-                    activeStreamingStates={activeStreamingStates}
-                    participants={visibleParticipants}
-                  />
-                </div>
+              <div className="flex-1 overflow-hidden relative">
+                {/* Chat tab - 初始化时只显示加载卡片，不显示消息列表 */}
+                {currentSession?.initializing ? (
+                  <div className="h-full flex flex-col items-center justify-center">
+                    <div className="flex flex-col items-center px-6 py-4 rounded-xl bg-background shadow-sm">
+                      <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+                      <p className="text-sm font-medium text-foreground">正在初始化环境</p>
+                      <p className="text-xs text-muted-foreground mt-1">安装 Python 依赖包...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={cn("h-full", activeTab !== 'chat' && 'hidden')}>
+                    <MessageList
+                      sessionId={resolvedSessionId}
+                      messages={messages}
+                      isLoading={isMessagesLoading}
+                      hasMore={hasMore}
+                      onLoadMore={() => {
+                        void loadMessages(true);
+                      }}
+                      streamingState={streamingState}
+                      activeStreamingStates={activeStreamingStates}
+                      participants={visibleParticipants}
+                    />
+                  </div>
+                )}
                 <AnimatePresence mode="wait">
                   {activeTab === 'files' && (
                     <motion.div key="files" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.15, ease: 'easeInOut' }} className="h-full">
@@ -498,8 +554,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
                   <ChatInput
                     sessionId={resolvedSessionId}
-                    disabled={isCreatingSession || currentSession?.status === 'paused'}
-                    placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
+                    disabled={isCreatingSession || currentSession?.status === 'paused' || currentSession?.initializing}
+                    placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : currentSession?.initializing ? '环境初始化中，请稍候...' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
                     onSend={async (content, attachments) => {
                       let targetSessionId = resolvedSessionId;
 
