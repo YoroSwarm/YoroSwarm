@@ -131,8 +131,9 @@ export function Sidebar() {
       try {
         const status = await swarmSessionsApi.getSessionStatus(sessionId);
         if (status.venvReady && status.workspaceReady) {
-          // 初始化完成，移除标记
+          // 初始化完成，移除标记并清除状态
           initializingSessionsRef.current.delete(sessionId);
+          useSessionsStore.getState().setSessionInitializing(sessionId, false);
           return;
         }
       } catch {
