@@ -13,7 +13,7 @@ import { runAgentLoop } from './agent-loop'
 import { teammateTools } from './tools/teammate-tools'
 import { listAgentContextEntries } from './agent-context'
 import prisma from '@/lib/db'
-import { listWorkspaceFiles } from './session-workspace'
+import { listWorkspaceFiles, getSessionWorkspaceRoot } from './session-workspace'
 import { buildTeammateContextMessages as buildSharedTeammateContextMessages } from './llm-context'
 
 // 认知收件箱
@@ -44,6 +44,9 @@ import { buildTeammateSkillsPromptSection, ensureTeammateSkillsMounted } from '.
 import { getUserTimezone, buildTimeInfoSection } from './agent-time'
 
 const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 {{APP_NAME}} 团队的成员 **{{name}}**。
+
+**工作区根目录**: {{workspaceRoot}}
+**重要**: 所有文件操作（shell_exec、read_workspace_file、create_workspace_file 等）都基于此工作区。绝对路径无效，必须使用相对路径。
 
 ## 你的角色
 - 角色：{{role}}
@@ -97,6 +100,11 @@ const TEAMMATE_SYSTEM_PROMPT_TEMPLATE = `你是 {{APP_NAME}} 团队的成员 **{
 - 遇到压缩后的上下文时，依据摘要和当前任务信息继续工作即可
 
 ## 工具使用说明
+- **shell_exec**：执行 Shell 命令
+  - 工作目录已设置为 workspace 根目录
+  - 禁止使用 cd 命令切换目录（如 cd /some/path && ...），这会导致命令失败
+  - 如需在不同目录执行命令，使用 working_dir 参数指定目录（相对路径或绝对路径）
+  - 示例：working_dir: "_skills/docx-dev/scripts", command: "python3 -m docx_dev.cli --help"
 - **list_workspace_files**：列出工作区中的文件和目录
 - **create_workspace_directory**：创建目录
 - **read_workspace_file**：读取文件内容
@@ -316,7 +324,7 @@ async function ensureCognitiveTeammateProcessor(
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, teammateId, {
     userId: sessionUserId,
     llmConfig: {
-      systemPrompt: buildTeammateSystemPrompt(teammate, null, undefined, timezone),
+      systemPrompt: buildTeammateSystemPrompt(teammate, null, undefined, timezone, getSessionWorkspaceRoot(swarmSessionId)),
       agentName: teammate.name,
       tools: [...teammateTools, ...progressTools],
       executeTool: buildTeammateToolExecutor(
@@ -732,7 +740,7 @@ async function processTeammateMessages(
 
   // 执行LLM循环
   const result = await runAgentLoop({
-    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection, timezone),
+    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection, timezone, getSessionWorkspaceRoot(swarmSessionId)),
     agentId: teammateId,
     agentName: teammate.name,
     swarmSessionId,
@@ -779,8 +787,9 @@ async function processTeammateMessages(
 function buildTeammateSystemPrompt(
   teammate: { name: string; role: string; description: string | null; capabilities: string | null; createdAt: Date },
   task: { title: string; description: string | null } | null,
-  skillsSection?: string | null,
-  timezone?: string
+  skillsSection: string | null | undefined,
+  timezone: string | undefined,
+  workspaceRoot: string
 ): string {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Swarm'
   const caps = teammate.capabilities
@@ -793,6 +802,7 @@ function buildTeammateSystemPrompt(
     .replace('{{role}}', teammate.role)
     .replace('{{description}}', teammate.description || '团队成员')
     .replace('{{capabilities}}', caps.length > 0 ? `- 能力: ${caps.join(', ')}` : '')
+    .replace('{{workspaceRoot}}', workspaceRoot)
     .replace('{{currentTask}}', task
       ? `- 标题: ${task.title}\n- 描述: ${task.description || '无详细描述'}`
       : '- 当前没有活跃任务，请优先处理收件箱中的协调或澄清消息。')
