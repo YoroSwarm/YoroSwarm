@@ -13,7 +13,14 @@ export interface ExtractedFileText {
 }
 
 function looksLikeTextMime(mimeType: string) {
-  return mimeType.startsWith('text/')
+  if (mimeType.startsWith('text/')) return true
+  // Check for text/x- type mime types (python, java, c, go, rust, etc.)
+  if (mimeType.startsWith('text/x-')) return true
+  // Check for application types that are actually text
+  return mimeType === 'application/javascript'
+    || mimeType === 'application/typescript'
+    || mimeType === 'application/json'
+    || mimeType === 'application/xml'
     || mimeType.includes('json')
     || mimeType.includes('xml')
     || mimeType.includes('javascript')
