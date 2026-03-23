@@ -9,6 +9,7 @@ import { getSkillsPythonPackages } from './skills/python-dependencies'
 const execFileAsync = promisify(execFile)
 export const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
 const VENV_DIR_NAME = '.venv'
+const BASE_VENV_DIR = path.join(WORKSPACE_BASE_DIR, '.base-venv')
 
 type ManagedFileRecord = {
   id: string
@@ -231,8 +232,125 @@ export function getSessionVenvBinPath(swarmSessionId: string): string {
 }
 
 /**
+ * 获取 base venv 的 Python 路径
+ */
+function getBaseVenvPythonPath(): string {
+  return path.join(BASE_VENV_DIR, process.platform === 'win32' ? 'Scripts' : 'bin', process.platform === 'win32' ? 'python.exe' : 'python')
+}
+
+/**
+ * 检查 base venv 是否已完整存在（python 存在且包已安装）
+ */
+async function isBaseVenvReady(): Promise<boolean> {
+  const basePythonPath = getBaseVenvPythonPath()
+  const packagesReadyPath = path.join(BASE_VENV_DIR, '.venv_packages_ready')
+  const [pythonExists, packagesReady] = await Promise.all([
+    pathExists(basePythonPath),
+    pathExists(packagesReadyPath),
+  ])
+  return pythonExists && packagesReady
+}
+
+/**
+ * 创建 base venv（包含所有 skills 包）
+ * 使用懒加载模式，首次需要时创建，后续复用
+ */
+async function ensureBaseVenv(): Promise<string> {
+  // 检查是否已就绪
+  if (await isBaseVenvReady()) {
+    console.log('[Workspace] Using existing base venv')
+    return BASE_VENV_DIR
+  }
+
+  // 检测系统 Python
+  const pythonCmd = await detectPython()
+  if (!pythonCmd) {
+    console.warn('[Workspace] Python not found, cannot create base venv')
+    return ''
+  }
+
+  // 如果目录存在但不完整，先删除
+  const baseExists = await pathExists(BASE_VENV_DIR)
+  if (baseExists) {
+    console.log('[Workspace] Incomplete base venv found, removing for rebuild')
+    try {
+      await rm(BASE_VENV_DIR, { recursive: true, force: true })
+    } catch {
+      // 删除失败，继续
+    }
+  }
+
+  // 确保父目录存在
+  await mkdir(path.dirname(BASE_VENV_DIR), { recursive: true })
+
+  try {
+    console.log('[Workspace] Creating base venv...')
+    await execFileAsync(pythonCmd, ['-m', 'venv', BASE_VENV_DIR], {
+      timeout: 30000,
+    })
+    console.log('[Workspace] Base venv created, installing packages...')
+
+    // 安装所有 skills 包
+    const packages = getSkillsPythonPackages()
+    if (packages.length > 0) {
+      const basePython = getBaseVenvPythonPath()
+      // 先升级 pip
+      await execFileAsync(basePython, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
+        timeout: 60000,
+      })
+      // 安装所有包
+      await execFileAsync(basePython, [
+        '-m', 'pip', 'install',
+        ...packages,
+      ], {
+        timeout: 300000,
+      })
+    }
+
+    // 创建 ready 标记
+    await writeFile(path.join(BASE_VENV_DIR, '.venv_packages_ready'), 'ok', 'utf-8')
+    console.log('[Workspace] Base venv ready')
+    return BASE_VENV_DIR
+  } catch (error) {
+    console.warn('[Workspace] Failed to create base venv:', error)
+    try {
+      await rm(BASE_VENV_DIR, { recursive: true, force: true })
+    } catch {
+      // 忽略删除失败
+    }
+    return ''
+  }
+}
+
+/**
+ * 将 base venv 复制到目标路径
+ * 使用 reflink（COW 硬链接）实现秒级复制
+ */
+async function copyVenv(from: string, to: string): Promise<void> {
+  const isWindows = process.platform === 'win32'
+  if (isWindows) {
+    // Windows: 使用 robocopy /E /NJH /NJS 复制
+    await execFileAsync('robocopy', ['/E', '/NJH', '/NJS', from, to], {
+      timeout: 120000,
+    })
+  } else {
+    // macOS/Linux: 使用 cp -r --reflink=auto 尝试 COW 复制，失败则用普通复制
+    try {
+      await execFileAsync('cp', ['-r', '--reflink=auto', from, to], {
+        timeout: 120000,
+      })
+    } catch {
+      // reflink 不支持（如跨文件系统），使用普通复制
+      await execFileAsync('cp', ['-r', from, to], {
+        timeout: 120000,
+      })
+    }
+  }
+}
+
+/**
  * 创建会话级 Python 虚拟环境（如果尚不存在）
- * 在工作区根目录下创建 .venv/ 目录
+ * 优先从预构建的 base venv 复制，加速创建
  */
 export async function ensureSessionVenv(swarmSessionId: string): Promise<string> {
   const venvPath = getSessionVenvPath(swarmSessionId)
@@ -262,79 +380,35 @@ export async function ensureSessionVenv(swarmSessionId: string): Promise<string>
     }
   }
 
-  // 检测系统 Python
-  const pythonCmd = await detectPython()
-  if (!pythonCmd) {
-    console.warn(`[Workspace][${swarmSessionId}] Python not found, skipping venv creation`)
+  // 确保 base venv 存在
+  const basePath = await ensureBaseVenv()
+  if (!basePath) {
+    console.warn(`[Workspace][${swarmSessionId}] Base venv unavailable, skipping venv creation`)
     return ''
   }
 
   try {
-    console.log(`[Workspace][${swarmSessionId}] Creating Python venv at ${venvPath}`)
-    await execFileAsync(pythonCmd, ['-m', 'venv', venvPath], {
-      cwd: getSessionWorkspaceRoot(swarmSessionId),
-      timeout: 30000,
-    })
-    console.log(`[Workspace][${swarmSessionId}] Python venv created successfully`)
+    console.log(`[Workspace][${swarmSessionId}] Copying venv from base...`)
+    await copyVenv(basePath, venvPath)
 
-    // 安装 skills 所需的 Python 包
-    await installSkillsPythonPackages(swarmSessionId, pythonPath)
+    // 创建会话特定的 ready 标记
+    await createVenvPackagesReadyMarker(swarmSessionId)
+    await deleteVenvPackagesErrorMarker(swarmSessionId)
 
+    console.log(`[Workspace][${swarmSessionId}] Venv ready (copied from base)`)
     return venvPath
   } catch (error) {
-    console.warn(`[Workspace][${swarmSessionId}] Failed to create venv:`, error)
-    // 创建失败，删除不完整的 venv
+    console.warn(`[Workspace][${swarmSessionId}] Failed to copy venv:`, error)
+    // 复制失败，清理
     try {
       await rm(venvPath, { recursive: true, force: true })
     } catch {
-      // 忽略删除失败
+      // 忽略
     }
     return ''
   }
 }
 
-/**
- * 在会话虚拟环境中安装 skills 所需的 Python 包
- * 安装成功后创建标记文件 .venv_packages_ready
- * 安装失败后创建标记文件 .venv_packages_error
- */
-async function installSkillsPythonPackages(swarmSessionId: string, pythonPath: string): Promise<void> {
-  const packages = getSkillsPythonPackages()
-  if (packages.length === 0) {
-    // 没有包需要安装，直接创建标记文件
-    await createVenvPackagesReadyMarker(swarmSessionId)
-    return
-  }
-
-  try {
-    console.log(`[Workspace][${swarmSessionId}] Installing Python packages: ${packages.join(', ')}`)
-
-    // 先升级 pip
-    await execFileAsync(pythonPath, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
-      timeout: 60000,
-    })
-
-    // 安装所有包
-    const installArgs = [
-      '-m', 'pip', 'install',
-      ...packages,
-    ]
-
-    await execFileAsync(pythonPath, installArgs, {
-      timeout: 300000, // 5 分钟超时
-    })
-
-    console.log(`[Workspace][${swarmSessionId}] Python packages installed successfully`)
-
-    // 安装成功：创建 ready 标记，删除 error 标记（如果存在）
-    await createVenvPackagesReadyMarker(swarmSessionId)
-    await deleteVenvPackagesErrorMarker(swarmSessionId)
-  } catch (error) {
-    console.warn(`[Workspace][${swarmSessionId}] Failed to install some Python packages:`, error)
-    // 安装失败：创建 error 标记
-    await createVenvPackagesErrorMarker(swarmSessionId)
-  }
-}
 
 /**
  * 创建 venv 包安装完成的标记文件
