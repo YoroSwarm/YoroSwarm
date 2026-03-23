@@ -81,6 +81,7 @@ interface SessionsActions {
   unpinSession: (sessionId: string) => Promise<void>;
   setSessions: (sessions: Session[] | ((prev: Session[]) => Session[])) => void;
   updateSessionParticipant: (sessionId: string, agent: { id: string; name: string; role?: string; status?: string }) => void;
+  setSessionInitializing: (sessionId: string, initializing: boolean) => void;
 }
 
 export const useSessionsStore = create<SessionsState & SessionsActions>((set) => ({
@@ -238,6 +239,14 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
           };
         }
       }),
+    }));
+  },
+
+  setSessionInitializing: (sessionId, initializing) => {
+    set((state) => ({
+      sessions: state.sessions.map((session) =>
+        session.id === sessionId ? { ...session, initializing } : session
+      ),
     }));
   },
 }));

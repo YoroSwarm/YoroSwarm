@@ -81,6 +81,7 @@ export interface Session {
   status: 'active' | 'archived' | 'deleted' | 'paused';
   isPinned?: boolean;
   tags?: string[];
+  initializing?: boolean;
 }
 
 export interface ChatState {

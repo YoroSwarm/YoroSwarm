@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { appConfig } from '@/lib/config/app';
-import { useUIStore, useLlmConfigsStore } from '@/stores';
+import { useUIStore, useLlmConfigsStore, useSessionsStore } from '@/stores';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { useSessions } from '@/hooks/use-sessions';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,10 @@ export function Sidebar() {
   const [showArchivedUserPreference, setShowArchivedUserPreference] = useState(() =>
     storage.get(SHOW_ARCHIVED_STORAGE_KEY, false)
   );
+  const [isCreating, setIsCreating] = useState(false);
+
+  // 会话初始化轮询状态
+  const initializingSessionsRef = useRef<Set<string>>(new Set());
 
   // 确认对话框
   const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
@@ -116,6 +120,34 @@ export function Sidebar() {
   // 根据开关状态决定显示的会话
   const displayedSessions = showArchived ? archivedSessions : activeSessions;
 
+  // 轮询会话初始化状态
+  const pollSessionInit = useCallback(async (sessionId: string) => {
+    if (initializingSessionsRef.current.has(sessionId)) return;
+    initializingSessionsRef.current.add(sessionId);
+
+    const checkStatus = async () => {
+      if (!initializingSessionsRef.current.has(sessionId)) return;
+
+      try {
+        const status = await swarmSessionsApi.getSessionStatus(sessionId);
+        if (status.venvReady && status.workspaceReady) {
+          // 初始化完成，移除标记
+          initializingSessionsRef.current.delete(sessionId);
+          return;
+        }
+      } catch {
+        // 忽略错误，继续轮询
+      }
+
+      // 继续轮询
+      if (initializingSessionsRef.current.has(sessionId)) {
+        setTimeout(checkStatus, 1000);
+      }
+    };
+
+    await checkStatus();
+  }, []);
+
   const handleCreateSession = async () => {
     // 检查是否有 LLM API 配置
     if (!hasConfig) {
@@ -131,8 +163,12 @@ export function Sidebar() {
       return;
     }
 
+    setIsCreating(true);
     try {
       const created = await createSession();
+      // 设置初始化状态并开始轮询
+      useSessionsStore.getState().setSessionInitializing(created.id, true);
+      pollSessionInit(created.id);
       router.push(`/chat?sessionId=${created.id}`);
     } catch (err) {
       console.error('Failed to create session:', err);
@@ -148,6 +184,8 @@ export function Sidebar() {
           router.push('/settings?tab=llm-api');
         }
       }
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -252,10 +290,14 @@ export function Sidebar() {
           <Button
             onClick={handleCreateSession}
             className="w-full btn-hand gap-2"
-            disabled={!hasConfig}
+            disabled={!hasConfig || isCreating}
           >
-            <Plus className="w-5 h-5" />
-            <span>新建会话</span>
+            {isCreating ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <Plus className="w-5 h-5" />
+            )}
+            <span>{isCreating ? '创建中...' : '新建会话'}</span>
           </Button>
 
           {/* 无配置提示 */}
@@ -326,6 +368,11 @@ export function Sidebar() {
                      {session.status === 'paused' && (
                        <Badge variant="outline" className="shrink-0 text-[10px] px-1 py-0 h-4 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950">
                          暂停
+                       </Badge>
+                     )}
+                     {session.initializing && (
+                       <Badge variant="outline" className="shrink-0 text-[10px] px-1 py-0 h-4 text-blue-600 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-950 animate-pulse">
+                         初始化中
                        </Badge>
                      )}
                   </div>

@@ -265,6 +265,25 @@ export async function ensureSessionVenv(swarmSessionId: string): Promise<string>
 }
 
 /**
+ * 检查会话初始化状态
+ */
+export async function checkSessionInitializationStatus(swarmSessionId: string): Promise<{
+  venvReady: boolean
+  workspaceReady: boolean
+}> {
+  const venvBinPath = getSessionVenvBinPath(swarmSessionId)
+  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+  const workspaceRoot = getSessionWorkspaceRoot(swarmSessionId)
+
+  const [venvReady, workspaceReady] = await Promise.all([
+    pathExists(pythonPath),
+    pathExists(workspaceRoot),
+  ])
+
+  return { venvReady, workspaceReady }
+}
+
+/**
  * 检测系统中可用的 Python 命令
  */
 async function detectPython(): Promise<string | null> {
