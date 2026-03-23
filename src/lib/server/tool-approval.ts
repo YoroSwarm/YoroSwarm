@@ -345,7 +345,7 @@ export async function executeApprovedCommand(
       // 检查常见的 shell 路径
       const shells = ['/bin/zsh', '/bin/bash', '/bin/sh', '/usr/local/bin/zsh', '/usr/local/bin/bash']
       for (const shell of shells) {
-        if (fs.existsSync(shell)) {
+        if (fsModule.existsSync(shell)) {
           return shell
         }
       }
@@ -366,7 +366,7 @@ export async function executeApprovedCommand(
     }
 
     // 如果 venv bin 存在，在 PATH 中覆盖用户设置的 PATH
-    if (fs.existsSync(venvBin)) {
+    if (fsModule.existsSync(venvBin)) {
       envVars.PATH = `${venvBin}${path.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
     }
 
