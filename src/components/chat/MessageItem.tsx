@@ -787,20 +787,26 @@ export const MessageItem = memo(function MessageItem({
                 <Brain className="h-3 w-3" />
               </span>
             ) : isToolCall ? (
-              <span className={cn(
-                "inline-flex items-center gap-1 opacity-60",
-                hasResult
-                  ? isError ? "text-red-600" : "text-green-600"
-                  : "text-amber-600"
-              )}>
-                {hasResult ? (
-                  <span className="animate-scale-in">{isError ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />}</span>
-                ) : (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                )}
-                <Wrench className="h-3 w-3" />
-                <span>{getToolDisplayName(tc?.toolName)}</span>
-              </span>
+              (() => {
+                // Determine status based on output type (same logic as Popover)
+                const outputDisplay = tc?.resultSummary ? formatToolOutput(tc.toolName, tc.resultSummary) : null;
+                const outputType = outputDisplay?.type;
+                const isErrorStatus = outputType === 'error' || (outputType !== 'success' && isError);
+                const statusColor = hasResult
+                  ? isErrorStatus ? "text-red-600" : "text-green-600"
+                  : "text-amber-600";
+                const StatusIcon = hasResult
+                  ? isErrorStatus ? <X className="h-3 w-3" /> : <Check className="h-3 w-3" />
+                  : <Loader2 className="h-3 w-3 animate-spin" />;
+
+                return (
+                  <span className={cn("inline-flex items-center gap-1 opacity-60", statusColor)}>
+                    <span className="animate-scale-in">{StatusIcon}</span>
+                    <Wrench className="h-3 w-3" />
+                    <span>{getToolDisplayName(tc?.toolName)}</span>
+                  </span>
+                );
+              })()
             ) : null}
           </button>
         </PopoverTrigger>
