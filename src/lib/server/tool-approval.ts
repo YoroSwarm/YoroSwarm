@@ -361,13 +361,13 @@ export async function executeApprovedCommand(
     const envVars = {
       ...process.env,
       PATH: venvEnvPath,
-      VIRTUAL_ENV: path.join(workingDir, '.venv'),
+      VIRTUAL_ENV: pathModule.join(workingDir, '.venv'),
       ...userEnvVars,
     }
 
     // 如果 venv bin 存在，在 PATH 中覆盖用户设置的 PATH
     if (fsModule.existsSync(venvBin)) {
-      envVars.PATH = `${venvBin}${path.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
+      envVars.PATH = `${venvBin}${pathModule.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
     }
 
     // 构建沙盒参数：根据平台自动选择 Seatbelt / Bubblewrap / 降级
