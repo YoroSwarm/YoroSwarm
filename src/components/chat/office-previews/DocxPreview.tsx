@@ -57,7 +57,7 @@ export function DocxPreview({ url }: DocxPreviewProps) {
   }
 
   return (
-    <div className="relative max-h-[70vh] overflow-auto rounded border border-border bg-white dark:bg-zinc-900">
+    <div className="relative max-h-[70vh] overflow-auto rounded border border-border bg-background dark:bg-zinc-900">
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/80 z-10">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
