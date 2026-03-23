@@ -18,6 +18,10 @@ import {
   Link2,
   Loader2,
   ExternalLink,
+  Box,
+  AlertTriangle,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react'
 import { useApprovalRules, type ApprovalAction, type MatchType } from '@/hooks/use-approval-rules'
 import { swarmSessionsApi, type SessionShareResponse } from '@/lib/api/swarm-sessions'
@@ -78,6 +82,32 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
   const [showShareDialog, setShowShareDialog] = useState(false)
   const [deletingShareId, setDeletingShareId] = useState<string | null>(null)
   const [copiedShareId, setCopiedShareId] = useState<string | null>(null)
+
+  // Virtual environment state
+  const [venvStatus, setVenvStatus] = useState<'initializing' | 'ready' | 'error' | null>(null)
+  const [isRetryingVenv, setIsRetryingVenv] = useState(false)
+
+  const loadVenvStatus = useCallback(async () => {
+    try {
+      const status = await swarmSessionsApi.getSessionStatus(sessionId)
+      setVenvStatus(status.venvStatus)
+    } catch { /* ignore */ }
+  }, [sessionId])
+
+  useEffect(() => { loadVenvStatus() }, [loadVenvStatus])
+
+  const handleRetryVenv = async () => {
+    setIsRetryingVenv(true)
+    try {
+      const status = await swarmSessionsApi.retryVenvSetup(sessionId)
+      setVenvStatus(status.venvStatus)
+    } catch {
+      // 重试失败，重新获取状态
+      await loadVenvStatus()
+    } finally {
+      setIsRetryingVenv(false)
+    }
+  }
 
   const loadShares = useCallback(async () => {
     setSharesLoading(true)
@@ -386,6 +416,82 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
         )}
 
         {/* 分隔线 */}
+        <div className="border-t border-border" />
+
+        {/* 虚拟环境设置 */}
+        <div>
+          <h2 className="text-lg font-bold flex items-center gap-2">
+            <Box className="h-5 w-5" />
+            虚拟环境
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            Python 虚拟环境状态，包含 Skills 所需的依赖包。
+          </p>
+        </div>
+
+        {/* 虚拟环境状态卡片 */}
+        <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {venvStatus === null || venvStatus === 'initializing' ? (
+                <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                  <Loader2 className="h-4 w-4 animate-spin text-blue-600 dark:text-blue-400" />
+                </div>
+              ) : venvStatus === 'ready' ? (
+                <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              ) : venvStatus === 'error' ? (
+                <div className="h-8 w-8 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center">
+                  <AlertTriangle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                </div>
+              ) : null}
+
+              <div>
+                <p className="text-sm font-medium">
+                  {venvStatus === null || venvStatus === 'initializing'
+                    ? '初始化中...'
+                    : venvStatus === 'ready'
+                    ? '就绪'
+                    : venvStatus === 'error'
+                    ? '初始化失败'
+                    : '未知状态'}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {venvStatus === null || venvStatus === 'initializing'
+                    ? '正在安装 Python 依赖包'
+                    : venvStatus === 'ready'
+                    ? '所有依赖包已安装完成'
+                    : venvStatus === 'error'
+                    ? '请尝试重新初始化'
+                    : ''}
+                </p>
+              </div>
+            </div>
+
+            {venvStatus === 'error' && (
+              <button
+                onClick={handleRetryVenv}
+                disabled={isRetryingVenv}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+              >
+                {isRetryingVenv ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    重试中...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    重新初始化
+                  </>
+                )}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* 分隔线（第二个） */}
         <div className="border-t border-border" />
 
         {/* 分享管理 */}

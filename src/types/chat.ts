@@ -82,6 +82,7 @@ export interface Session {
   isPinned?: boolean;
   tags?: string[];
   initializing?: boolean;
+  venvError?: boolean;
 }
 
 export interface ChatState {

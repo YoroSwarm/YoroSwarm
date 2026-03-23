@@ -134,6 +134,14 @@ export function Sidebar() {
           // 初始化完成，移除标记并清除状态
           initializingSessionsRef.current.delete(sessionId);
           useSessionsStore.getState().setSessionInitializing(sessionId, false);
+          useSessionsStore.getState().setSessionVenvError(sessionId, false);
+          return;
+        }
+        // 检查是否是错误状态
+        if (status.venvStatus === 'error') {
+          initializingSessionsRef.current.delete(sessionId);
+          useSessionsStore.getState().setSessionInitializing(sessionId, false);
+          useSessionsStore.getState().setSessionVenvError(sessionId, true);
           return;
         }
       } catch {
@@ -374,6 +382,11 @@ export function Sidebar() {
                      {session.initializing && (
                        <Badge variant="outline" className="shrink-0 text-[10px] px-1 py-0 h-4 text-blue-600 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-950 animate-pulse">
                          初始化中
+                       </Badge>
+                     )}
+                     {session.venvError && !session.initializing && (
+                       <Badge variant="outline" className="shrink-0 text-[10px] px-1 py-0 h-4 text-red-600 border-red-300 bg-red-50 dark:text-red-400 dark:border-red-700 dark:bg-red-950">
+                         异常
                        </Badge>
                      )}
                   </div>

@@ -203,8 +203,12 @@ export const swarmSessionsApi = {
     return api.get<SwarmSessionResponse>(`/swarm-sessions/${sessionId}`);
   },
 
-  getSessionStatus: async (sessionId: string): Promise<{ venvReady: boolean; workspaceReady: boolean }> => {
-    return api.get<{ venvReady: boolean; workspaceReady: boolean }>(`/swarm-sessions/${sessionId}/status`);
+  getSessionStatus: async (sessionId: string): Promise<{ venvReady: boolean; workspaceReady: boolean; venvStatus: 'initializing' | 'ready' | 'error' }> => {
+    return api.get<{ venvReady: boolean; workspaceReady: boolean; venvStatus: 'initializing' | 'ready' | 'error' }>(`/swarm-sessions/${sessionId}/status`);
+  },
+
+  retryVenvSetup: async (sessionId: string): Promise<{ venvReady: boolean; workspaceReady: boolean; venvStatus: 'initializing' | 'ready' | 'error' }> => {
+    return api.post<{ venvReady: boolean; workspaceReady: boolean; venvStatus: 'initializing' | 'ready' | 'error' }>(`/swarm-sessions/${sessionId}/venv/retry`);
   },
 
   updateSession: async (sessionId: string, data: Partial<CreateSwarmSessionRequest> & { status?: string; isPinned?: boolean }): Promise<SwarmSessionResponse> => {

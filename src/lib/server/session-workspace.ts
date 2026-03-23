@@ -4,6 +4,7 @@ import { execFile } from 'child_process'
 import { promisify } from 'util'
 import prisma from '@/lib/db'
 import { extractFileText } from './file-text-extractor'
+import { getSkillsPythonPackages } from './skills/python-dependencies'
 
 const execFileAsync = promisify(execFile)
 export const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
@@ -238,9 +239,27 @@ export async function ensureSessionVenv(swarmSessionId: string): Promise<string>
   const venvBinPath = getSessionVenvBinPath(swarmSessionId)
   const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
 
-  // 检查虚拟环境是否已存在
-  if (await pathExists(pythonPath)) {
+  // 检查虚拟环境是否已完整存在（python 存在且包已安装）
+  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
+  const [pythonExists, packagesReady] = await Promise.all([
+    pathExists(pythonPath),
+    pathExists(packagesReadyPath),
+  ])
+
+  // 如果 python 存在且包已安装，说明 venv 已完整初始化
+  if (pythonExists && packagesReady) {
     return venvPath
+  }
+
+  // 如果 venv 目录存在但不完整（python 存在但包没装完，或 venv 创建失败），先删除
+  const venvExists = await pathExists(venvPath)
+  if (venvExists) {
+    console.log(`[Workspace][${swarmSessionId}] Incomplete venv found, removing for retry`)
+    try {
+      await rm(venvPath, { recursive: true, force: true })
+    } catch {
+      // 删除失败，继续尝试使用现有的
+    }
   }
 
   // 检测系统 Python
@@ -257,30 +276,159 @@ export async function ensureSessionVenv(swarmSessionId: string): Promise<string>
       timeout: 30000,
     })
     console.log(`[Workspace][${swarmSessionId}] Python venv created successfully`)
+
+    // 安装 skills 所需的 Python 包
+    await installSkillsPythonPackages(swarmSessionId, pythonPath)
+
     return venvPath
   } catch (error) {
     console.warn(`[Workspace][${swarmSessionId}] Failed to create venv:`, error)
+    // 创建失败，删除不完整的 venv
+    try {
+      await rm(venvPath, { recursive: true, force: true })
+    } catch {
+      // 忽略删除失败
+    }
     return ''
   }
 }
 
 /**
+ * 在会话虚拟环境中安装 skills 所需的 Python 包
+ * 安装成功后创建标记文件 .venv_packages_ready
+ * 安装失败后创建标记文件 .venv_packages_error
+ */
+async function installSkillsPythonPackages(swarmSessionId: string, pythonPath: string): Promise<void> {
+  const packages = getSkillsPythonPackages()
+  if (packages.length === 0) {
+    // 没有包需要安装，直接创建标记文件
+    await createVenvPackagesReadyMarker(swarmSessionId)
+    return
+  }
+
+  try {
+    console.log(`[Workspace][${swarmSessionId}] Installing Python packages: ${packages.join(', ')}`)
+
+    // 先升级 pip
+    await execFileAsync(pythonPath, ['-m', 'pip', 'install', '--upgrade', 'pip'], {
+      timeout: 60000,
+    })
+
+    // 安装所有包
+    const installArgs = [
+      '-m', 'pip', 'install',
+      ...packages,
+    ]
+
+    await execFileAsync(pythonPath, installArgs, {
+      timeout: 300000, // 5 分钟超时
+    })
+
+    console.log(`[Workspace][${swarmSessionId}] Python packages installed successfully`)
+
+    // 安装成功：创建 ready 标记，删除 error 标记（如果存在）
+    await createVenvPackagesReadyMarker(swarmSessionId)
+    await deleteVenvPackagesErrorMarker(swarmSessionId)
+  } catch (error) {
+    console.warn(`[Workspace][${swarmSessionId}] Failed to install some Python packages:`, error)
+    // 安装失败：创建 error 标记
+    await createVenvPackagesErrorMarker(swarmSessionId)
+  }
+}
+
+/**
+ * 创建 venv 包安装完成的标记文件
+ */
+async function createVenvPackagesReadyMarker(swarmSessionId: string): Promise<void> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  const markerPath = path.join(venvPath, '.venv_packages_ready')
+  try {
+    await writeFile(markerPath, 'ok', 'utf-8')
+  } catch {
+    // 忽略标记文件创建失败
+  }
+}
+
+/**
+ * 创建 venv 包安装失败的标记文件
+ */
+async function createVenvPackagesErrorMarker(swarmSessionId: string): Promise<void> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  const markerPath = path.join(venvPath, '.venv_packages_error')
+  try {
+    await writeFile(markerPath, 'ok', 'utf-8')
+  } catch {
+    // 忽略标记文件创建失败
+  }
+}
+
+/**
+ * 删除 venv 包安装失败的标记文件
+ */
+async function deleteVenvPackagesErrorMarker(swarmSessionId: string): Promise<void> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  const markerPath = path.join(venvPath, '.venv_packages_error')
+  try {
+    await unlink(markerPath)
+  } catch {
+    // 忽略删除失败
+  }
+}
+
+/**
  * 检查会话初始化状态
+ * venvReady 不仅要求 python 存在，还要求包安装标记文件存在
  */
 export async function checkSessionInitializationStatus(swarmSessionId: string): Promise<{
   venvReady: boolean
   workspaceReady: boolean
+  venvStatus: 'initializing' | 'ready' | 'error'
 }> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
   const venvBinPath = getSessionVenvBinPath(swarmSessionId)
   const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
+  const packagesErrorPath = path.join(venvPath, '.venv_packages_error')
   const workspaceRoot = getSessionWorkspaceRoot(swarmSessionId)
 
-  const [venvReady, workspaceReady] = await Promise.all([
+  const [pythonExists, packagesReady, packagesError, workspaceReady] = await Promise.all([
     pathExists(pythonPath),
+    pathExists(packagesReadyPath),
+    pathExists(packagesErrorPath),
     pathExists(workspaceRoot),
   ])
 
-  return { venvReady, workspaceReady }
+  // venvReady 需要 python 存在且包安装完成
+  const venvReady = pythonExists && packagesReady
+
+  // 判断 venv 状态
+  let venvStatus: 'initializing' | 'ready' | 'error' = 'initializing'
+  if (venvReady) {
+    venvStatus = 'ready'
+  } else if (packagesError) {
+    // 安装失败
+    venvStatus = 'error'
+  } else if (!pythonExists) {
+    // venv 还没开始创建
+    venvStatus = 'initializing'
+  } else if (pythonExists && !packagesReady && !packagesError) {
+    // python 存在但没有 ready 也没有 error，说明正在安装中
+    venvStatus = 'initializing'
+  }
+
+  return { venvReady, workspaceReady, venvStatus }
+}
+
+/**
+ * 删除虚拟环境（用于重试）
+ */
+export async function deleteSessionVenv(swarmSessionId: string): Promise<void> {
+  const venvPath = getSessionVenvPath(swarmSessionId)
+  try {
+    await rm(venvPath, { recursive: true, force: true })
+  } catch {
+    // 忽略删除失败
+  }
 }
 
 /**
