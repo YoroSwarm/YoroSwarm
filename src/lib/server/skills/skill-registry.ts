@@ -10,6 +10,8 @@
 
 import path from 'path'
 import { readdir, stat, mkdir, cp, rm, symlink } from 'fs/promises'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import prisma from '@/lib/db'
 import {
   loadSkillFromDirectory,
@@ -18,6 +20,10 @@ import {
   type SkillMetadata,
   type SkillSummary,
 } from './skill-parser'
+import { isSkillWithLocalPackage } from './python-dependencies'
+import { ensureSessionVenv, getSessionVenvBinPath } from '../session-workspace'
+
+const execFileAsync = promisify(execFile)
 
 // ============================================
 // 路径常量
@@ -332,7 +338,67 @@ export async function mountSkillToWorkspace(
 
   const relativePath = `_skills/${skillName}`
   console.log(`[SkillRegistry] Mounted skill ${skillName} to workspace ${swarmSessionId} at ${relativePath}`)
+
+  // 如果 skill 包含本地 Python 包（如 docx_dev），需要安装到虚拟环境
+  if (isSkillWithLocalPackage(skillName)) {
+    await installSkillLocalPackage(swarmSessionId, skill.basePath)
+  }
+
   return relativePath
+}
+
+/**
+ * 将 skill 的本地 Python 包安装到会话虚拟环境
+ */
+async function installSkillLocalPackage(swarmSessionId: string, skillBasePath: string): Promise<void> {
+  const scriptsPath = path.join(skillBasePath, 'scripts')
+
+  try {
+    // 确保虚拟环境存在
+    const venvPath = await ensureSessionVenv(swarmSessionId)
+    if (!venvPath) {
+      console.warn(`[SkillRegistry] Cannot install local package: venv not available for ${swarmSessionId}`)
+      return
+    }
+
+    const venvBinPath = getSessionVenvBinPath(swarmSessionId)
+    const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+
+    // 检查 scripts 目录是否存在
+    const scriptsDirExists = await pathExists(scriptsPath)
+    if (!scriptsDirExists) {
+      console.log(`[SkillRegistry] No scripts dir for local package: ${scriptsPath}`)
+      return
+    }
+
+    console.log(`[SkillRegistry] Installing local package from ${scriptsPath} to venv...`)
+
+    // 使用 pip install -e 安装本地包
+    await execFileAsync(pythonPath, [
+      '-m', 'pip', 'install',
+      '--quiet',  // 减少日志输出
+      '-e', scriptsPath,
+    ], {
+      timeout: 120000,
+    })
+
+    console.log(`[SkillRegistry] Local package installed successfully`)
+  } catch (error) {
+    console.warn(`[SkillRegistry] Failed to install local package from ${scriptsPath}:`, error)
+    // 不抛出错误，symlink 已创建成功，只是包安装失败
+  }
+}
+
+/**
+ * 检查路径是否存在
+ */
+async function pathExists(targetPath: string): Promise<boolean> {
+  try {
+    await stat(targetPath)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
