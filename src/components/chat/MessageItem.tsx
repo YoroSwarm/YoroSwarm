@@ -69,7 +69,7 @@ function formatJsonReadable(jsonStr: string | undefined): { key: string; value: 
       let displayValue: string;
       let nested = false;
       if (typeof value === 'string') {
-        displayValue = value.length > 100 ? value.slice(0, 100) + '...' : value;
+        displayValue = value;
       } else if (typeof value === 'number' || typeof value === 'boolean') {
         displayValue = String(value);
       } else if (value === null) {
@@ -107,7 +107,7 @@ function formatJsonReadable(jsonStr: string | undefined): { key: string; value: 
 interface ToolInputDisplay {
   icon: string;
   title: string;
-  fields: { label: string; value: string; truncate?: boolean }[];
+  fields: { label: string; value: string }[];
 }
 
 function formatToolInput(toolName: string, inputJson: string | undefined): ToolInputDisplay | null {
@@ -119,7 +119,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
         return {
           icon: '💬',
           title: '回复用户',
-          fields: [{ label: '内容', value: input.content, truncate: true }],
+          fields: [{ label: '内容', value: input.content }],
         };
       case 'provision_teammate':
         return {
@@ -128,20 +128,19 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           fields: [
             { label: '名称', value: input.name },
             { label: '角色', value: input.role },
-            ...(input.description ? [{ label: '描述', value: input.description, truncate: true }] : []),
+            ...(input.description ? [{ label: '描述', value: input.description,  }] : []),
             ...(input.capabilities?.length ? [{ label: '能力', value: input.capabilities.join(', ') }] : []),
           ],
         };
       case 'decompose_task':
         const taskCount = input.tasks?.length || 0;
-        const taskFields: { label: string; value: string; truncate?: boolean }[] = [{ label: '任务数', value: `${taskCount} 个子任务` }];
+        const taskFields: { label: string; value: string }[] = [{ label: '任务数', value: `${taskCount} 个子任务` }];
         // Add each task title as a separate field for better visibility
         if (input.tasks && Array.isArray(input.tasks)) {
           input.tasks.forEach((task: { title?: string; description?: string }, index: number) => {
             taskFields.push({
               label: `${index + 1}.`,
               value: task.title || '未命名任务',
-              truncate: true,
             });
           });
         }
@@ -165,7 +164,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '发送消息',
           fields: [
             { label: '接收者', value: input.teammate_id },
-            { label: '内容', value: input.content, truncate: true },
+            { label: '内容', value: input.content,  },
           ],
         };
       case 'list_workspace_files':
@@ -203,7 +202,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
         };
       case 'replace_in_file': {
         const repls = Array.isArray(input.replacements) ? input.replacements : [];
-        const previewFields: { label: string; value: string; truncate?: boolean }[] = [
+        const previewFields: { label: string; value: string }[] = [
           { label: '路径', value: input.path },
           { label: '替换数', value: `${repls.length} 处` },
         ];
@@ -211,7 +210,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           const r = repls[i] as Record<string, unknown>;
           const oldStr = String(r.old_str || '').slice(0, 40);
           const newStr = String(r.new_str || '').slice(0, 40);
-          previewFields.push({ label: `#${i + 1}`, value: `${oldStr || '(开头插入)'} → ${newStr || '(删除)'}`, truncate: true });
+          previewFields.push({ label: `#${i + 1}`, value: `${oldStr || '(开头插入)'} → ${newStr || '(删除)'}`, });
         }
         if (repls.length > 3) {
           previewFields.push({ label: '...', value: `还有 ${repls.length - 3} 处替换` });
@@ -230,7 +229,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '报告完成',
           fields: [
             ...(input.result_summary ? [{ label: '摘要', value: input.result_summary }] : []),
-            ...(input.report ? [{ label: '报告', value: input.report, truncate: true }] : []),
+            ...(input.report ? [{ label: '报告', value: input.report,  }] : []),
           ],
         };
       case 'send_message_to_lead':
@@ -239,7 +238,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '消息 Lead',
           fields: [
             { label: '类型', value: input.message_type },
-            { label: '内容', value: input.content, truncate: true },
+            { label: '内容', value: input.content,  },
           ],
         };
       case 'update_self_todo': {
@@ -247,20 +246,20 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
         const actionLabels: Record<string, string> = {
           add: '添加', insert: '插入', delete: '删除', update: '更新', clear: '清空',
         };
-        const fields: { label: string; value: string; truncate?: boolean }[] = [
+        const fields: { label: string; value: string }[] = [
           { label: '操作', value: actionLabels[action] || action },
         ];
         if (input.item && typeof input.item === 'object') {
           const item = input.item as Record<string, unknown>;
-          if (item.title) fields.push({ label: '标题', value: String(item.title), truncate: true });
+          if (item.title) fields.push({ label: '标题', value: String(item.title) });
           if (item.status) fields.push({ label: '状态', value: String(item.status) });
           if (item.category) fields.push({ label: '分类', value: String(item.category) });
         } else if (input.item) {
-          fields.push({ label: '内容', value: String(input.item), truncate: true });
+          fields.push({ label: '内容', value: String(input.item) });
         }
         if (input.item_id) fields.push({ label: 'ID', value: String(input.item_id) });
         if (input.index !== undefined) fields.push({ label: '位置', value: `#${Number(input.index) + 1}` });
-        if (input.new_item) fields.push({ label: '新内容', value: String(input.new_item), truncate: true });
+        if (input.new_item) fields.push({ label: '新内容', value: String(input.new_item) });
         if (input.status) fields.push({ label: '新状态', value: String(input.status) });
         return { icon: '📝', title: '更新待办', fields };
       }
@@ -271,7 +270,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           fields: [
             { label: '任务', value: input.task_id as string },
             { label: '方式', value: input.verification_type === 'cross_validate' ? '交叉验证' : (input.verification_type as string || '验证') },
-            ...(input.focus_areas?.length ? [{ label: '重点', value: (input.focus_areas as string[]).join(', '), truncate: true }] : []),
+            ...(input.focus_areas?.length ? [{ label: '重点', value: (input.focus_areas as string[]).join(', '),  }] : []),
           ],
         };
       case 'save_progress':
@@ -279,7 +278,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           icon: '💾',
           title: '保存进度',
           fields: [
-            ...(input.summary ? [{ label: '摘要', value: input.summary as string, truncate: true }] : []),
+            ...(input.summary ? [{ label: '摘要', value: input.summary as string,  }] : []),
           ],
         };
       case 'resume_work':
@@ -295,7 +294,7 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           icon: '📢',
           title: '团队广播',
           fields: [
-            { label: '内容', value: input.content as string, truncate: true },
+            { label: '内容', value: input.content as string,  },
           ],
         };
       case 'get_team_roster':
@@ -318,9 +317,9 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           icon: '⚡',
           title: '执行命令',
           fields: [
-            { label: '命令', value: input.command as string, truncate: false },
-            { label: '说明', value: input.description as string, truncate: true },
-            ...(input.working_dir ? [{ label: '目录', value: input.working_dir as string, truncate: true }] : []),
+            { label: '命令', value: input.command as string },
+            { label: '说明', value: input.description as string,  },
+            ...(input.working_dir ? [{ label: '目录', value: input.working_dir as string,  }] : []),
             ...(input.timeout ? [{ label: '超时', value: `${input.timeout}秒` }] : []),
           ],
         };
@@ -882,7 +881,7 @@ export const MessageItem = memo(function MessageItem({
         }
 
         return (
-          <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-wordword">
+          <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-word">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={markdownComponents}
@@ -1010,10 +1009,10 @@ export const MessageItem = memo(function MessageItem({
                               <span>{toolDisplay.title}</span>
                             </div>
                             <div className="mt-1.5 space-y-1">
-                              {toolDisplay.fields.map(({ label, value, truncate }) => (
+                              {toolDisplay.fields.map(({ label, value }) => (
                                 <div key={label} className="flex gap-2 items-start min-w-0">
                                   <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
-                                  <span className={cn("text-foreground text-xs", truncate ? "truncate max-w-64" : "whitespace-pre-wrap wrap-break-wordword")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+                                  <span className="text-foreground text-xs whitespace-pre-wrap wrap-break-word">{typeof value === 'object' ? JSON.stringify(value) : value}</span>
                                 </div>
                               ))}
                             </div>
@@ -1029,7 +1028,7 @@ export const MessageItem = memo(function MessageItem({
                               {formatted.map(({ key, value, nested }) => (
                                 <div key={key} className="flex gap-2 items-start min-w-0">
                                   <span className="text-muted-foreground/60 shrink-0 text-xs">{key}:</span>
-                                  <span className={cn("text-foreground text-xs", nested ? "italic text-muted-foreground/70 truncate max-w-64" : "whitespace-pre-wrap wrap-break-wordword")}>{value}</span>
+                                  <span className={cn("text-foreground text-xs", nested ? "italic text-muted-foreground/70 whitespace-pre-wrap wrap-break-word" : "whitespace-pre-wrap wrap-break-word")}>{value}</span>
                                 </div>
                               ))}
                             </div>
@@ -1080,7 +1079,7 @@ export const MessageItem = memo(function MessageItem({
                                 {outputDisplay.fields.map(({ label, value, isLong }) => (
                                   <div key={label} className="flex gap-2 items-start min-w-0">
                                     <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
-                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap wrap-break-word max-w-64" : "truncate max-w-64")}>{value}</span>
+                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap wrap-break-word" : "whitespace-pre-wrap wrap-break-word")}>{value}</span>
                                   </div>
                                 ))}
                               </div>
