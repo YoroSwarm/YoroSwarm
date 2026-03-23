@@ -47,27 +47,56 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// Format JSON with proper indentation and syntax highlighting
+function formatJsonBeautify(jsonStr: string | undefined): string {
+  if (!jsonStr) return '';
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return jsonStr;
+  }
+}
+
 // Format JSON string to readable key-value pairs
-function formatJsonReadable(jsonStr: string | undefined): { key: string; value: string }[] | null {
+function formatJsonReadable(jsonStr: string | undefined): { key: string; value: string; nested?: boolean }[] | null {
   if (!jsonStr) return null;
   try {
     const parsed = JSON.parse(jsonStr);
     if (typeof parsed !== 'object' || parsed === null) return null;
-    
+
     return Object.entries(parsed).map(([key, value]) => {
       let displayValue: string;
+      let nested = false;
       if (typeof value === 'string') {
-        displayValue = value;
+        displayValue = value.length > 100 ? value.slice(0, 100) + '...' : value;
       } else if (typeof value === 'number' || typeof value === 'boolean') {
         displayValue = String(value);
       } else if (value === null) {
         displayValue = 'null';
       } else if (Array.isArray(value)) {
-        displayValue = `[${value.length} 项]`;
+        if (value.length === 0) {
+          displayValue = '[]';
+        } else if (value.length <= 3) {
+          displayValue = value.map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(', ');
+        } else {
+          const preview = value.slice(0, 2).map(v => typeof v === 'string' ? v : JSON.stringify(v)).join(', ');
+          displayValue = `${preview}, ... (+${value.length - 2})`;
+        }
+        nested = value.length > 3;
       } else {
-        displayValue = '{...}';
+        const entries = Object.entries(value as Record<string, unknown>);
+        if (entries.length === 0) {
+          displayValue = '{}';
+        } else if (entries.length <= 3) {
+          displayValue = entries.map(([k, v]) => `${k}: ${typeof v === 'string' ? v : JSON.stringify(v)}`).join(', ');
+        } else {
+          const preview = entries.slice(0, 2).map(([k, v]) => `${k}: ${typeof v === 'string' ? v.slice(0, 20) : JSON.stringify(v)}`).join(', ');
+          displayValue = `${preview}, ... (+${entries.length - 2})`;
+        }
+        nested = entries.length > 3;
       }
-      return { key, value: displayValue };
+      return { key, value: displayValue, nested };
     });
   } catch {
     return null;
@@ -339,11 +368,12 @@ interface ToolOutputField {
 }
 
 interface ToolOutputDisplay {
-  type: 'text' | 'code' | 'list' | 'error' | 'success' | 'fields';
+  type: 'text' | 'code' | 'list' | 'error' | 'success' | 'fields' | 'json';
   content: string;
   items?: string[];
   fields?: ToolOutputField[];
   language?: string;
+  rawJson?: string;
 }
 
 function formatToolOutput(toolName: string, output: string | undefined): ToolOutputDisplay | null {
@@ -355,9 +385,11 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
   }
   
   // Try to parse as JSON for structured formatting
-  let parsedOutput: Record<string, unknown> | null = null;
+  let parsedOutput: unknown = null;
+  let rawJson = output;
   try {
     parsedOutput = JSON.parse(output);
+    rawJson = JSON.stringify(parsedOutput, null, 2);
   } catch {
     parsedOutput = null;
   }
@@ -370,103 +402,237 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
   // Tool-specific formatting
   switch (toolName) {
     case 'provision_teammate':
-      if (parsedOutput) {
+      if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [
-          { label: 'ID', value: String(parsedOutput.teammate_id || parsedOutput.id || '-') },
-          { label: '名称', value: String(parsedOutput.name || '-') },
-          { label: '角色', value: String(parsedOutput.role || '-') },
-          { label: '状态', value: String(parsedOutput.status || '-') },
+          { label: 'ID', value: String((parsedOutput as Record<string, unknown>).teammate_id || (parsedOutput as Record<string, unknown>).id || '-') },
+          { label: '名称', value: String((parsedOutput as Record<string, unknown>).name || '-') },
+          { label: '角色', value: String((parsedOutput as Record<string, unknown>).role || '-') },
+          { label: '状态', value: String((parsedOutput as Record<string, unknown>).status || '-') },
         ];
         return { type: 'fields', content: output, fields };
       }
-      return { type: 'success', content: output };
-      
+      return { type: 'json', content: 'JSON 输出', rawJson };
+
     case 'decompose_task':
-      if (parsedOutput && Array.isArray(parsedOutput.tasks)) {
+      if (parsedOutput && typeof parsedOutput === 'object' && Array.isArray((parsedOutput as Record<string, unknown>).tasks)) {
         return { 
           type: 'list', 
           content: output,
-          items: parsedOutput.tasks.map((t: { title?: string }) => t.title || '未命名任务')
+          rawJson,
+          items: ((parsedOutput as Record<string, unknown>).tasks as Array<{ title?: string }>).map(t => t.title || '未命名任务')
         };
       }
-      return { type: 'text', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
       
     case 'assign_task':
-      if (parsedOutput) {
+      if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [
-          { label: '任务', value: String(parsedOutput.taskId || parsedOutput.task_id || '-') },
-          { label: '分配给', value: String(parsedOutput.assignee || parsedOutput.assigneeId || parsedOutput.assignee_id || '-') },
-          { label: '状态', value: String(parsedOutput.status || '已分配') },
+          { label: '任务', value: String((parsedOutput as Record<string, unknown>).taskId || (parsedOutput as Record<string, unknown>).task_id || '-') },
+          { label: '分配给', value: String((parsedOutput as Record<string, unknown>).assignee || (parsedOutput as Record<string, unknown>).assigneeId || (parsedOutput as Record<string, unknown>).assignee_id || '-') },
+          { label: '状态', value: String((parsedOutput as Record<string, unknown>).status || '已分配') },
         ];
         return { type: 'fields', content: output, fields };
       }
-      return { type: 'success', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
       
     case 'create_workspace_directory':
-      if (parsedOutput) {
+      if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [
-          { label: '路径', value: String(parsedOutput.path || '-') },
+          { label: '路径', value: String((parsedOutput as Record<string, unknown>).path || '-') },
           { label: '类型', value: 'directory' },
         ];
         return { type: 'fields', content: output, fields };
       }
-      return { type: 'success', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
 
     case 'create_workspace_file':
     case 'replace_workspace_file':
-      if (parsedOutput) {
+      if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [
-          { label: '文件ID', value: String(parsedOutput.file_id || parsedOutput.id || '-') },
-          { label: '路径', value: String(parsedOutput.path || '-') },
-          { label: '大小', value: String(parsedOutput.size ? `${parsedOutput.size} 字节` : '-') },
-          { label: '操作', value: String(parsedOutput.operation || '-') },
+          { label: '文件ID', value: String((parsedOutput as Record<string, unknown>).file_id || (parsedOutput as Record<string, unknown>).id || '-') },
+          { label: '路径', value: String((parsedOutput as Record<string, unknown>).path || '-') },
+          { label: '大小', value: String((parsedOutput as Record<string, unknown>).size ? `${(parsedOutput as Record<string, unknown>).size} 字节` : '-') },
+          { label: '操作', value: String((parsedOutput as Record<string, unknown>).operation || '-') },
         ];
         return { type: 'fields', content: output, fields };
       }
-      return { type: 'success', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
 
     case 'list_workspace_files':
-      if (parsedOutput && Array.isArray(parsedOutput.entries)) {
+      if (parsedOutput && typeof parsedOutput === 'object' && Array.isArray((parsedOutput as Record<string, unknown>).entries)) {
         return {
           type: 'list',
           content: output,
-          items: parsedOutput.entries.map((entry: { path?: string; type?: string }) => `${entry.type === 'directory' ? '📁' : '📄'} ${entry.path || '-'}`),
+          rawJson,
+          items: ((parsedOutput as Record<string, unknown>).entries as Array<{ path?: string; type?: string }>).map(entry => `${entry.type === 'directory' ? '📁' : '📄'} ${entry.path || '-'}`),
         };
       }
-      return { type: 'text', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
 
     case 'read_workspace_file':
-      return { type: 'code', content: output, language: 'text' };
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fileContent = String((parsedOutput as Record<string, unknown>).content || '');
+        return { type: 'code', content: fileContent, language: 'text', rawJson };
+      }
+      return { type: 'code', content: output, language: 'text', rawJson };
       
     case 'reply_to_user':
     case 'send_message_to_teammate':
     case 'send_message_to_lead':
-      return { type: 'text', content: output };
+      if (!parsedOutput) {
+        return { type: 'text', content: output };
+      }
+      return { type: 'json', content: 'JSON 输出', rawJson };
 
     case 'assign_skill_to_teammate':
-      if (parsedOutput) {
+      if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [
-          { label: '队友', value: String(parsedOutput.teammate_id || parsedOutput.agentId || '-') },
-          { label: '技能', value: String(parsedOutput.skill_name || parsedOutput.skillName || '-') },
-          { label: '状态', value: String(parsedOutput.status || '已分配') },
+          { label: '队友', value: String((parsedOutput as Record<string, unknown>).teammate_id || (parsedOutput as Record<string, unknown>).agentId || '-') },
+          { label: '技能', value: String((parsedOutput as Record<string, unknown>).skill_name || (parsedOutput as Record<string, unknown>).skillName || '-') },
+          { label: '状态', value: String((parsedOutput as Record<string, unknown>).status || '已分配') },
         ];
         return { type: 'fields', content: output, fields };
       }
-      return { type: 'success', content: output };
+      return { type: 'json', content: 'JSON 输出', rawJson };
       
     case 'report_task_completion':
       return { type: 'success', content: output };
-      
-    default:
-      // For unknown tools, try to format JSON as fields
+
+    case 'shell_exec':
       if (parsedOutput && typeof parsedOutput === 'object') {
-        const fields: ToolOutputField[] = Object.entries(parsedOutput).map(([key, value]) => ({
-          label: key,
-          value: typeof value === 'string' ? value : JSON.stringify(value),
-          isLong: typeof value === 'string' && value.length > 50,
-        }));
+        const execOutput = String((parsedOutput as Record<string, unknown>).output || '');
+        return { type: 'code', content: execOutput, language: 'text', rawJson };
+      }
+      return { type: 'code', content: output, language: 'text', rawJson };
+
+    case 'update_self_todo':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [
+          { label: '操作', value: String((parsedOutput as Record<string, unknown>).operation || (parsedOutput as Record<string, unknown>).action || '-') },
+          ...((parsedOutput as Record<string, unknown>).todo_items
+            ? [{ label: '待办数', value: String(((parsedOutput as Record<string, unknown>).todo_items as unknown[]).length) }]
+            : []),
+        ];
+        if ((parsedOutput as Record<string, unknown>).message) {
+          fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
         return { type: 'fields', content: output, fields };
       }
+      return { type: 'text', content: output };
+
+    case 'verify_result':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).task_id) {
+          fields.push({ label: '任务', value: String((parsedOutput as Record<string, unknown>).task_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).status) {
+          fields.push({ label: '状态', value: String((parsedOutput as Record<string, unknown>).status) });
+        }
+        if ((parsedOutput as Record<string, unknown>).verification_type) {
+          fields.push({ label: '验证类型', value: String((parsedOutput as Record<string, unknown>).verification_type) });
+        }
+        if ((parsedOutput as Record<string, unknown>).result) {
+          fields.push({ label: '结果', value: String((parsedOutput as Record<string, unknown>).result), isLong: true });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'text', content: output };
+
+    case 'replace_in_file':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).path) {
+          fields.push({ label: '路径', value: String((parsedOutput as Record<string, unknown>).path) });
+        }
+        if ((parsedOutput as Record<string, unknown>).replacements_count !== undefined) {
+          fields.push({ label: '替换数', value: String((parsedOutput as Record<string, unknown>).replacements_count) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message) {
+          fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    case 'broadcast_to_team':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).recipients_count !== undefined) {
+          fields.push({ label: '接收者', value: String((parsedOutput as Record<string, unknown>).recipients_count) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message) {
+          fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    case 'get_team_roster':
+      if (parsedOutput && typeof parsedOutput === 'object' && Array.isArray((parsedOutput as Record<string, unknown>).teammates)) {
+        const teammates = ((parsedOutput as Record<string, unknown>).teammates as Array<{ id?: string; name?: string; role?: string; status?: string }>);
+        return {
+          type: 'list',
+          content: output,
+          rawJson,
+          items: teammates.map(t => `${t.name || t.id || '-'}${t.role ? ` (${t.role})` : ''}${t.status ? ` - ${t.status}` : ''}`),
+        };
+      }
+      return { type: 'json', content: 'JSON 输出', rawJson };
+
+    case 'save_progress':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).saved !== undefined) {
+          fields.push({ label: '已保存', value: String((parsedOutput as Record<string, unknown>).saved) });
+        }
+        if ((parsedOutput as Record<string, unknown>).progress !== undefined) {
+          fields.push({ label: '进度', value: `${(parsedOutput as Record<string, unknown>).progress}%` });
+        }
+        if ((parsedOutput as Record<string, unknown>).snapshot_id) {
+          fields.push({ label: '快照ID', value: String((parsedOutput as Record<string, unknown>).snapshot_id) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    case 'resume_work':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).resumed !== undefined) {
+          fields.push({ label: '已恢复', value: String((parsedOutput as Record<string, unknown>).resumed) });
+        }
+        if ((parsedOutput as Record<string, unknown>).snapshot_id) {
+          fields.push({ label: '快照ID', value: String((parsedOutput as Record<string, unknown>).snapshot_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message) {
+          fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    default:
+      // For unknown tools or JSON output, use flattened fields display
+      if (parsedOutput) {
+        if (typeof parsedOutput === 'object' && parsedOutput !== null) {
+          // Use flattened JSON display
+          return { type: 'json', content: 'JSON 输出', rawJson };
+        }
+        // Simple value
+        return { type: 'text', content: output };
+      }
+      // Not valid JSON, show as text
       return { type: 'text', content: output };
   }
 }
@@ -812,7 +978,7 @@ export const MessageItem = memo(function MessageItem({
         </PopoverTrigger>
 
         {hasExpandableContent && (
-          <PopoverContent align="start" side="bottom" className="w-auto max-w-md p-0">
+          <PopoverContent align="start" side="bottom" className="w-auto max-w-2xl p-0">
             {/* Model provider badge */}
             {message.metadata?.model && (
               <div className="px-2.5 pt-2 pb-0">
@@ -823,31 +989,31 @@ export const MessageItem = memo(function MessageItem({
             )}
 
             {isThinking && (
-              <div className="p-2.5 text-xs text-muted-foreground max-h-48 overflow-y-auto">
-                <div className="pl-2 border-l-2 border-purple-500/30 italic">
+              <div className="p-3 max-w-full max-h-80 overflow-y-auto">
+                <div className="pl-2 border-l-2 border-purple-500/30 italic text-xs text-muted-foreground break-words whitespace-pre-wrap">
                   {message.content}
                 </div>
               </div>
             )}
 
             {isToolCall && tc && (
-              <div className="p-2.5 text-xs space-y-2.5 max-h-64 overflow-y-auto">
+              <div className="flex flex-col max-h-96 overflow-hidden">
                 {tc.inputSummary && (
-                  <div>
+                  <div className="px-3 py-2 max-h-44 overflow-y-auto border-b border-border/30 shrink-0">
                     {(() => {
                       const toolDisplay = formatToolInput(tc.toolName, tc.inputSummary);
                       if (toolDisplay) {
                         return (
                           <>
-                            <div className="flex items-center gap-1.5 text-[10px] text-amber-600 font-medium uppercase tracking-wider">
+                            <div className="flex items-center gap-1.5 text-xs text-amber-600 font-medium uppercase tracking-wider">
                               <span>{toolDisplay.icon}</span>
                               <span>{toolDisplay.title}</span>
                             </div>
                             <div className="mt-1.5 space-y-1">
                               {toolDisplay.fields.map(({ label, value, truncate }) => (
-                                <div key={label} className="flex gap-2 items-start">
-                                  <span className="text-muted-foreground/50 shrink-0 min-w-12">{label}</span>
-                                  <span className={cn("text-foreground", truncate && "truncate max-w-50")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+                                <div key={label} className="flex gap-2 items-start min-w-0">
+                                  <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
+                                  <span className={cn("text-foreground text-xs", truncate ? "truncate max-w-64" : "whitespace-pre-wrap break-words")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
                                 </div>
                               ))}
                             </div>
@@ -858,24 +1024,34 @@ export const MessageItem = memo(function MessageItem({
                       if (formatted) {
                         return (
                           <>
-                            <span className="text-amber-600 font-medium text-[10px] uppercase tracking-wider">输入</span>
+                            <div className="text-xs text-amber-600 font-medium uppercase tracking-wider">输入</div>
                             <div className="mt-1 space-y-0.5">
-                              {formatted.map(({ key, value }) => (
-                                <div key={key} className="flex gap-2">
-                                  <span className="text-muted-foreground/60 shrink-0">{key}:</span>
-                                  <span className="text-foreground truncate">{value}</span>
+                              {formatted.map(({ key, value, nested }) => (
+                                <div key={key} className="flex gap-2 items-start min-w-0">
+                                  <span className="text-muted-foreground/60 shrink-0 text-xs">{key}:</span>
+                                  <span className={cn("text-foreground text-xs", nested ? "italic text-muted-foreground/70 truncate max-w-64" : "whitespace-pre-wrap break-words")}>{value}</span>
                                 </div>
                               ))}
                             </div>
                           </>
                         );
                       }
-                      return <div className="text-muted-foreground">{tc.inputSummary}</div>;
+                      // Fallback: show beautified JSON with syntax highlighting
+                      return (
+                        <>
+                          <div className="text-xs text-amber-600 font-medium uppercase tracking-wider">输入</div>
+                          <div className="mt-1 overflow-x-auto max-w-lg">
+                            <pre className="text-xs text-muted-foreground whitespace-pre bg-muted/30 rounded p-1.5 max-h-28 overflow-y-auto">
+                              {formatJsonBeautify(tc.inputSummary)}
+                            </pre>
+                          </div>
+                        </>
+                      );
                     })()}
                   </div>
                 )}
                 {tc.resultSummary && (
-                  <div className={cn("border-t border-border/30 pt-2", !tc.inputSummary && "border-t-0 pt-0")}>
+                  <div className="px-3 py-2 max-h-44 overflow-y-auto shrink-0">
                     {(() => {
                       const outputDisplay = formatToolOutput(tc.toolName, tc.resultSummary);
                       if (outputDisplay) {
@@ -887,44 +1063,57 @@ export const MessageItem = memo(function MessageItem({
                         
                         return (
                           <>
-                            <span className={cn("font-medium text-[10px] uppercase tracking-wider", colorClass)}>
+                            <div className={cn("text-xs font-medium uppercase tracking-wider", colorClass)}>
                               {outputDisplay.type === 'error' ? '❌ 错误' : outputDisplay.type === 'success' ? '✅ 成功' : '📤 输出'}
-                            </span>
+                            </div>
                             {outputDisplay.type === 'list' && outputDisplay.items ? (
                               <ul className="mt-1.5 space-y-0.5">
                                 {outputDisplay.items.map((item, i) => (
-                                  <li key={i} className="flex items-start gap-1.5">
-                                    <span className="text-muted-foreground/50">•</span>
-                                    <span className="text-muted-foreground">{item}</span>
+                                  <li key={i} className="flex items-start gap-1.5 min-w-0">
+                                    <span className="text-muted-foreground/50 shrink-0 text-xs">•</span>
+                                    <span className="text-muted-foreground text-xs break-words">{item}</span>
                                   </li>
                                 ))}
                               </ul>
                             ) : outputDisplay.type === 'fields' && outputDisplay.fields ? (
                               <div className="mt-1.5 space-y-1">
                                 {outputDisplay.fields.map(({ label, value, isLong }) => (
-                                  <div key={label} className="flex gap-2 items-start">
-                                    <span className="text-muted-foreground/50 shrink-0 min-w-12">{label}</span>
-                                    <span className={cn("text-foreground", isLong && "wrap-break-word")}>{value}</span>
+                                  <div key={label} className="flex gap-2 items-start min-w-0">
+                                    <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
+                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap break-words max-w-64" : "truncate max-w-64")}>{value}</span>
                                   </div>
                                 ))}
                               </div>
+                            ) : outputDisplay.type === 'json' && outputDisplay.rawJson ? (
+                              <div className="mt-1.5 overflow-x-auto max-w-lg">
+                                <pre className="text-xs font-mono text-muted-foreground whitespace-pre bg-muted/30 rounded p-1.5 max-h-32 overflow-y-auto">
+                                  {outputDisplay.rawJson}
+                                </pre>
+                              </div>
                             ) : (
-                              <div className={cn(
-                                "mt-1.5 wrap-break-word",
-                                outputDisplay.type === 'code' && "bg-background/50 rounded px-2 py-1.5 font-mono text-[10px] whitespace-pre-wrap"
-                              )}>
-                                {outputDisplay.content}
+                              <div className="mt-1.5 overflow-x-auto max-w-lg">
+                                <pre className={cn(
+                                  "text-xs whitespace-pre-wrap break-words bg-muted/30 rounded p-1.5 max-h-28 overflow-y-auto",
+                                  outputDisplay.type === 'code' ? "font-mono" : "text-muted-foreground"
+                                )}>
+                                  {outputDisplay.content}
+                                </pre>
                               </div>
                             )}
                           </>
                         );
                       }
+                      // Fallback: show beautified JSON
                       return (
                         <>
-                          <span className={cn("font-medium text-[10px] uppercase tracking-wider", isError ? "text-red-600" : "text-green-600")}>
+                          <div className={cn("text-xs font-medium uppercase tracking-wider", isError ? "text-red-600" : "text-green-600")}>
                             {isError ? '❌ 错误' : '✅ 输出'}
-                          </span>
-                          <div className="text-muted-foreground mt-1.5 wrap-break-word">{typeof tc.resultSummary === 'object' ? JSON.stringify(tc.resultSummary) : tc.resultSummary}</div>
+                          </div>
+                          <div className="mt-1.5 overflow-x-auto max-w-lg">
+                            <pre className="text-xs font-mono text-muted-foreground whitespace-pre bg-muted/30 rounded p-1.5 max-h-32 overflow-y-auto">
+                              {formatJsonBeautify(tc.resultSummary)}
+                            </pre>
+                          </div>
                         </>
                       );
                     })()}

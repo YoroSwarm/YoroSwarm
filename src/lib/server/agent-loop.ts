@@ -377,7 +377,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         // Generate unique tool call ID for this specific tool invocation
         const toolCallId = `tc-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const inputSummary = JSON.stringify(toolUse.input).slice(0, 100)
+        const inputSummary = JSON.stringify(toolUse.input)
 
         // Broadcast tool activity - calling
         publishRealtimeMessage(
@@ -501,7 +501,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               tool_call_id: toolCallId,
               tool_name: toolUse.name,
               status: isError ? 'error' : 'completed',
-              result_summary: result.slice(0, 100),
+              result_summary: result,
               timestamp: new Date().toISOString(),
               model: currentModel,
             },
@@ -518,7 +518,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           toolName: toolUse.name,
           status: isError ? 'error' : 'completed',
           inputSummary: inputSummary,
-          resultSummary: result.slice(0, 200),
+          resultSummary: result,
           timestamp: new Date().toISOString(),
         })
 

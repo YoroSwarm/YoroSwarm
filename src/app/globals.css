@@ -369,23 +369,33 @@ h1, h2, h3, h4, h5, h6 {
   }
 }
 
-/* Scrollbar - Theme adaptive */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+/* Popover scrollable sections */
+[data-slot="popover-content"] [class*="max-h-"],
+[data-slot="popover-content"] [class*="overflow-y-auto"] {
+  scrollbar-gutter: stable;
 }
 
-::-webkit-scrollbar-track {
+/* Popover input/output sections */
+.popover-scrollable {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+.popover-scrollable::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.popover-scrollable::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+.popover-scrollable::-webkit-scrollbar-thumb {
   background: var(--muted-foreground);
-  border: 2px solid var(--background);
-  border-radius: 10px;
+  border-radius: 3px;
 }
 
-::-webkit-scrollbar-thumb:hover {
+.popover-scrollable::-webkit-scrollbar-thumb:hover {
   background: var(--foreground);
 }
 
