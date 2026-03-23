@@ -747,7 +747,7 @@ async function processTeammateMessages(
       { getTeammateProcessor }
     ),
     contextMessages,
-    maxIterations: 20,
+    maxIterations: 40,
     stopOnSuccessfulTools: ['report_task_completion'],
     abortSignal: taskRuntime.abortController?.signal,
     userId,

@@ -4,7 +4,7 @@ import { appendAgentContextEntry } from './agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
 import { recordToolCall, getSessionToolCallCount } from './parallel-scheduler'
 
-const MAX_ITERATIONS = 25
+const MAX_ITERATIONS = 50
 const MAX_SESSION_TOOL_CALLS = 2000
 
 /**

@@ -469,7 +469,7 @@ ${messageSummary}
 
   // 动态计算 maxIterations：大任务集需要更多迭代空间
   const taskCount = leadContext.tasks.length
-  const dynamicMaxIterations = Math.max(15, Math.min(taskCount * 2, 50))
+  const dynamicMaxIterations = Math.max(30, Math.min(taskCount * 2, 80))
 
   // 执行LLM循环
   const communicationToolCounts = new Map<string, number>()
