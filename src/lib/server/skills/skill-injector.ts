@@ -69,8 +69,12 @@ export async function buildTeammateSkillsPromptSection(
     sections.push('')
 
     if (skill.hasScripts && skill.scriptFiles.length > 0) {
-      sections.push(`> 📁 此 Skill 的脚本位于 \`${workspacePath}/scripts/\` 目录。`)
-      sections.push('> 你可以通过 `read_workspace_file` 读取脚本内容，通过 `shell_exec` 执行脚本。')
+      sections.push(`> 📁 此 Skill 的脚本位于 \`${workspacePath}/scripts/\` 目录（相对于 workspace 根目录的相对路径）。`)
+      sections.push('> **重要**: `shell_exec` 执行时工作目录已设置为 workspace 根目录，无需使用 `cd` 命令。')
+      sections.push(`> 如需在脚本目录执行命令，建议使用 \`working_dir\` 参数指定 \`${workspacePath}/scripts/\`，例如：`)
+      sections.push('> ```')
+      sections.push('> python3 -m docx_dev.cli --help')
+      sections.push('> ```')
       sections.push('')
     }
   }
