@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk'
+import Anthropic, { type ClientOptions } from '@anthropic-ai/sdk'
 import type {
   LLMCallOptions,
   LLMResponse,
@@ -32,7 +32,7 @@ function getClient(
 
     console.log(`[Anthropic] Creating SDK client with baseUrl=${normalizedBaseUrl || 'default'}, authMode=${authMode || 'bearer_token'}, hasCustomHeaders=${!!customHeaders}`)
 
-    const clientOptions: Anthropic.ClientOptions = {
+    const clientOptions: ClientOptions = {
       apiKey,
       ...(normalizedBaseUrl ? { baseURL: normalizedBaseUrl } : {}),
     }
@@ -120,15 +120,10 @@ export async function callAnthropic(options: LLMCallOptions, config: LLMProvider
     params.tools = tools
   }
 
-  const requestOptions: RequestInit = {}
-  if (options.abortSignal) {
-    requestOptions.signal = options.abortSignal
-  }
-
   // Use client.messages.stream() instead of client.messages.create() with stream: true
   // This is required by Anthropic API for operations that may exceed 10 minutes
   // The stream() method returns a MessageStream object with finalMessage() method
-  const messageStream = client.messages.stream(params, requestOptions)
+  const messageStream = client.messages.stream(params)
   const fullMessage = await messageStream.finalMessage()
   return convertFromAnthropicResponse(fullMessage)
 }

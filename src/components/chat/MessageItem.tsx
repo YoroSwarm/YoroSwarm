@@ -990,7 +990,7 @@ export const MessageItem = memo(function MessageItem({
 
             {isThinking && (
               <div className="p-3 max-w-full max-h-80 overflow-y-auto">
-                <div className="pl-2 border-l-2 border-purple-500/30 italic text-xs text-muted-foreground break-words whitespace-pre-wrap">
+                <div className="pl-2 border-l-2 border-purple-500/30 italic text-xs text-muted-foreground wrap-break-word whitespace-pre-wrap">
                   {message.content}
                 </div>
               </div>
@@ -1013,7 +1013,7 @@ export const MessageItem = memo(function MessageItem({
                               {toolDisplay.fields.map(({ label, value, truncate }) => (
                                 <div key={label} className="flex gap-2 items-start min-w-0">
                                   <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
-                                  <span className={cn("text-foreground text-xs", truncate ? "truncate max-w-64" : "whitespace-pre-wrap break-words")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
+                                  <span className={cn("text-foreground text-xs", truncate ? "truncate max-w-64" : "whitespace-pre-wrap wrap-break-wordword")}>{typeof value === 'object' ? JSON.stringify(value) : value}</span>
                                 </div>
                               ))}
                             </div>
@@ -1029,7 +1029,7 @@ export const MessageItem = memo(function MessageItem({
                               {formatted.map(({ key, value, nested }) => (
                                 <div key={key} className="flex gap-2 items-start min-w-0">
                                   <span className="text-muted-foreground/60 shrink-0 text-xs">{key}:</span>
-                                  <span className={cn("text-foreground text-xs", nested ? "italic text-muted-foreground/70 truncate max-w-64" : "whitespace-pre-wrap break-words")}>{value}</span>
+                                  <span className={cn("text-foreground text-xs", nested ? "italic text-muted-foreground/70 truncate max-w-64" : "whitespace-pre-wrap wrap-break-wordword")}>{value}</span>
                                 </div>
                               ))}
                             </div>
@@ -1071,7 +1071,7 @@ export const MessageItem = memo(function MessageItem({
                                 {outputDisplay.items.map((item, i) => (
                                   <li key={i} className="flex items-start gap-1.5 min-w-0">
                                     <span className="text-muted-foreground/50 shrink-0 text-xs">•</span>
-                                    <span className="text-muted-foreground text-xs break-words">{item}</span>
+                                    <span className="text-muted-foreground text-xs wrap-break-word">{item}</span>
                                   </li>
                                 ))}
                               </ul>
@@ -1080,7 +1080,7 @@ export const MessageItem = memo(function MessageItem({
                                 {outputDisplay.fields.map(({ label, value, isLong }) => (
                                   <div key={label} className="flex gap-2 items-start min-w-0">
                                     <span className="text-muted-foreground/50 shrink-0 min-w-12 text-xs">{label}</span>
-                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap break-words max-w-64" : "truncate max-w-64")}>{value}</span>
+                                    <span className={cn("text-foreground text-xs", isLong ? "whitespace-pre-wrap wrap-break-word max-w-64" : "truncate max-w-64")}>{value}</span>
                                   </div>
                                 ))}
                               </div>
@@ -1093,7 +1093,7 @@ export const MessageItem = memo(function MessageItem({
                             ) : (
                               <div className="mt-1.5 overflow-x-auto max-w-lg">
                                 <pre className={cn(
-                                  "text-xs whitespace-pre-wrap break-words bg-muted/30 rounded p-1.5 max-h-28 overflow-y-auto",
+                                  "text-xs whitespace-pre-wrap wrap-break-word bg-muted/30 rounded p-1.5 max-h-28 overflow-y-auto",
                                   outputDisplay.type === 'code' ? "font-mono" : "text-muted-foreground"
                                 )}>
                                   {outputDisplay.content}

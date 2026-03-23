@@ -397,8 +397,8 @@ export async function executeApprovedCommand(
 
     const child = spawn(sandboxArgs.command, sandboxArgs.args, {
       cwd: sandboxArgs.options.cwd,
-      env: sandboxArgs.options.env,
-    })
+      env: sandboxArgs.options.env as NodeJS.ProcessEnv,
+    }) as ReturnType<typeof spawn>
 
     // 设置超时
     const timer = setTimeout(() => {

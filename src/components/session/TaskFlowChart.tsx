@@ -260,7 +260,7 @@ export function TaskFlowChart({ tasks, onTaskClick }: TaskFlowChartProps) {
           const isRelatedToSelected = selectedTask && (
             node.task.id === selectedTask ||
             node.task.dependencyIds?.includes(selectedTask) ||
-            taskGraph.nodeMap.get(selectedTask)?.dependencyIds?.includes(node.task.id)
+            taskGraph.nodeMap.get(selectedTask)?.task.dependencyIds?.includes(node.task.id)
           );
 
           const opacity = (selectedTask && !isRelatedToSelected) ? 0.2 : 1;
