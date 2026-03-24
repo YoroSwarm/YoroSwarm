@@ -29,6 +29,7 @@ import {
   saveWorkspaceFile,
   ensureSessionWorkspaceRoot,
   normalizeWorkspaceRelativePath,
+  findWorkspaceFileByPath,
 } from './session-workspace'
 import {
   smartApproval,
@@ -129,22 +130,11 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           return JSON.stringify({ success: false, error: '无效的工作区路径' })
         }
 
-        let fileInfo: { id: string; originalName: string; mimeType: string } | null = null
-        try {
-          const file = await prisma.file.findFirst({
-            where: {
-              swarmSessionId,
-              OR: [
-                { path: absolutePath },
-                { filename: normalizedPath },
-              ],
-            },
-            select: { id: true, originalName: true, mimeType: true },
-          })
-          fileInfo = file
-        } catch {
-          // 文件不存在
-        }
+        // 查找文件 - 使用 findWorkspaceFileByPath 以支持多种路径格式
+        const fileRecord = await findWorkspaceFileByPath(swarmSessionId, filePath)
+        const fileInfo = fileRecord
+          ? { id: fileRecord.id, originalName: fileRecord.originalName, mimeType: fileRecord.mimeType }
+          : null
 
         if (!fileInfo) {
           return JSON.stringify({ success: false, error: `文件不存在: ${filePath}` })

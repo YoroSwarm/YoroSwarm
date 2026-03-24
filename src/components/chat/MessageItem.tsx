@@ -113,6 +113,24 @@ function formatToolInput(toolName: string, inputJson: string | undefined): ToolI
           title: '回复用户',
           fields: [{ label: '内容', value: input.content }],
         };
+      case 'send_files_to_user':
+        return {
+          icon: '📤',
+          title: '发送文件',
+          fields: [
+            { label: '路径', value: input.path },
+            ...(input.caption ? [{ label: '说明', value: input.caption }] : []),
+          ],
+        };
+      case 'dismiss_teammate':
+        return {
+          icon: '👋',
+          title: '移除队友',
+          fields: [
+            { label: '队友ID', value: input.teammate_id },
+            ...(input.reason ? [{ label: '原因', value: input.reason }] : []),
+          ],
+        };
       case 'provision_teammate':
         return {
           icon: '👤',
@@ -348,6 +366,8 @@ function getToolDisplayName(toolName: string | undefined): string {
     'broadcast_to_team': '团队广播',
     'get_team_roster': '获取团队',
     'assign_skill_to_teammate': '分配技能',
+    'send_files_to_user': '发送文件',
+    'dismiss_teammate': '移除队友',
   };
   return nameMap[toolName] || toolName;
 }
@@ -520,6 +540,27 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
       }
       return { type: 'text', content: output };
 
+    case 'send_files_to_user':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).files_sent !== undefined) {
+          fields.push({ label: '文件数', value: String((parsedOutput as Record<string, unknown>).files_sent) });
+        }
+        if ((parsedOutput as Record<string, unknown>).file_name) {
+          fields.push({ label: '文件名', value: String((parsedOutput as Record<string, unknown>).file_name) });
+        }
+        if ((parsedOutput as Record<string, unknown>).path) {
+          fields.push({ label: '路径', value: String((parsedOutput as Record<string, unknown>).path) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message_id) {
+          fields.push({ label: '消息ID', value: String((parsedOutput as Record<string, unknown>).message_id) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
     case 'send_message_to_teammate':
       if (parsedOutput && typeof parsedOutput === 'object') {
         const fields: ToolOutputField[] = [];
@@ -671,6 +712,27 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
         const fields: ToolOutputField[] = [];
         if ((parsedOutput as Record<string, unknown>).recipients_count !== undefined) {
           fields.push({ label: '接收者', value: String((parsedOutput as Record<string, unknown>).recipients_count) });
+        }
+        if ((parsedOutput as Record<string, unknown>).message) {
+          fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    case 'dismiss_teammate':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).teammate_id) {
+          fields.push({ label: '队友ID', value: String((parsedOutput as Record<string, unknown>).teammate_id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).teammate_name) {
+          fields.push({ label: '队友名称', value: String((parsedOutput as Record<string, unknown>).teammate_name) });
+        }
+        if ((parsedOutput as Record<string, unknown>).reason) {
+          fields.push({ label: '原因', value: String((parsedOutput as Record<string, unknown>).reason) });
         }
         if ((parsedOutput as Record<string, unknown>).message) {
           fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
