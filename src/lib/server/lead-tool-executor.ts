@@ -218,6 +218,25 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           updatedAt: now,
         })
 
+        // 辅助函数：尝试将 item_id 解析为真实 ID（支持用 title 查找）
+        const resolveItemId = async (itemIdOrTitle: string): Promise<{ resolvedId: string; usedTitle: boolean; matchedTitle: string } | null> => {
+          // 先尝试按 ID 查找
+          const byId = await prisma.leadSelfTodo.findFirst({ where: { id: itemIdOrTitle, leadAgentId } })
+          if (byId) return { resolvedId: byId.id, usedTitle: false, matchedTitle: byId.title }
+
+          // 再尝试按 title 查找（不区分大小写）
+          const normalized = itemIdOrTitle.trim().toLowerCase()
+          const byTitle = await prisma.leadSelfTodo.findFirst({
+            where: {
+              leadAgentId,
+              title: { equals: normalized, mode: 'insensitive' },
+            },
+          })
+          if (byTitle) return { resolvedId: byTitle.id, usedTitle: true, matchedTitle: byTitle.title }
+
+          return null
+        }
+
         switch (operation) {
           case 'clear': {
             const saved = await clearLeadSelfTodoItems({ leadAgentId })
@@ -248,28 +267,52 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           case 'delete': {
             const itemId = toolInput.item_id as string | undefined
             if (!itemId) return JSON.stringify({ success: false, error: 'item_id is required for delete' })
+            const resolved = await resolveItemId(itemId)
+            if (!resolved) {
+              return JSON.stringify({ success: false, error: 'todo item not found', input_received: itemId })
+            }
             const saved = await deleteLeadSelfTodoItem({
               leadAgentId,
-              itemId,
+              itemId: resolved.resolvedId,
             })
             if (!saved) {
               return JSON.stringify({ success: false, error: 'todo item not found' })
             }
-            return JSON.stringify({ success: true, count: saved.length, changed: true, operation })
+            return JSON.stringify({
+              success: true,
+              count: saved.length,
+              changed: true,
+              operation,
+              warning: resolved.usedTitle
+                ? `你传的是 title "${resolved.matchedTitle}" 而非 id，已按 title 匹配。以后请使用 id（系统内部标识符）来操作待办项，title 仅用于展示。`
+                : undefined,
+            })
           }
           case 'update': {
             const itemId = toolInput.item_id as string | undefined
             const status = toolInput.status as 'pending' | 'in_progress' | 'completed' | 'dropped' | undefined
             if (!itemId || !status) return JSON.stringify({ success: false, error: 'item_id and status are required for update' })
+            const resolved = await resolveItemId(itemId)
+            if (!resolved) {
+              return JSON.stringify({ success: false, error: 'todo item not found', input_received: itemId })
+            }
             const saved = await updateLeadSelfTodoItemStatus({
               leadAgentId,
-              itemId,
+              itemId: resolved.resolvedId,
               status,
             })
             if (!saved) {
               return JSON.stringify({ success: false, error: 'todo item not found' })
             }
-            return JSON.stringify({ success: true, count: saved.length, changed: true, operation })
+            return JSON.stringify({
+              success: true,
+              count: saved.length,
+              changed: true,
+              operation,
+              warning: resolved.usedTitle
+                ? `你传的是 title "${resolved.matchedTitle}" 而非 id，已按 title 匹配。以后请使用 id（系统内部标识符）来操作待办项，title 仅用于展示。`
+                : undefined,
+            })
           }
           default:
             return JSON.stringify({ success: false, error: 'unsupported todo operation' })
