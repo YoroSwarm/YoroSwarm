@@ -1,36 +1,184 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Swarm
+
+Multi-Agent Collaboration Platform — A Team Lead interface for orchestrating multiple AI agents to accomplish complex tasks together.
+
+## Overview
+
+Swarm is a real-time multi-agent collaboration platform where you act as a **Team Lead** directing a team of AI agents. Unlike single-agent AI assistants, Swarm enables complex workflows where specialized agents (Researchers, Writers, Analysts, Engineers) work together under your guidance.
+
+### Key Concepts
+
+| Role | Description |
+|------|-------------|
+| **Team Lead (You)** | Human operator who directs, approves, and coordinates the team |
+| **Lead Agent** | Your AI assistant that breaks down tasks and assigns work |
+| **Worker Agents** | Specialized agents (Researcher, Writer, Analyst, Engineer, etc.) |
+
+### Architecture
+
+```
+User (Team Lead)
+    │
+    ├── Lead Agent (AI Assistant)
+    │       │
+    │       ├── Researcher Agent
+    │       ├── Writer Agent
+    │       ├── Analyst Agent
+    │       └── Engineer Agent
+    │
+    └── Real-time WebSocket Communication
+```
+
+## Features
+
+### Multi-Agent Task Management
+- Create, assign, and track tasks across agent team
+- Task dependencies and priority system
+- Subtask decomposition for complex goals
+
+### Real-Time Collaboration
+- WebSocket-based agent-to-agent messaging
+- Internal threads for agent coordination
+- Live task status updates
+
+### Skills System
+Extensible skill registry for specialized agent capabilities:
+
+| Skill | Purpose |
+|-------|---------|
+| `xlsx-dev` | Excel spreadsheet operations |
+| `pdf-dev` | PDF document processing |
+| `docx-dev` | Word document manipulation |
+| `pptx-generator` | PowerPoint generation |
+| `code-review` | Code review workflows |
+| `webapp-building` | Web application development |
+| `fullstack-dev` | Full-stack development tasks |
+
+### Tool Approval System
+Dangerous operations require explicit approval:
+- Shell command execution
+- File system writes
+- Network requests
+
+### Session Management
+- Create and archive collaboration sessions
+- Share session snapshots with others
+- Token usage tracking per session
+
+### File Handling
+- Upload and preview documents (Excel, Word, PDF, PowerPoint)
+- File sharing between user and agents
+- Thumbnail generation for images
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|------------|
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS, Radix UI, Framer Motion |
+| Backend | Node.js, WebSocket (ws), Prisma ORM |
+| Database | SQLite (libSQL) |
+| AI | Anthropic Claude API |
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- npm / yarn / pnpm / bun
+
+### Installation
 
 ```bash
+# Install dependencies
+npm install
+
+# Configure environment
+cp .env.local.example .env.local
+# Edit .env.local with your API keys
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Environment Variables
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```env
+# Database
+DATABASE_URL="file:./dev.db"
 
-## Learn More
+# Authentication
+JWT_SECRET="your-super-secret-jwt-key-change-this-in-production"
+JWT_REFRESH_SECRET="your-super-secret-refresh-key-change-this-in-production"
 
-To learn more about Next.js, take a look at the following resources:
+# App Configuration
+NEXT_PUBLIC_APP_NAME=Swarm
+NEXT_PUBLIC_APP_VERSION=1.0.0
+NEXT_PUBLIC_API_URL=/api
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# File Upload
+UPLOAD_DIR="./uploads"
+MAX_UPLOAD_SIZE=104857600
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# LLM API keys are configured per-user in the web UI (Settings → API Configuration)
+```
 
-## Deploy on Vercel
+## Project Structure
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── (dashboard)/        # Main application pages
+│   │   ├── chat/          # Chat interface
+│   │   ├── agents/        # Agent management
+│   │   ├── dashboard/     # Dashboard & analytics
+│   │   └── settings/      # User settings
+│   ├── api/               # REST API routes
+│   ├── login/             # Authentication
+│   └── register/          # User registration
+├── components/
+│   ├── chat/              # Chat UI components
+│   ├── session/           # Session management UI
+│   ├── monitor/           # Agent monitoring
+│   └── ui/                # Shadcn/ui components
+├── hooks/                 # React custom hooks
+├── lib/                   # Utilities and helpers
+├── stores/                # Zustand state stores
+└── types/                 # TypeScript type definitions
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+server.mjs                 # Custom Node.js server (HTTP + WebSocket)
+prisma/
+└── schema.prisma          # Database schema
+skills/
+├── _registry/             # Built-in skills
+└── users/                 # User-installed skills
+```
+
+## Development
+
+```bash
+# Start development server
+npm run dev
+
+# Lint code
+npm run lint
+
+# Database migration
+npm run db:migrate
+
+# Build for production
+npm run build
+```
+
+## Documentation
+
+For detailed development guidelines, see:
+
+- [Frontend Guidelines](./.trellis/spec/frontend/index.md)
+- [Backend Guidelines](./.trellis/spec/backend/index.md)
+- [Thinking Guides](./.trellis/spec/guides/index.md)
+
+## License
+
+Private project.
