@@ -258,9 +258,22 @@ export function Sidebar() {
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirm) return;
-    await deleteSession(deleteConfirm.sessionId);
-    if (currentSessionId === deleteConfirm.sessionId) {
-      router.push('/chat');
+    const sessionIdToDelete = deleteConfirm.sessionId;
+    const wasCurrentSession = currentSessionId === sessionIdToDelete;
+
+    await deleteSession(sessionIdToDelete);
+
+    if (wasCurrentSession) {
+      // 删除当前会话后，直接从 store 获取最新的 sessions
+      const state = useSessionsStore.getState();
+      const remainingSessions = state.sessions.filter((s) => s.id !== sessionIdToDelete);
+      if (remainingSessions.length > 0) {
+        // 跳转到第一个有效会话，而不是先跳 /chat 再自动跳转
+        router.push(`/chat?sessionId=${remainingSessions[0].id}`);
+      } else {
+        // 没有剩余会话，跳到 /chat 显示空状态
+        router.push('/chat');
+      }
     }
     setDeleteConfirm(null);
   };
