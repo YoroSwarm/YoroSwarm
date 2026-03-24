@@ -328,18 +328,20 @@ export async function mountSkillToWorkspace(
 
   const targetLink = path.join(skillsMountDir, skillName)
 
-  // 创建 symlink（如果已存在则跳过）
-  try {
-    await stat(targetLink)
-    // 已存在，跳过
-  } catch {
+  // 检查 symlink 是否已存在
+  const symlinkExists = await pathExists(targetLink)
+  if (symlinkExists) {
+    console.log(`[SkillRegistry] Skill ${skillName} symlink already exists at ${targetLink}`)
+  } else {
     await symlink(skill.basePath, targetLink, 'dir')
+    console.log(`[SkillRegistry] Created symlink for ${skillName} at ${targetLink}`)
   }
 
   const relativePath = `_skills/${skillName}`
   console.log(`[SkillRegistry] Mounted skill ${skillName} to workspace ${swarmSessionId} at ${relativePath}`)
 
   // 如果 skill 包含本地 Python 包（如 docx_dev），需要安装到虚拟环境
+  // 注意：即使 symlink 已存在，也要确保包已安装（venv 复制时 editable 安装可能丢失）
   if (isSkillWithLocalPackage(skillName)) {
     await installSkillLocalPackage(swarmSessionId, skill.basePath)
   }
