@@ -151,7 +151,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           userId,
           leadAgentId,
           caption,
-          { attachments }
+          { attachments, ...(context?.currentModel ? { model: context.currentModel } : {}) }
         )
 
         return JSON.stringify({
