@@ -21,6 +21,7 @@ import { getLeadSelfTodoItems } from './lead-self-todo'
 import { getLeadPreferences } from './lead-preferences'
 import { buildLeadSkillsSection } from './skills/skill-injector'
 import { getUserTimezone, buildTimeInfoSection } from './agent-time'
+import { getSessionWorkspaceRoot } from './session-workspace'
 
 // 认知收件箱
 import {
@@ -35,7 +36,7 @@ import {
 /**
  * 构建带有时间戳的 Lead 系统提示
  */
-function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null): string {
+function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null, swarmSessionId?: string): string {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Swarm'
   let prompt = LEAD_SYSTEM_PROMPT_BASE.replace(/\{APP_NAME\}/g, appName)
 
@@ -47,6 +48,16 @@ function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?:
 - 你的昵称是「${leadNickname.trim()}」
 - 在回复用户时，你可以使用这个昵称来自我介绍`
 
+  }
+
+  // 注入工作区根目录
+  if (swarmSessionId) {
+    const workspaceRoot = getSessionWorkspaceRoot(swarmSessionId)
+    prompt += `
+
+## 工作区
+- 工作区根目录: ${workspaceRoot}
+- 所有文件操作都基于此工作区`
   }
 
   return prompt + buildTimeInfoSection(createdAt, timezone)
@@ -230,7 +241,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
     userId,
     llmConfig: {
-      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone, leadNickname),
+      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone, leadNickname, swarmSessionId),
       agentName: 'Team Lead',
       tools: leadTools,
       executeTool: buildLeadToolExecutor(input),
@@ -476,7 +487,7 @@ ${messageSummary}
   // 执行LLM循环
   const communicationToolCounts = new Map<string, number>()
   const result = await runAgentLoop({
-    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone, preferences.leadNickname),
+    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone, preferences.leadNickname, swarmSessionId),
     agentId: leadAgentId,
     agentName: 'Team Lead',
     swarmSessionId,
