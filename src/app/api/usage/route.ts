@@ -27,7 +27,7 @@ export async function GET() {
 
     for (let i = 23; i >= 0; i--) {
       const d = new Date(Date.now() - i * 60 * 60 * 1000);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}`;
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}T${String(d.getUTCHours()).padStart(2, '0')}`;
       buckets.set(key, { input: 0, output: 0, cache: 0, total: 0 });
     }
 
@@ -35,7 +35,7 @@ export async function GET() {
 
     for (const event of events) {
       const d = event.createdAt;
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}T${String(d.getHours()).padStart(2, '0')}`;
+      const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}T${String(d.getUTCHours()).padStart(2, '0')}`;
       const bucket = buckets.get(key);
       if (bucket) {
         const input = Math.max(0, event.inputTokens);

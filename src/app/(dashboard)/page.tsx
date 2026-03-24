@@ -25,6 +25,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
+import { useLeadPreferencesStore } from "@/stores/leadPreferencesStore";
 
 const HITOKOTO_QUOTES = [
   "小小微躯能负重，嚣嚣薄翅会乘风。",
@@ -45,6 +46,33 @@ const HITOKOTO_QUOTES = [
 ];
 
 const RANDOM_QUOTE = HITOKOTO_QUOTES[Math.floor(Math.random() * HITOKOTO_QUOTES.length)];
+
+/**
+ * 将 UTC 小时字符串转换为用户时区的小时字符串
+ * @param utcHour UTC 小时字符串，格式如 "14:00"
+ * @param timezone 用户时区，如 "Asia/Shanghai"
+ * @returns 用户时区的小时字符串，格式如 "22:00"
+ */
+function utcHourToTimezoneHour(utcHour: string, timezone: string): string {
+  // 创建一个 UTC 日期时间
+  const [hour] = utcHour.split(':').map(Number);
+  const utcDate = new Date(Date.UTC(2024, 0, 1, hour, 0, 0));
+
+  // 使用 Intl.DateTimeFormat 获取用户时区的小时
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: '2-digit',
+    hour12: false,
+    minute: '2-digit',
+  });
+
+  // 解析格式化后的时间
+  const parts = formatter.formatToParts(utcDate);
+  const tzHour = parts.find(p => p.type === 'hour')?.value || utcHour;
+  const tzMinute = parts.find(p => p.type === 'minute')?.value || '00';
+
+  return `${tzHour.padStart(2, '0')}:${tzMinute}`;
+}
 
 interface HourlyUsage {
   hour: string;
@@ -103,10 +131,19 @@ export default function DashboardPage() {
     isLoading: isStatsLoading,
   } = useTeamStats();
   const { data: hourlyData, totals: usageTotals, isLoading: isChartLoading } = useHourlyUsage();
+  const { timezone: userTimezone } = useLeadPreferencesStore();
 
   const isLoading = isTasksLoading || isStatsLoading;
 
   const quote = RANDOM_QUOTE;
+
+  // 获取用户时区，默认为浏览器时区
+  const displayTimezone = userTimezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  // 将 UTC hour 转换为用户时区显示
+  const formatHourForTimezone = useCallback((utcHour: string) => {
+    return utcHourToTimezoneHour(utcHour, displayTimezone);
+  }, [displayTimezone]);
 
   const pendingTasks = tasks.filter((t) => t.status === "pending").length;
   const inProgressTasks = tasks.filter((t) => t.status === "in_progress").length;
@@ -192,7 +229,11 @@ export default function DashboardPage() {
           {/* Token 用量卡片 */}
           <div className="card-hand p-6">
             <div className="flex items-center justify-between mb-2 border-b border-border/50 pb-2">
-              <h2 className="text-lg font-semibold">Token 用量 <span className="text-sm font-normal text-muted-foreground ml-2">24小时</span></h2>
+              <h2 className="text-lg font-semibold">Token 用量 <span className="text-sm font-normal text-muted-foreground ml-2">24小时</span>
+                {userTimezone && (
+                  <span className="text-xs text-muted-foreground/60 ml-1 transition-opacity duration-500">({userTimezone})</span>
+                )}
+              </h2>
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>总计 <strong className="text-foreground">{formatTokenCount(totalTokens)}</strong></span>
                 <span>输入 <strong className="text-foreground">{formatTokenCount(inputTokens)}</strong></span>
@@ -203,7 +244,10 @@ export default function DashboardPage() {
             </div>
             <div className="h-64 mt-4">
               {isChartLoading ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">加载中...</div>
+                <div className="h-full flex flex-col items-center justify-center text-muted-foreground text-sm gap-2">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                  <span>加载用量数据...</span>
+                </div>
               ) : hourlyData.length > 0 ? (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={hourlyData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
@@ -228,6 +272,7 @@ export default function DashboardPage() {
                       tickLine={false}
                       axisLine={false}
                       interval={2}
+                      tickFormatter={(utcHour) => formatHourForTimezone(utcHour)}
                     />
                     <YAxis
                       tick={{ fontSize: 11, fill: '#888' }}
@@ -244,6 +289,7 @@ export default function DashboardPage() {
                         fontSize: '12px',
                       }}
                       labelStyle={{ color: '#999' }}
+                      labelFormatter={(utcHour) => formatHourForTimezone(utcHour as string)}
                       formatter={(value, name) => [
                         formatTokenCount(Number(value)),
                         name === 'input' ? '输入' : name === 'output' ? '输出' : '缓存',
