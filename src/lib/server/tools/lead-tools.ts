@@ -227,7 +227,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'send_message_to_teammate',
-    description: '向队友发送内部消息，用于补充需求、纠偏、澄清、重排优先级，或发送 execution control 指令。teammate_id 必须使用上下文中展示的真实队友 ID，若只知道名字，也必须使用上下文里显示的精确名字。不要使用 41、81、teammate_0 这类编造引用。禁止发送仅用于“收到通知”“等待其他人”“继续待命”“礼貌致谢”的消息。',
+    description: '向队友发送内部消息，用于补充需求、纠偏、澄清、重排优先级，或发送 execution control 指令。⚠️ 注意：此工具**无法激活队友执行新工作** — 队友必须先通过 assign_task 被分配任务才会开始工作。此工具仅用于对已分配任务的队友进行协调。teammate_id 必须使用上下文中展示的真实队友 ID，若只知道名字，也必须使用上下文里显示的精确名字。不要使用 41、81、teammate_0 这类编造引用。禁止发送仅用于“收到通知”“等待其他人”“继续待命”“礼貌致谢”的消息。',
     input_schema: {
       type: 'object' as const,
       properties: {
