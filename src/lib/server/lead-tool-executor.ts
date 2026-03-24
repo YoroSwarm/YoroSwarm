@@ -509,13 +509,6 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           data: { assigneeId: null },
         })
 
-        // 格式化显示给用户
-        const displayMessage = [
-          `已移除队友 **${teammate.name}**`,
-          reason ? `（原因：${reason}）` : '',
-        ].filter(Boolean).join('')
-        await replyToUser(swarmSessionId, userId, leadAgentId, displayMessage)
-
         return JSON.stringify({
           success: true,
           teammate_id: teammateId,
