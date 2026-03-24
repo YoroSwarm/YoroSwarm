@@ -12,7 +12,9 @@ import { createServer } from 'node:http'
 import { randomBytes } from 'node:crypto'
 import { spawn } from 'node:child_process'
 import { createRequire } from 'node:module'
-import { parse } from 'node:url'
+import { parse as parseUrl } from 'node:url'
+import { existsSync, createReadStream } from 'node:fs'
+import { join, extname } from 'node:path'
 import next from 'next'
 import { WebSocketServer, WebSocket } from 'ws'
 
@@ -354,7 +356,7 @@ function initializeWebSocketServer(server) {
 
   // 处理 HTTP upgrade 请求
   server.on('upgrade', (request, socket, head) => {
-    const { pathname } = parse(request.url)
+    const { pathname } = parseUrl(request.url)
 
     // 只处理 /ws 路径的 WebSocket 升级请求
     // 其他路径（如 /_next/webpack-hmr）留给 Next.js 处理
@@ -377,12 +379,54 @@ globalThis.__publishRealtimeMessage = function(message, scope) {
   broadcast(message, { scope })
 }
 
+// ============ 静态文件服务（生产模式） ============
+// 生产模式下，Next.js 从 dist/ 提供静态文件，但头像上传到 public/avatars/
+// 需要手动处理 /avatars/* 路径
+const mimeTypes = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+}
+
+function serveAvatarFile(req, res) {
+  const pathname = parseUrl(req.url).pathname
+  // 提取文件名：/avatars/xxx.png -> xxx.png
+  const filename = pathname.replace(/^\/avatars\//, '')
+  const filePath = join(process.cwd(), 'public', 'avatars', filename)
+
+  if (!existsSync(filePath)) {
+    res.statusCode = 404
+    res.end('Not found')
+    return
+  }
+
+  const ext = extname(filename).toLowerCase()
+  const contentType = mimeTypes[ext] || 'application/octet-stream'
+
+  res.setHeader('Content-Type', contentType)
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+
+  const fileStream = createReadStream(filePath)
+  fileStream.pipe(res)
+}
+
 // ============ 启动服务器 ============
 await app.prepare()
 
 const server = createServer(async (req, res) => {
   try {
-    const parsedUrl = parse(req.url, true)
+    const parsedUrl = parseUrl(req.url, true)
+    const pathname = parsedUrl.pathname
+
+    // 生产模式下处理 /avatars/* 静态文件
+    if (!dev && pathname.startsWith('/avatars/')) {
+      serveAvatarFile(req, res)
+      return
+    }
+
     await handle(req, res, parsedUrl)
   } catch (err) {
     console.error('Error handling request:', err)
