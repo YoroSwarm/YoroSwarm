@@ -199,7 +199,19 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'decompose_task',
-    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。支持指定语义化 ID（如 "task-research", "task-write-1"），便于后续引用和依赖声明。拆解时必须同时考虑并行性与逻辑关系：能并行的维度拆开，必须先做才能继续的步骤要通过 dependsOnTaskTitles / dependsOnTaskIds 明确声明前置任务。若是补充或深化已有工作，而不是第一次拆解，必须使用 dependsOnTaskTitles / dependsOnTaskIds 或 parentTitle / parentId 明确关联到现有任务，避免重复创建已完成维度。为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId。若要表达同批次层级关系，可传 parentTitle。',
+    description: '将工作拆解为多个子任务。每个任务会被添加到共享任务列表中。支持指定语义化 ID（如 "task-research", "task-write-1"），便于后续引用和依赖声明。
+
+**⚠️ 依赖声明是强制要求，不是可选项**
+- 必须通过 dependsOnTaskTitles / dependsOnTaskIds 明确声明所有前置依赖关系
+- dependsOnTaskTitles：同批次创建的任务间的依赖（如"task-report"依赖"task-research"）
+- dependsOnTaskIds：依赖已存在的任务
+- 常见场景：分析→报告（报告依赖分析）、调研→分析→PPT（PPT依赖分析）、代码集成→测试（测试依赖集成）
+
+**拆解原则**：
+- 能并行的维度拆开给不同队友
+- 必须先完成才能继续的步骤必须声明依赖
+- 若是补充或深化已有工作，必须使用 dependsOnTaskTitles / dependsOnTaskIds 或 parentTitle / parentId 明确关联到现有任务
+- 为避免非法外键，不要编造新的 parentId；只有在引用已存在任务ID时才传 parentId',
     input_schema: {
       type: 'object' as const,
       properties: {
