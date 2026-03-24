@@ -73,8 +73,11 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
     }))
 
     // Determine message type based on attachments
+    // Only use image/file type when there's NO text content; otherwise keep text
+    // type so MessageItem renders both content and attachment buttons (in default branch)
     let messageType: 'text' | 'image' | 'file' = 'text'
-    if (messageAttachments && messageAttachments.length > 0) {
+    const hasTextContent = msg.content && msg.content.trim().length > 0
+    if (messageAttachments && messageAttachments.length > 0 && !hasTextContent) {
       const firstAttachment = messageAttachments[0]
       if (firstAttachment.type === 'image') {
         messageType = 'image'
