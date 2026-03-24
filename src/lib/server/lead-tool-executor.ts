@@ -376,6 +376,55 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         })
       }
 
+      case 'dismiss_teammate': {
+        const teammateId = toolInput.teammate_id as string
+        const reason = (toolInput.reason as string) || ''
+
+        // 验证队友存在且属于当前 session
+        const teammate = await prisma.agent.findFirst({
+          where: { id: teammateId, swarmSessionId },
+        })
+        if (!teammate) {
+          return JSON.stringify({ success: false, error: '队友不存在或不属于当前会话' })
+        }
+        if (teammate.id === leadAgentId) {
+          return JSON.stringify({ success: false, error: '不能移除自己（Lead）' })
+        }
+
+        // 检查是否有进行中的任务
+        const activeTasks = await prisma.teamLeadTask.findMany({
+          where: { assigneeId: teammateId, status: { in: ['ASSIGNED', 'IN_PROGRESS'] } },
+          select: { id: true, title: true },
+        })
+        if (activeTasks.length > 0) {
+          return JSON.stringify({
+            success: false,
+            error: `队友仍有 ${activeTasks.length} 个进行中的任务，请先等待完成或取消任务`,
+            active_tasks: activeTasks.map(t => ({ id: t.id, title: t.title })),
+          })
+        }
+
+        // 标记为 OFFLINE
+        await prisma.agent.update({
+          where: { id: teammateId },
+          data: { status: 'OFFLINE' },
+        })
+
+        // 清理该队友的待分配任务（改为 PENDING + 无 assignee）
+        await prisma.teamLeadTask.updateMany({
+          where: { assigneeId: teammateId, status: 'PENDING' },
+          data: { assigneeId: null },
+        })
+
+        return JSON.stringify({
+          success: true,
+          teammate_id: teammateId,
+          teammate_name: teammate.name,
+          reason,
+          message: `已移除队友 ${teammate.name}`,
+        })
+      }
+
       case 'assign_skill_to_teammate': {
         const teammateId = toolInput.teammate_id as string
         const skillName = toolInput.skill_name as string

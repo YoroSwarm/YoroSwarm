@@ -250,7 +250,7 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'update_self_todo',
-    description: '对 Lead 私有待办做单步操作。用于跟踪多阶段任务进度。一次调用只做一种操作：clear / add / insert / delete / update。clear=清空全部待办；add=追加一项到末尾；insert=插入到指定位置；delete=删除一项；update=仅允许更新已有项的 status，不能改 title/details/category/sourceRef。状态语义：pending=尚未开始，in_progress=进行中，completed=已全部交付。对于复杂多阶段任务（如包含分析、报告、讲稿、PPT等），应为每个阶段创建独立的 Todo 项，便于跟踪整体进度。',
+    description: '对 Lead 私有待办做单步操作。用于跟踪多阶段任务进度。一次调用只做一种操作：clear / add / insert / delete / update。clear=清空全部待办；add=追加一项到末尾；insert=插入到指定位置；delete=删除一项；update=仅允许更新已有项的 status，不能改 title/details/category/sourceRef。状态语义：pending=尚未开始，in_progress=进行中，completed=已全部交付。对于复杂多阶段任务（如包含分析、报告、讲稿、PPT等），应为每个阶段创建独立的 Todo 项，便于跟踪整体进度。\n\n【重要】id 与 title 的区别：id 是系统内部使用的标识符（用于 delete/update 等操作），title 是人类可读的简短描述（显示给用户）。在调用 delete/update 时，必须传入 item_id（而非 title）。',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -319,6 +319,24 @@ export const leadTools: ToolDefinition[] = [
         },
       },
       required: ['task_id', 'verification_type'],
+    },
+  },
+  {
+    name: 'dismiss_teammate',
+    description: '移除一个 idle 状态的队友。当某个队友的工作已完成、或长期处于 idle 状态不再有任务时，可以使用此工具将其从团队中移除。让团队保持精简，只保留活跃的队友。如果队友仍有进行中的任务，应先等待任务完成，或使用 cancel_execution 指令取消后再移除。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        teammate_id: {
+          type: 'string',
+          description: '要移除的队友ID（从「当前团队成员」列表中获取）',
+        },
+        reason: {
+          type: 'string',
+          description: '移除原因（可选，用于日志记录）',
+        },
+      },
+      required: ['teammate_id'],
     },
   },
   {
