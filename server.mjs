@@ -379,8 +379,8 @@ globalThis.__publishRealtimeMessage = function(message, scope) {
 }
 
 // ============ 静态文件服务（生产模式） ============
-// 生产模式下，Next.js 从 dist/ 提供静态文件，但头像上传到 public/avatars/
-// 需要手动处理 /avatars/* 路径
+// 生产模式下，Next.js 从 dist/ 提供静态文件，但头像/背景上传到 public/avatars/ 和 public/backgrounds/
+// 需要手动处理这些路径
 const mimeTypes = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -390,11 +390,12 @@ const mimeTypes = {
   '.svg': 'image/svg+xml',
 }
 
-function serveAvatarFile(req, res) {
+function serveStaticFile(req, res, baseDir) {
   const pathname = parseUrl(req.url).pathname
-  // 提取文件名：/avatars/xxx.png -> xxx.png
-  const filename = pathname.replace(/^\/avatars\//, '')
-  const filePath = join(process.cwd(), 'public', 'avatars', filename)
+  // 提取文件名：/xxx/yyy.png -> yyy.png
+  const segments = pathname.split('/').filter(Boolean)
+  const filename = segments[segments.length - 1]
+  const filePath = join(process.cwd(), 'public', baseDir, filename)
 
   if (!existsSync(filePath)) {
     res.statusCode = 404
@@ -420,10 +421,16 @@ const server = createServer(async (req, res) => {
     const parsedUrl = parseUrl(req.url, true)
     const pathname = parsedUrl.pathname
 
-    // 生产模式下处理 /avatars/* 静态文件
-    if (!dev && pathname.startsWith('/avatars/')) {
-      serveAvatarFile(req, res)
-      return
+    // 生产模式下处理 /avatars/* 和 /backgrounds/* 静态文件
+    if (!dev) {
+      if (pathname.startsWith('/avatars/')) {
+        serveStaticFile(req, res, 'avatars')
+        return
+      }
+      if (pathname.startsWith('/backgrounds/')) {
+        serveStaticFile(req, res, 'backgrounds')
+        return
+      }
     }
 
     await handle(req, res, parsedUrl)
