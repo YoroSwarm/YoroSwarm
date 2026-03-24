@@ -110,6 +110,51 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         return JSON.stringify({ success: true, message_id: result.id })
       }
 
+      case 'send_files_to_user': {
+        const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
+        if (fileRefs.length === 0) {
+          return JSON.stringify({ success: false, error: '至少需要选择一个文件' })
+        }
+
+        const caption = (toolInput.caption as string | undefined) || ''
+
+        // 验证文件存在
+        const fileIds = fileRefs.map(f => f.file_id)
+        const files = await prisma.file.findMany({
+          where: { id: { in: fileIds } },
+          select: { id: true, originalName: true, mimeType: true },
+        })
+        const foundIds = new Set(files.map(f => f.id))
+        const missingIds = fileIds.filter(id => !foundIds.has(id))
+        if (missingIds.length > 0) {
+          return JSON.stringify({ success: false, error: `文件不存在: ${missingIds.join(', ')}` })
+        }
+
+        const attachments = fileRefs.map(ref => {
+          const dbFile = files.find(f => f.id === ref.file_id)
+          return {
+            fileId: ref.file_id,
+            fileName: dbFile?.originalName || ref.file_name,
+            mimeType: dbFile?.mimeType || 'application/octet-stream',
+          }
+        })
+
+        const result = await replyToUser(
+          swarmSessionId,
+          userId,
+          leadAgentId,
+          caption,
+          { attachments }
+        )
+
+        return JSON.stringify({
+          success: true,
+          message_id: result.id,
+          files_sent: attachments.length,
+          file_names: attachments.map(a => a.fileName),
+        })
+      }
+
       case 'provision_teammate': {
         const result = await provisionTeammate(swarmSessionId, leadAgentId, {
           id: toolInput.id as string | undefined,
