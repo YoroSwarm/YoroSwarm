@@ -21,7 +21,6 @@ import {
   Code,
   Copy,
   Check as CheckIcon,
-  MoreHorizontal,
   CornerUpLeft,
   Download,
   Brain,
@@ -1444,9 +1443,12 @@ export const MessageItem = memo(function MessageItem({
         </button>
         <button
           className="p-1.5 rounded-full hover:bg-accent active:bg-accent/80 transition-colors"
-          title="更多"
+          title="复制"
+          onClick={() => {
+            navigator.clipboard.writeText(message.content || '');
+          }}
         >
-          <MoreHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+          <Copy className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
       </div>
     </div>
