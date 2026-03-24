@@ -220,18 +220,15 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
 
         // 辅助函数：尝试将 item_id 解析为真实 ID（支持用 title 查找）
         const resolveItemId = async (itemIdOrTitle: string): Promise<{ resolvedId: string; usedTitle: boolean; matchedTitle: string } | null> => {
-          // 先尝试按 ID 查找
+          // 先尝试按 ID 精确查找
           const byId = await prisma.leadSelfTodo.findFirst({ where: { id: itemIdOrTitle, leadAgentId } })
           if (byId) return { resolvedId: byId.id, usedTitle: false, matchedTitle: byId.title }
 
-          // 再尝试按 title 查找（不区分大小写）
+          // 再尝试按 title 模糊查找（大小写不敏感）
           const normalized = itemIdOrTitle.trim().toLowerCase()
-          const byTitle = await prisma.leadSelfTodo.findFirst({
-            where: {
-              leadAgentId,
-              title: { equals: normalized, mode: 'insensitive' },
-            },
-          })
+          const allItems = await prisma.leadSelfTodo.findMany({ where: { leadAgentId } })
+          const byTitle = allItems.find(item => item.title.toLowerCase() === normalized)
+            || allItems.find(item => item.title.toLowerCase().includes(normalized))
           if (byTitle) return { resolvedId: byTitle.id, usedTitle: true, matchedTitle: byTitle.title }
 
           return null
