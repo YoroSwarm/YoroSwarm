@@ -435,7 +435,8 @@ export function useMessages(options: UseMessagesOptions) {
     content: string,
     _type: 'text' | 'system' | 'file' = 'text',
     attachments?: File[],
-    targetSessionId?: string | null
+    targetSessionId?: string | null,
+    replyToId?: string | null
   ) => {
     const activeSessionId = targetSessionId || sessionId;
     if (!activeSessionId) return;
@@ -500,9 +501,12 @@ export function useMessages(options: UseMessagesOptions) {
               fileName: f.originalName,
               mimeType: f.mimeType,
             })),
+            ...(replyToId ? { replyTo: replyToId } : {}),
           };
         } else {
-          messagePayload.metadata = {};
+          messagePayload.metadata = {
+            ...(replyToId ? { replyTo: replyToId } : {}),
+          };
         }
 
         const response = await swarmSessionsApi.sendExternalMessage(activeSessionId, messagePayload);

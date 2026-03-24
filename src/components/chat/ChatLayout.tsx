@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { Message } from '@/types/chat';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -55,6 +56,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(initialSessionId);
   const [activeTab, setActiveTab] = useState<TabType>('chat');
   const [fileRefreshTick, setFileRefreshTick] = useState(0);
+  const [replyToMessage, setReplyToMessage] = useState<Message | null>(null);
 
   const {
     sessions,
@@ -520,6 +522,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                       streamingState={streamingState}
                       activeStreamingStates={activeStreamingStates}
                       participants={visibleParticipants}
+                      onReply={setReplyToMessage}
                     />
                   </div>
                 )}
@@ -554,9 +557,11 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
                   <ChatInput
                     sessionId={resolvedSessionId}
+                    replyTo={replyToMessage}
+                    onCancelReply={() => setReplyToMessage(null)}
                     disabled={isCreatingSession || currentSession?.status === 'paused' || currentSession?.initializing}
                     placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : currentSession?.initializing ? '环境初始化中，请稍候...' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
-                    onSend={async (content, attachments) => {
+                    onSend={async (content, attachments, replyToId) => {
                       let targetSessionId = resolvedSessionId;
 
                       if (!targetSessionId) {
@@ -564,7 +569,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                         targetSessionId = created.id;
                       }
 
-                      await sendMessage(content, 'text', attachments, targetSessionId);
+                      await sendMessage(content, 'text', attachments, targetSessionId, replyToId || undefined);
+                      setReplyToMessage(null);
                     }}
                   />
                 </div>

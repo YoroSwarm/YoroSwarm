@@ -20,10 +20,11 @@ interface MessageListProps {
   streamingState?: StreamingState;
   activeStreamingStates?: AgentStreamingState[];
   participants?: Agent[];
+  onReply?: (message: Message) => void;
   className?: string;
 }
 
-export const MessageList = memo(function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], className }: MessageListProps) {
+export const MessageList = memo(function MessageList({ sessionId, messages, isLoading, hasMore, onLoadMore, streamingState: _streamingState, activeStreamingStates = [], participants = [], onReply, className }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const isFirstLoad = useRef(true);
   const isUserScrolling = useRef(false);
@@ -101,6 +102,44 @@ export const MessageList = memo(function MessageList({ sessionId, messages, isLo
   }, [messages]);
 
   const messageGroups = useMemo(() => groupMessages(), [groupMessages]);
+
+  // Helper to find quoted message by ID
+  const findQuotedMessage = useCallback((replyToId: string | undefined): Message | null => {
+    if (!replyToId) return null;
+    return messages.find(m => m.id === replyToId) || null;
+  }, [messages]);
+
+  // Scroll to a specific message by ID
+  const scrollToMessage = useCallback((messageId: string) => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    // Scroll to target message first
+    const element = container.querySelector(`[data-message-id="${messageId}"]`) as HTMLElement | null;
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Then dim all messages except the target after a brief delay
+    setTimeout(() => {
+      const allMessages = container.querySelectorAll('[data-message-id]');
+      allMessages.forEach((msg) => {
+        const msgEl = msg as HTMLElement;
+        if (msgEl.dataset.messageId === messageId) {
+          msgEl.classList.remove('opacity-30');
+        } else {
+          msgEl.classList.add('opacity-30');
+        }
+      });
+
+      // Remove dimming after 800ms
+      setTimeout(() => {
+        allMessages.forEach((msg) => {
+          (msg as HTMLElement).classList.remove('opacity-30');
+        });
+      }, 800);
+    }, 150);
+  }, []);
 
   return (
     <div
@@ -180,6 +219,9 @@ export const MessageList = memo(function MessageList({ sessionId, messages, isLo
                               isConsecutive={!showAvatar}
                               showTime={showTime}
                               isLead={msgIsLead}
+                              onReply={onReply}
+                              quotedMessage={findQuotedMessage(msg.metadata?.replyTo)}
+                              onQuotedMessageClick={scrollToMessage}
                             />
                           );
                         })}
@@ -202,6 +244,9 @@ export const MessageList = memo(function MessageList({ sessionId, messages, isLo
                         isConsecutive={!showAvatar}
                         showTime={showTime}
                         isLead={isLead}
+                        onReply={onReply}
+                        quotedMessage={findQuotedMessage(message.metadata?.replyTo)}
+                        onQuotedMessageClick={scrollToMessage}
                       />
                     );
                     i++;

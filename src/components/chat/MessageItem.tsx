@@ -812,6 +812,9 @@ interface MessageItemProps {
   isConsecutive: boolean;
   showTime?: boolean;
   isLead?: boolean;
+  onReply?: (message: Message) => void;
+  quotedMessage?: Message | null;
+  onQuotedMessageClick?: (messageId: string) => void;
 }
 
 export const MessageItem = memo(function MessageItem({
@@ -820,6 +823,9 @@ export const MessageItem = memo(function MessageItem({
   isConsecutive,
   showTime = true,
   isLead = true,
+  onReply,
+  quotedMessage,
+  onQuotedMessageClick,
 }: MessageItemProps) {
   const { resolvedTheme } = useThemeStore();
   const { leadNickname, leadAvatarUrl } = useLeadPreferencesStore();
@@ -909,6 +915,19 @@ export const MessageItem = memo(function MessageItem({
       case 'code':
         return (
           <div className="relative group/code">
+            {quotedMessage && (
+              <div
+                className="px-3 py-2 border-b border-border/50 cursor-pointer hover:bg-muted/10 transition-colors rounded-t-lg"
+                onClick={() => onQuotedMessageClick?.(quotedMessage.id)}
+              >
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground leading-4">
+                  <CornerUpLeft className="h-3 w-3 shrink-0 self-start mt-0.5" />
+                  <span className="font-medium truncate">{quotedMessage.sender.name}</span>
+                  <span>:</span>
+                  <span className="line-clamp-1 break-all">{quotedMessage.content}</span>
+                </div>
+              </div>
+            )}
             <div className="flex items-center justify-between px-3 py-2 bg-muted/80 rounded-t-lg border-b border-border">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Code className="h-3.5 w-3.5" />
@@ -1052,6 +1071,19 @@ export const MessageItem = memo(function MessageItem({
 
         return (
           <div className="text-sm leading-relaxed max-w-full overflow-hidden wrap-break-word">
+            {quotedMessage && (
+              <div
+                className="mb-2 pb-2 border-b border-border/30 cursor-pointer hover:bg-muted/10 transition-colors rounded"
+                onClick={() => onQuotedMessageClick?.(quotedMessage.id)}
+              >
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground leading-4">
+                  <CornerUpLeft className="h-3 w-3 shrink-0 self-start mt-0.5" />
+                  <span className="font-medium truncate">{quotedMessage.sender.name}</span>
+                  <span>:</span>
+                  <span className="line-clamp-1 break-all">{quotedMessage.content}</span>
+                </div>
+              </div>
+            )}
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
               components={markdownComponents}
@@ -1304,8 +1336,9 @@ export const MessageItem = memo(function MessageItem({
   return (
     <>
     <div
+      data-message-id={message.id}
       className={cn(
-        'group flex gap-3',
+        'group flex gap-3 transition-opacity duration-500',
         isUser ? 'flex-row-reverse' : 'flex-row',
         isConsecutive && 'mt-1'
       )}
@@ -1403,6 +1436,7 @@ export const MessageItem = memo(function MessageItem({
         )}
       >
         <button
+          onClick={() => onReply?.(message)}
           className="p-1.5 rounded-full hover:bg-accent active:bg-accent/80 transition-colors"
           title="回复"
         >

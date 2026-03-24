@@ -12,6 +12,7 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
+  CornerUpLeft,
 } from 'lucide-react';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { MentionSuggestion } from '@/types/chat';
@@ -20,13 +21,17 @@ interface ChatInputProps {
   sessionId: string | null;
   disabled?: boolean;
   placeholder?: string;
-  onSend?: (content: string, attachments?: File[]) => Promise<void> | void;
+  replyTo?: import('@/types/chat').Message | null;
+  onCancelReply?: () => void;
+  onSend?: (content: string, attachments?: File[], replyToId?: string) => Promise<void> | void;
 }
 
 export function ChatInput({
   sessionId,
   disabled = false,
   placeholder = '输入消息...',
+  replyTo,
+  onCancelReply,
   onSend,
 }: ChatInputProps) {
   const { glassEffect } = useLeadPreferencesStore();
@@ -160,7 +165,7 @@ export function ChatInput({
     try {
       sendingRef.current = true;
       setIsSending(true);
-      await onSend?.(content.trim(), attachments.length > 0 ? attachments : undefined);
+      await onSend?.(content.trim(), attachments.length > 0 ? attachments : undefined, replyTo?.id);
 
       setContent('');
       setAttachments([]);
@@ -249,6 +254,24 @@ export function ChatInput({
             <Paperclip className="h-8 w-8" />
             <span className="text-sm font-medium">拖放文件到这里</span>
           </div>
+        </div>
+      )}
+
+      {replyTo && (
+        <div className="mb-3 flex items-start gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border/50">
+          <CornerUpLeft className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground">
+              回复 <span className="font-medium">{replyTo.sender.name}</span>
+            </p>
+            <p className="text-sm truncate">{replyTo.content}</p>
+          </div>
+          <button
+            onClick={onCancelReply}
+            className="p-0.5 rounded hover:bg-accent active:bg-accent/80 transition-colors"
+          >
+            <X className="h-4 w-4 text-muted-foreground" />
+          </button>
         </div>
       )}
 
