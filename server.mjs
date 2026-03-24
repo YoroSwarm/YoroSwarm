@@ -65,7 +65,6 @@ try {
 }
 
 // ============ 沙盒环境检测 ============
-import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { platform } from 'node:os'
 
