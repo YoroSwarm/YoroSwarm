@@ -17,7 +17,8 @@ export interface Agent {
 export interface MessageAttachment {
   id: string;
   type: 'image' | 'file';
-  url: string;
+  relativePath?: string;
+  url?: string;
   name: string;
   size?: number;
   mimeType?: string;

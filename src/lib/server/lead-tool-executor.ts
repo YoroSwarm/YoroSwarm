@@ -1,5 +1,6 @@
 import type { ToolExecutor, ToolExecutorContext } from './agent-loop'
 import prisma from '@/lib/db'
+import { stat } from 'fs/promises'
 import {
   provisionTeammate,
   replyToUser,
@@ -27,9 +28,8 @@ import {
   createWorkspaceDirectory,
   readWorkspaceFile,
   saveWorkspaceFile,
-  ensureSessionWorkspaceRoot,
-  normalizeWorkspaceRelativePath,
-  findWorkspaceFileByPath,
+  resolveWorkspaceAbsolutePath,
+  inferMimeType,
 } from './session-workspace'
 import {
   smartApproval,
@@ -77,20 +77,15 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           })
         }
 
-        const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
-        let attachments: Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
+        const fileRefs = (toolInput.file_references as Array<{ relative_path: string; file_name: string }>) || []
+        let attachments: Array<{ relativePath: string; fileName: string; mimeType: string }> | undefined
         if (fileRefs.length > 0) {
-          const files = await prisma.file.findMany({
-            where: { id: { in: fileRefs.map(f => f.file_id) } },
-            select: { id: true, originalName: true, mimeType: true },
-          })
-          const fileMap = new Map(files.map(f => [f.id, f]))
           attachments = fileRefs.map(ref => {
-            const dbFile = fileMap.get(ref.file_id)
+            const relativePath = ref.relative_path
             return {
-              fileId: ref.file_id,
-              fileName: dbFile?.originalName || ref.file_name,
-              mimeType: dbFile?.mimeType || 'application/octet-stream',
+              relativePath,
+              fileName: ref.file_name,
+              mimeType: inferMimeType(relativePath),
             }
           })
         }
@@ -121,29 +116,30 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
 
         const caption = (toolInput.caption as string | undefined) || ''
 
-        // 查找文件
-        const root = await ensureSessionWorkspaceRoot(swarmSessionId)
-        const normalizedPath = normalizeWorkspaceRelativePath(filePath)
-        const absolutePath = path.join(root, normalizedPath)
+        // 使用 resolveWorkspaceAbsolutePath 解析文件绝对路径
+        const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, filePath)
 
-        if (!absolutePath.startsWith(root)) {
-          return JSON.stringify({ success: false, error: '无效的工作区路径' })
+        // 检查文件是否在文件系统中真实存在
+        let fileExists = false
+        try {
+          const fileStat = await stat(resolved.absolutePath)
+          fileExists = fileStat.isFile()
+        } catch {
+          fileExists = false
         }
 
-        // 查找文件 - 使用 findWorkspaceFileByPath 以支持多种路径格式
-        const fileRecord = await findWorkspaceFileByPath(swarmSessionId, filePath)
-        const fileInfo = fileRecord
-          ? { id: fileRecord.id, originalName: fileRecord.originalName, mimeType: fileRecord.mimeType }
-          : null
-
-        if (!fileInfo) {
+        if (!fileExists) {
           return JSON.stringify({ success: false, error: `文件不存在: ${filePath}` })
         }
 
+        // 直接基于文件系统构建附件数据
+        const fileName = path.posix.basename(resolved.relativePath)
+        const mimeType = inferMimeType(resolved.relativePath)
+
         const attachments = [{
-          fileId: fileInfo.id,
-          fileName: fileInfo.originalName,
-          mimeType: fileInfo.mimeType,
+          relativePath: resolved.relativePath,
+          fileName,
+          mimeType,
         }]
 
         const result = await replyToUser(
@@ -158,8 +154,8 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           success: true,
           message_id: result.id,
           files_sent: 1,
-          file_name: fileInfo.originalName,
-          path: filePath,
+          file_name: fileName,
+          relative_path: resolved.relativePath,
         })
       }
 
@@ -751,44 +747,3 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
   }
 }
 
-function inferMimeType(filename: string): string {
-  const ext = path.extname(filename).toLowerCase()
-  const mimeTypes: Record<string, string> = {
-    '.txt': 'text/plain',
-    '.md': 'text/markdown',
-    '.html': 'text/html',
-    '.css': 'text/css',
-    '.js': 'application/javascript',
-    '.ts': 'application/typescript',
-    '.json': 'application/json',
-    '.xml': 'application/xml',
-    '.csv': 'text/csv',
-    '.py': 'text/x-python',
-    '.java': 'text/x-java',
-    '.c': 'text/x-c',
-    '.cpp': 'text/x-c++',
-    '.go': 'text/x-go',
-    '.rs': 'text/x-rust',
-    '.rb': 'text/x-ruby',
-    '.php': 'text/x-php',
-    '.sh': 'text/x-shellscript',
-    '.yaml': 'text/yaml',
-    '.yml': 'text/yaml',
-    '.sql': 'text/x-sql',
-    '.r': 'text/x-r',
-    '.swift': 'text/x-swift',
-    '.kt': 'text/x-kotlin',
-    '.tex': 'text/x-latex',
-    '.log': 'text/plain',
-    '.svg': 'image/svg+xml',
-    '.pdf': 'application/pdf',
-    '.doc': 'application/msword',
-    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    '.xls': 'application/vnd.ms-excel',
-    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    '.ppt': 'application/vnd.ms-powerpoint',
-    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-    '.zip': 'application/zip',
-  }
-  return mimeTypes[ext] || 'application/octet-stream'
-}

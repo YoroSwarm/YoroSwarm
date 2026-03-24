@@ -125,11 +125,13 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
     const mimeType = file?.mimeType || entry.mimeType;
     const size = file?.size ?? entry.size;
     const name = file?.originalName || entry.name;
-    // 优先使用 file.id，否则尝试使用 path 构建 URL
-    const fileId = file?.id;
-    const fileUrl = fileId
-      ? `/api/files/${fileId}`
-      : filesApi.getPathDownloadUrl(sessionId, entry.path, false);
+    // 优先使用 relativePath 构建 URL，其次使用 file.id
+    const relativePath = file?.relativePath;
+    const fileUrl = relativePath
+      ? filesApi.getPathDownloadUrl(sessionId, relativePath, false)
+      : file?.id
+        ? `/api/files/${file.id}`
+        : filesApi.getPathDownloadUrl(sessionId, entry.path, false);
 
     setPreviewFile({
       url: fileUrl,
@@ -280,7 +282,11 @@ export function SessionFiles({ sessionId, refreshToken = 0 }: SessionFilesProps)
               }
 
               const file = files.find((item) => (item.relativePath || item.originalName) === entry.path);
-              const downloadHref = file ? `/api/files/${file.id}?download=1` : filesApi.getPathDownloadUrl(sessionId, entry.path, true);
+              const downloadHref = file?.relativePath
+                ? filesApi.getPathDownloadUrl(sessionId, file.relativePath, true)
+                : file
+                  ? `/api/files/${file.id}?download=1`
+                  : filesApi.getPathDownloadUrl(sessionId, entry.path, true);
               const handleDeleteClick = () => file ? handleDelete(file.id) : filesApi.deleteFileByPath(sessionId, entry.path).then(load).catch((err) => console.error('Failed to delete file:', err));
               const canPreview = isPreviewable(entry.mimeType || file?.mimeType, entry.name);
               return (

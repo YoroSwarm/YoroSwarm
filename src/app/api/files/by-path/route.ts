@@ -4,11 +4,10 @@ import path from 'path'
 import { Readable } from 'stream'
 import { cookies } from 'next/headers'
 import { NextRequest } from 'next/server'
-import prisma from '@/lib/db'
 import { errorResponse, notFoundResponse, unauthorizedResponse } from '@/lib/api/response'
 import { verifyAccessToken } from '@/lib/auth/jwt'
 import { resolveSessionScope } from '@/lib/server/swarm'
-import { findWorkspaceFileByPath, resolveWorkspaceAbsolutePath, inferMimeType } from '@/lib/server/session-workspace'
+import { resolveWorkspaceAbsolutePath, inferMimeType } from '@/lib/server/session-workspace'
 
 function buildContentDisposition(filename: string, inline: boolean) {
   const encoded = encodeURIComponent(filename)
@@ -54,9 +53,8 @@ export async function GET(request: NextRequest) {
       return errorResponse('Path is not a file', 400)
     }
 
-    const fileRecord = await findWorkspaceFileByPath(sessionScope.id, resolved.relativePath)
-    const mimeType = fileRecord?.mimeType || inferMimeType(resolved.relativePath)
-    const originalName = fileRecord?.originalName || path.posix.basename(resolved.relativePath)
+    const mimeType = inferMimeType(resolved.relativePath)
+    const originalName = path.posix.basename(resolved.relativePath)
     const isInline = new URL(request.url).searchParams.get('download') !== '1'
       && (mimeType.startsWith('image/') || mimeType === 'application/pdf' || mimeType.startsWith('text/')
         || mimeType.startsWith('audio/') || mimeType.startsWith('video/')
@@ -110,12 +108,6 @@ export async function DELETE(request: NextRequest) {
       await unlink(resolved.absolutePath)
     } catch {
       return notFoundResponse('File not found')
-    }
-
-    const fileRecord = await findWorkspaceFileByPath(sessionScope.id, resolved.relativePath)
-    if (fileRecord) {
-      await prisma.fileThumbnail.deleteMany({ where: { fileId: fileRecord.id } })
-      await prisma.file.delete({ where: { id: fileRecord.id } })
     }
 
     return new Response(JSON.stringify({ success: true }), {

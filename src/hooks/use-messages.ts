@@ -81,12 +81,13 @@ function convertExternalMessage(message: ExternalMessageResponse, participants: 
   const isUser = message.sender_type === 'user';
 
   // 从 metadata 中提取附件信息
-  const metadataAttachments = (message.metadata as { attachments?: Array<{ fileId: string; fileName: string; mimeType: string }> })?.attachments;
+  const rawAttachments = message.metadata as { attachments?: Array<{ fileId?: string; relativePath?: string; fileName: string; mimeType: string }> } | undefined;
+  const metadataAttachments = rawAttachments?.attachments;
   const attachments = metadataAttachments?.map((att) => ({
-    id: att.fileId,
+    id: att.fileId || '',
     name: att.fileName,
     type: (att.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
-    url: `/api/files/${att.fileId}`,
+    relativePath: att.relativePath,
     mimeType: att.mimeType,
   }));
 
@@ -371,12 +372,13 @@ export function useMessages(options: UseMessagesOptions) {
     if (targetSessionId !== sessionId) return;
 
     // 从 metadata 中提取附件信息
-    const metadataAttachments = (incoming.metadata as { attachments?: Array<{ fileId: string; fileName: string; mimeType: string }> })?.attachments;
+    const rawAttachments = incoming.metadata as { attachments?: Array<{ fileId?: string; relativePath?: string; fileName: string; mimeType: string }> } | undefined;
+    const metadataAttachments = rawAttachments?.attachments;
     const attachments = metadataAttachments?.map((att) => ({
-      id: att.fileId,
+      id: att.fileId || '',
       name: att.fileName,
       type: (att.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
-      url: `/api/files/${att.fileId}`,
+      relativePath: att.relativePath,
       mimeType: att.mimeType,
     }));
 
@@ -446,7 +448,7 @@ export function useMessages(options: UseMessagesOptions) {
 
     try {
       // Upload files first
-      const uploadedFiles: Array<{ id: string; originalName: string; mimeType: string; size: number; url: string }> = [];
+      const uploadedFiles: Array<{ id: string; originalName: string; mimeType: string; size: number; relativePath: string }> = [];
       for (const file of files) {
         const uploaded = await filesApi.uploadFile(file, activeSessionId);
         uploadedFiles.push({
@@ -454,7 +456,7 @@ export function useMessages(options: UseMessagesOptions) {
           originalName: uploaded.originalName,
           mimeType: uploaded.mimeType,
           size: uploaded.size,
-          url: uploaded.url,
+          relativePath: uploaded.relativePath || uploaded.originalName,
         });
       }
 
@@ -478,7 +480,7 @@ export function useMessages(options: UseMessagesOptions) {
             name: f.originalName,
             type: (f.mimeType.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
             size: f.size,
-            url: f.url,
+            relativePath: f.relativePath,
           })),
         }]);
 
@@ -491,13 +493,14 @@ export function useMessages(options: UseMessagesOptions) {
           messagePayload.metadata = {
             ...(trimmed ? {} : {
               fileId: uploadedFiles[0].id,
+              relativePath: uploadedFiles[0].relativePath,
               fileName: uploadedFiles[0].originalName,
               mimeType: uploadedFiles[0].mimeType,
               size: uploadedFiles[0].size,
-              url: uploadedFiles[0].url,
             }),
             attachments: uploadedFiles.map(f => ({
               fileId: f.id,
+              relativePath: f.relativePath,
               fileName: f.originalName,
               mimeType: f.mimeType,
             })),

@@ -9,6 +9,7 @@ import { vscDarkPlus, vs } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { cn } from '@/lib/utils';
 import { formatMessageTime } from '@/lib/utils/date';
 import { appConfig } from '@/lib/config/app';
+import { filesApi } from '@/lib/api/files';
 import { useThemeStore } from '@/stores/themeStore';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -805,6 +806,16 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
   }
 }
 
+function buildAttachmentUrl(sessionId: string, relativePath?: string, url?: string, download = false): string {
+  if (relativePath) {
+    return filesApi.getPathDownloadUrl(sessionId, relativePath, download);
+  }
+  if (url) {
+    return download ? `${url}?download=1` : url;
+  }
+  return '';
+}
+
 interface MessageItemProps {
   message: Message;
   showAvatar: boolean;
@@ -844,7 +855,9 @@ export const MessageItem = memo(function MessageItem({
     size?: number;
   } | null>(null);
   const primaryAttachment = message.attachments?.[0];
-  const attachmentUrl = primaryAttachment?.url || message.content;
+  const attachmentUrl = primaryAttachment
+    ? buildAttachmentUrl(message.sessionId, primaryAttachment.relativePath, primaryAttachment.url)
+    : message.content;
 
   // Activity type messages (thinking, tool_call, tool_result)
   const activityType = message.metadata?.activityType;
@@ -987,7 +1000,9 @@ export const MessageItem = memo(function MessageItem({
         );
 
       case 'file': {
-        const fileUrl = primaryAttachment?.url || message.metadata?.url;
+        const fileUrl = primaryAttachment
+          ? buildAttachmentUrl(message.sessionId, primaryAttachment.relativePath, primaryAttachment.url)
+          : (message.metadata?.url as string | undefined);
         const fileName = primaryAttachment?.name || message.metadata?.fileName || '文件';
         const fileSize = primaryAttachment?.size || message.metadata?.size;
         const fileMimeType = (primaryAttachment?.mimeType as string) || (message.metadata?.mimeType as string) || '';
@@ -1040,7 +1055,7 @@ export const MessageItem = memo(function MessageItem({
             </div>
             {fileUrl && (
               <a
-                href={`${fileUrl}?download=1`}
+                href={buildAttachmentUrl(message.sessionId, primaryAttachment?.relativePath, primaryAttachment?.url, true)}
                 download={fileName as string}
                 className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 active:bg-primary-foreground/30 text-primary-foreground" : "hover:bg-accent active:bg-accent/80")}
                 title="下载文件"
@@ -1096,7 +1111,7 @@ export const MessageItem = memo(function MessageItem({
                     key={att.id}
                     type="button"
                     onClick={() => setPreviewFile({
-                      url: att.url,
+                      url: buildAttachmentUrl(message.sessionId, att.relativePath, att.url),
                       name: att.name,
                       mimeType: att.mimeType,
                       size: att.size,

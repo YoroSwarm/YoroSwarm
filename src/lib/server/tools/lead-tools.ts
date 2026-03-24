@@ -137,12 +137,12 @@ export const leadTools: ToolDefinition[] = [
           items: {
             type: 'object',
             properties: {
-              file_id: { type: 'string', description: '文件 ID（从会话文件列表或队友汇报中获取）' },
+              relative_path: { type: 'string', description: '文件的相对路径，例如 "reports/analysis.md"' },
               file_name: { type: 'string', description: '文件名（用于显示）' },
             },
-            required: ['file_id', 'file_name'],
+            required: ['relative_path', 'file_name'],
           },
-          description: '可选。要附带给用户的文件引用列表。文件 ID 可从上下文中的「会话文件」部分获取。',
+          description: '可选。要附带给用户的文件引用列表。使用文件的相对路径指定文件。',
         },
       },
       required: ['content'],

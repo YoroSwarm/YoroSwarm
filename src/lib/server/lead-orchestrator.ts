@@ -451,7 +451,7 @@ export async function replyToUser(
   })
 
   // 广播到 WebSocket
-  const wsAttachments = metadata?.attachments as Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
+  const wsAttachments = metadata?.attachments as Array<{ relativePath: string; fileName: string; mimeType: string }> | undefined
   const wsModel = metadata?.model as string | undefined
   publishRealtimeMessage(
     {

@@ -490,7 +490,9 @@ export async function ensureSessionVenv(swarmSessionId: string): Promise<string>
     return venvPath
   } catch (error) {
     console.warn(`[Workspace][${swarmSessionId}] Failed to copy venv:`, error)
-    // 复制失败，清理
+    // 创建错误标记
+    await createVenvPackagesErrorMarker(swarmSessionId)
+    // 清理
     try {
       await rm(venvPath, { recursive: true, force: true })
     } catch {
@@ -679,6 +681,9 @@ export async function resolveFileOwnerContext(
   }
 }
 
+/**
+ * @deprecated 此函数依赖数据库查询，保留用于可选的元数据查询。主要流程已迁移至基于文件系统的操作。
+ */
 export async function findWorkspaceFileByPath(swarmSessionId: string, relativePath: string) {
   const normalized = normalizeWorkspaceRelativePath(relativePath)
   const exact = await prisma.file.findFirst({
