@@ -150,28 +150,20 @@ export const leadTools: ToolDefinition[] = [
   },
   {
     name: 'send_files_to_user',
-    description: '单独向用户发送文件（可附带简短说明）。适用于将队友生成的报告、文档等成果转交给用户。与 reply_to_user 的区别在于：此工具专注于文件传输，可以只传文件不附带文字说明。文件 ID 从上下文中的「会话文件」列表获取。',
+    description: '单独向用户发送文件（可附带简短说明）。适用于将队友生成的报告、文档等成果转交给用户。与 reply_to_user 的区别在于：此工具专注于文件传输，可以只传文件不附带文字说明。使用文件相对路径（如 "reports/analysis.md"）来指定文件。',
     input_schema: {
       type: 'object' as const,
       properties: {
-        file_references: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              file_id: { type: 'string', description: '文件 ID' },
-              file_name: { type: 'string', description: '文件名（用于显示）' },
-            },
-            required: ['file_id', 'file_name'],
-          },
-          description: '要发送的文件列表',
+        path: {
+          type: 'string',
+          description: '文件的相对路径，例如 "reports/analysis.md"',
         },
         caption: {
           type: 'string',
           description: '可选。文件的简短说明（如"这是分析报告，请查收"）。不填则只发文件。',
         },
       },
-      required: ['file_references'],
+      required: ['path'],
     },
   },
   {

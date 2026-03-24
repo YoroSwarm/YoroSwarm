@@ -27,6 +27,8 @@ import {
   createWorkspaceDirectory,
   readWorkspaceFile,
   saveWorkspaceFile,
+  ensureSessionWorkspaceRoot,
+  normalizeWorkspaceRelativePath,
 } from './session-workspace'
 import {
   smartApproval,
@@ -111,33 +113,48 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
       }
 
       case 'send_files_to_user': {
-        const fileRefs = (toolInput.file_references as Array<{ file_id: string; file_name: string }>) || []
-        if (fileRefs.length === 0) {
-          return JSON.stringify({ success: false, error: '至少需要选择一个文件' })
+        const filePath = toolInput.path as string
+        if (!filePath) {
+          return JSON.stringify({ success: false, error: '缺少文件路径' })
         }
 
         const caption = (toolInput.caption as string | undefined) || ''
 
-        // 验证文件存在
-        const fileIds = fileRefs.map(f => f.file_id)
-        const files = await prisma.file.findMany({
-          where: { id: { in: fileIds } },
-          select: { id: true, originalName: true, mimeType: true },
-        })
-        const foundIds = new Set(files.map(f => f.id))
-        const missingIds = fileIds.filter(id => !foundIds.has(id))
-        if (missingIds.length > 0) {
-          return JSON.stringify({ success: false, error: `文件不存在: ${missingIds.join(', ')}` })
+        // 查找文件
+        const root = await ensureSessionWorkspaceRoot(swarmSessionId)
+        const normalizedPath = normalizeWorkspaceRelativePath(filePath)
+        const absolutePath = path.join(root, normalizedPath)
+
+        if (!absolutePath.startsWith(root)) {
+          return JSON.stringify({ success: false, error: '无效的工作区路径' })
         }
 
-        const attachments = fileRefs.map(ref => {
-          const dbFile = files.find(f => f.id === ref.file_id)
-          return {
-            fileId: ref.file_id,
-            fileName: dbFile?.originalName || ref.file_name,
-            mimeType: dbFile?.mimeType || 'application/octet-stream',
-          }
-        })
+        let fileInfo: { id: string; originalName: string; mimeType: string } | null = null
+        try {
+          const file = await prisma.file.findFirst({
+            where: {
+              swarmSessionId,
+              OR: [
+                { path: absolutePath },
+                { filename: normalizedPath },
+              ],
+            },
+            select: { id: true, originalName: true, mimeType: true },
+          })
+          fileInfo = file
+        } catch {
+          // 文件不存在
+        }
+
+        if (!fileInfo) {
+          return JSON.stringify({ success: false, error: `文件不存在: ${filePath}` })
+        }
+
+        const attachments = [{
+          fileId: fileInfo.id,
+          fileName: fileInfo.originalName,
+          mimeType: fileInfo.mimeType,
+        }]
 
         const result = await replyToUser(
           swarmSessionId,
@@ -150,8 +167,9 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         return JSON.stringify({
           success: true,
           message_id: result.id,
-          files_sent: attachments.length,
-          file_names: attachments.map(a => a.fileName),
+          files_sent: 1,
+          file_name: fileInfo.originalName,
+          path: filePath,
         })
       }
 
@@ -500,6 +518,13 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           where: { assigneeId: teammateId, status: 'PENDING' },
           data: { assigneeId: null },
         })
+
+        // 格式化显示给用户
+        const displayMessage = [
+          `已移除队友 **${teammate.name}**`,
+          reason ? `（原因：${reason}）` : '',
+        ].filter(Boolean).join('')
+        await replyToUser(swarmSessionId, userId, leadAgentId, displayMessage)
 
         return JSON.stringify({
           success: true,
