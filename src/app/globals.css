@@ -187,6 +187,14 @@ body {
   background-position: center;
 }
 
+/* Dark mode base background when glass effect is enabled but no background image.
+ * This ensures the html/body background stays dark in dark mode even when all
+ * bg-background surfaces become transparent due to glass effect. */
+.dark[data-glass-effect]:not([data-has-background]) html,
+.dark[data-glass-effect]:not([data-has-background]) body {
+  background-color: var(--background);
+}
+
 /* Reveal background image under main surfaces without making them fully transparent */
 :root[data-has-background] .bg-background,
 :root[data-has-background] [class*="bg-background/"] {
@@ -221,12 +229,18 @@ body {
 }
 
 /*
- * Make generic bg-background layers fully transparent when glass is active,
+ * Make generic bg-background layers fully transparent when glass is active with background image,
  * since the background overlay handles the global tint.
+ * When no background image, keep a semi-transparent dark background so the page isn't white.
  */
-:root[data-glass-effect] .bg-background:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]),
-:root[data-glass-effect] [class*="bg-background/"]:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]) {
+:root[data-glass-effect][data-has-background] .bg-background:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]),
+:root[data-glass-effect][data-has-background] [class*="bg-background/"]:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]) {
   background-color: transparent;
+}
+
+:root[data-glass-effect]:not([data-has-background]) .bg-background:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]),
+:root[data-glass-effect]:not([data-has-background]) [class*="bg-background/"]:not([data-slot="switch-thumb"]):not([data-slot="dialog-content"]):not([data-slot="sheet-content"]) {
+  background-color: rgb(var(--background-rgb) / 0.5);
 }
 
 /* ── Chat glass hierarchy ───────────────────────────────────────────────
