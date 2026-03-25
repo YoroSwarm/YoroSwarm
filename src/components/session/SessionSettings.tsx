@@ -124,12 +124,12 @@ export function SessionSettings({ sessionId }: SessionSettingsProps) {
     finally { setPackagesLoading(false) }
   }, [sessionId])
 
-  // 当 venv 就绪时加载包列表
+  // 当 venv 就绪时自动加载包列表
   useEffect(() => {
-    if (venvStatus === 'ready' && showPackages) {
+    if (venvStatus === 'ready') {
       loadPackages()
     }
-  }, [venvStatus, showPackages, loadPackages])
+  }, [venvStatus, loadPackages])
 
   const handleRetryVenv = async () => {
     setIsRetryingVenv(true)
