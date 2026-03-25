@@ -29,6 +29,7 @@ import {
   readWorkspaceFile,
   saveWorkspaceFile,
   resolveWorkspaceAbsolutePath,
+  findWorkspaceFileByPath,
   inferMimeType,
 } from './session-workspace'
 import {
@@ -132,11 +133,15 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           return JSON.stringify({ success: false, error: `文件不存在: ${filePath}` })
         }
 
+        // 查询数据库获取 fileId，以便快照能正确复制文件
+        const dbFile = await findWorkspaceFileByPath(swarmSessionId, resolved.relativePath)
+
         // 直接基于文件系统构建附件数据
         const fileName = path.posix.basename(resolved.relativePath)
         const mimeType = inferMimeType(resolved.relativePath)
 
         const attachments = [{
+          ...(dbFile?.id ? { fileId: dbFile.id } : {}),
           relativePath: resolved.relativePath,
           fileName,
           mimeType,
@@ -147,7 +152,7 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           userId,
           leadAgentId,
           caption,
-          { attachments, ...(context?.currentModel ? { model: context.currentModel } : {}) }
+          { attachments, ...(context?.currentModel ? { model: context.currentModel } : {}), messageType: 'file' }
         )
 
         return JSON.stringify({

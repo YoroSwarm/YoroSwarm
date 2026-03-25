@@ -63,26 +63,43 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
     const isUser = msg.senderType === 'user'
     const parsed = parseMeta(msg.metadata)
 
-    const attachments = parsed?.attachments as Array<{ fileId: string; fileName: string; mimeType: string }> | undefined
-    const messageAttachments = attachments?.filter(a => data.fileIds.includes(a.fileId)).map(a => ({
-      id: a.fileId,
-      type: (a.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
-      url: `/api/share/${shareToken}/files/${a.fileId}?inline=true`,
-      name: a.fileName,
-      mimeType: a.mimeType,
-    }))
+    // Support both fileId (legacy) and relativePath (preferred) in attachments
+    // Share API can look up files by either id (fileId or relativePath)
+    const attachments = parsed?.attachments as Array<{ fileId?: string; relativePath?: string; fileName: string; mimeType: string }> | undefined
+    const messageAttachments = attachments?.map(a => {
+      // Use relativePath as the unique identifier for the file
+      const relativePath = a.relativePath || a.fileId
+      const encodedPath = relativePath ? encodeURIComponent(relativePath) : relativePath
+      const baseUrl = `/api/share/${shareToken}/file?path=${encodedPath}`
+      return {
+        id: relativePath,
+        type: (a.mimeType?.startsWith('image/') ? 'image' : 'file') as 'image' | 'file',
+        url: `${baseUrl}&inline=true`,
+        downloadUrl: baseUrl,
+        name: a.fileName,
+        mimeType: a.mimeType,
+        // Don't set relativePath here - buildAttachmentUrl will use the pre-built url/downloadUrl instead
+        // relativePath is kept only for identification purposes
+      }
+    })
 
     // Determine message type based on attachments
-    // Only use image/file type when there's NO text content; otherwise keep text
-    // type so MessageItem renders both content and attachment buttons (in default branch)
+    // If original messageType is 'file' or 'image', use that type for proper file card rendering
+    // Otherwise, only use image/file type when there's NO text content
     let messageType: 'text' | 'image' | 'file' = 'text'
-    const hasTextContent = msg.content && msg.content.trim().length > 0
-    if (messageAttachments && messageAttachments.length > 0 && !hasTextContent) {
-      const firstAttachment = messageAttachments[0]
-      if (firstAttachment.type === 'image') {
-        messageType = 'image'
-      } else if (firstAttachment.type === 'file') {
-        messageType = 'file'
+    if (msg.messageType === 'image') {
+      messageType = 'image'
+    } else if (msg.messageType === 'file') {
+      messageType = 'file'
+    } else {
+      const hasTextContent = msg.content && msg.content.trim().length > 0
+      if (messageAttachments && messageAttachments.length > 0 && !hasTextContent) {
+        const firstAttachment = messageAttachments[0]
+        if (firstAttachment.type === 'image') {
+          messageType = 'image'
+        } else if (firstAttachment.type === 'file') {
+          messageType = 'file'
+        }
       }
     }
 

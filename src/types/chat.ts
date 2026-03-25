@@ -19,6 +19,7 @@ export interface MessageAttachment {
   type: 'image' | 'file';
   relativePath?: string;
   url?: string;
+  downloadUrl?: string;
   name: string;
   size?: number;
   mimeType?: string;

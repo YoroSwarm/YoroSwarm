@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { randomBytes } from 'crypto'
-import { mkdir, copyFile } from 'fs/promises'
+import { mkdir, copyFile, writeFile } from 'fs/promises'
 import path from 'path'
 import prisma from '@/lib/db'
 import { errorResponse, successResponse, unauthorizedResponse, notFoundResponse } from '@/lib/api/response'
@@ -84,8 +84,10 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       createdAt: a.createdAt.toISOString(),
     }))
 
-    // 3. Extract file IDs referenced in all messages' attachments (both user and lead)
+    // 3. Extract file info referenced in all messages' attachments (both user and lead)
+    // Support both fileId (legacy, from database) and relativePath (preferred, from filesystem)
     const referencedFileIds = new Set<string>()
+    const referencedRelativePaths = new Set<string>()
     for (const msg of messages) {
       if (msg.metadata) {
         try {
@@ -93,6 +95,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           if (meta.attachments && Array.isArray(meta.attachments)) {
             for (const att of meta.attachments) {
               if (att.fileId) referencedFileIds.add(att.fileId)
+              if (att.relativePath) referencedRelativePaths.add(att.relativePath)
             }
           }
         } catch { /* ignore parse errors */ }
@@ -105,7 +108,27 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     const snapshotDir = path.join(getSessionWorkspaceRoot(id), '.share-snapshots', shareToken)
     await mkdir(snapshotDir, { recursive: true })
 
-    const copiedFileIds: string[] = []
+    const workspaceRoot = getSessionWorkspaceRoot(id)
+    // Manifest: maps snapshotFilename to original file identifier (fileId or relativePath)
+    const snapshotManifest: Record<string, { type: 'fileId' | 'relativePath'; id: string; originalName: string }> = {}
+
+    // Copy files by relativePath (preferred, filesystem-based)
+    for (const relativePath of referencedRelativePaths) {
+      try {
+        const srcPath = path.join(workspaceRoot, relativePath)
+        const originalName = path.basename(relativePath)
+        // Use a hash of relativePath as prefix for uniqueness
+        const hashPrefix = Math.random().toString(36).substring(2, 10)
+        const snapshotFilename = `${hashPrefix}_${originalName}`
+        const destPath = path.join(snapshotDir, snapshotFilename)
+        await copyFile(srcPath, destPath)
+        snapshotManifest[snapshotFilename] = { type: 'relativePath', id: relativePath, originalName }
+      } catch (err) {
+        console.error(`[Share] Failed to copy file by relativePath ${relativePath}:`, err)
+      }
+    }
+
+    // Copy files by fileId (legacy, database-based) - only if not already copied via relativePath
     if (referencedFileIds.size > 0) {
       const files = await prisma.file.findMany({
         where: { id: { in: [...referencedFileIds] }, swarmSessionId: id },
@@ -113,19 +136,27 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       })
 
       for (const file of files) {
+        // Skip if already copied via relativePath (to avoid duplicates)
+        const fileRelativePath = file.path.startsWith('/') ? file.path.slice(1) : file.path
+        if (referencedRelativePaths.has(fileRelativePath)) continue
+
         try {
           // file.path can be absolute or relative - handle both cases
           const srcPath = path.isAbsolute(file.path)
             ? file.path
-            : path.join(getSessionWorkspaceRoot(id), file.path)
-          const destPath = path.join(snapshotDir, file.id + '_' + file.originalName)
+            : path.join(workspaceRoot, file.path)
+          const snapshotFilename = `${file.id}_${file.originalName}`
+          const destPath = path.join(snapshotDir, snapshotFilename)
           await copyFile(srcPath, destPath)
-          copiedFileIds.push(file.id)
+          snapshotManifest[snapshotFilename] = { type: 'fileId', id: file.id, originalName: file.originalName }
         } catch (err) {
           console.error(`[Share] Failed to copy file ${file.id}:`, err)
         }
       }
     }
+
+    // Save snapshot manifest as JSON file in snapshot directory
+    await writeFile(path.join(snapshotDir, '_manifest.json'), JSON.stringify(snapshotManifest, null, 2))
 
     // 5. Build snapshot metadata (Lead info + user info)
     const leadAgent = swarmSession.leadAgentId ? agentMap[swarmSession.leadAgentId] : null
@@ -135,6 +166,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       leadAvatar: user?.leadAvatarUrl || null,
       userName: user?.displayName || 'User',
       userAvatar: user?.avatarUrl || null,
+      // Store file manifest for snapshot file lookup
+      fileManifest: snapshotManifest,
     }
 
     // 6. Create share record
@@ -150,7 +183,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
           createdAt: m.createdAt.toISOString(),
         }))),
         snapshotActivities: JSON.stringify(enrichedActivities),
-        snapshotFileIds: JSON.stringify(copiedFileIds),
+        snapshotFileIds: JSON.stringify(Object.keys(snapshotManifest)),
         snapshotFilesPath: snapshotDir,
         snapshotMeta: JSON.stringify(snapshotMeta),
       },
@@ -165,7 +198,7 @@ export async function POST(_request: NextRequest, context: RouteContext) {
       shareUrl,
       createdAt: share.createdAt.toISOString(),
       messageCount: messages.length,
-      fileCount: copiedFileIds.length,
+      fileCount: Object.keys(snapshotManifest).length,
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

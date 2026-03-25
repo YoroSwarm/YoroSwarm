@@ -6,7 +6,7 @@ import { Readable } from 'stream'
 import prisma from '@/lib/db'
 import { inferMimeType } from '@/lib/server/session-workspace'
 
-type RouteContext = { params: Promise<{ token: string; fileId: string }> }
+type RouteContext = { params: Promise<{ token: string }> }
 
 function buildContentDisposition(filename: string, inline: boolean) {
   const encoded = encodeURIComponent(filename)
@@ -15,12 +15,19 @@ function buildContentDisposition(filename: string, inline: boolean) {
   return `${disposition}; filename="${safeFallback}"; filename*=UTF-8''${encoded}`
 }
 
-// GET — Serve file from share snapshot (no auth required)
+// GET — Serve file from share snapshot using path query parameter (no auth required)
 export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const { token, fileId } = await context.params
-    // Decode URL-encoded fileId (relativePath may contain slashes)
-    const decodedFileId = decodeURIComponent(fileId)
+    const { token } = await context.params
+    const url = new URL(request.url)
+    const filePath = url.searchParams.get('path')
+
+    if (!filePath) {
+      return new NextResponse('Missing path parameter', { status: 400 })
+    }
+
+    // Decode the file path
+    const decodedPath = decodeURIComponent(filePath)
 
     const share = await prisma.sessionShare.findUnique({
       where: { shareToken: token },
@@ -39,7 +46,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return new NextResponse('Snapshot files not available', { status: 404 })
     }
 
-    // Parse file manifest from snapshotMeta (new format)
+    // Parse file manifest from snapshotMeta
     // Manifest maps snapshotFilename -> { type, id, originalName }
     let manifest: Record<string, { type: 'fileId' | 'relativePath'; id: string; originalName: string }> = {}
     if (share.snapshotMeta) {
@@ -52,50 +59,46 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     let snapshotFilename: string | null = null
-    let originalName: string = decodedFileId
+    let originalName: string = decodedPath
 
-    // Strategy 1: If decodedFileId exactly matches a snapshotFilename in manifest, use it
-    if (manifest[decodedFileId]) {
-      snapshotFilename = decodedFileId
-      originalName = manifest[decodedFileId].originalName
-    } else {
-      // Strategy 2: Search manifest by id (for relativePath or fileId lookup)
-      for (const [snapName, entry] of Object.entries(manifest)) {
-        if (entry.id === decodedFileId) {
-          snapshotFilename = snapName
-          originalName = entry.originalName
-          break
-        }
+    // Search manifest by relativePath (id)
+    for (const [snapName, entry] of Object.entries(manifest)) {
+      if (entry.type === 'relativePath' && entry.id === decodedPath) {
+        snapshotFilename = snapName
+        originalName = entry.originalName
+        break
       }
     }
 
-    // Strategy 3: Fallback to legacy prefix matching ({fileId}_{originalName})
+    // If not found in manifest, try to find file by path pattern
     if (!snapshotFilename) {
-      const allowedFileIds: string[] = JSON.parse(share.snapshotFileIds)
-      if (!allowedFileIds.includes(decodedFileId)) {
-        return new NextResponse('File not found in this share', { status: 404 })
-      }
-
+      // Try to find a file that matches the decodedPath
       const dirEntries = await readdir(share.snapshotFilesPath)
-      const matchingFile = dirEntries.find(f => f.startsWith(decodedFileId + '_'))
-      if (!matchingFile) {
-        return new NextResponse('File not found in snapshot', { status: 404 })
+      // Look for files that contain the decodedPath basename
+      const pathBasename = path.basename(decodedPath)
+      const matchingFile = dirEntries.find(f => f.endsWith('_' + pathBasename))
+      if (matchingFile) {
+        snapshotFilename = matchingFile
+        originalName = pathBasename
       }
-      snapshotFilename = matchingFile
-      originalName = matchingFile.substring(decodedFileId.length + 1)
     }
 
-    const filePath = path.join(share.snapshotFilesPath, snapshotFilename)
-    const fileStat = await stat(filePath)
+    if (!snapshotFilename) {
+      return new NextResponse('File not found in snapshot', { status: 404 })
+    }
+
+    const fullPath = path.join(share.snapshotFilesPath, snapshotFilename)
+    const fileStat = await stat(fullPath)
     const mimeType = inferMimeType(originalName)
 
     // Check if inline display is requested
-    const url = new URL(request.url)
-    const inline = url.searchParams.get('inline') === 'true' ||
+    // If download=1 is specified, always use attachment regardless of file type
+    const download = url.searchParams.get('download') === '1'
+    const inline = !download && (url.searchParams.get('inline') === 'true' ||
       mimeType.startsWith('image/') ||
-      mimeType === 'application/pdf'
+      mimeType === 'application/pdf')
 
-    const stream = createReadStream(filePath)
+    const stream = createReadStream(fullPath)
     const webStream = Readable.toWeb(stream) as ReadableStream
 
     return new NextResponse(webStream, {

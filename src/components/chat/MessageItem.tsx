@@ -806,11 +806,14 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
   }
 }
 
-function buildAttachmentUrl(sessionId: string, relativePath?: string, url?: string, download = false): string {
+function buildAttachmentUrl(sessionId: string, relativePath?: string, url?: string, download = false, downloadUrl?: string): string {
   if (relativePath) {
     return filesApi.getPathDownloadUrl(sessionId, relativePath, download);
   }
   if (url) {
+    if (download && downloadUrl) {
+      return downloadUrl;
+    }
     return download ? `${url}?download=1` : url;
   }
   return '';
@@ -1055,7 +1058,7 @@ export const MessageItem = memo(function MessageItem({
             </div>
             {fileUrl && (
               <a
-                href={buildAttachmentUrl(message.sessionId, primaryAttachment?.relativePath, primaryAttachment?.url, true)}
+                href={buildAttachmentUrl(message.sessionId, primaryAttachment?.relativePath, primaryAttachment?.url, true, primaryAttachment?.downloadUrl)}
                 download={fileName as string}
                 className={cn("p-2 rounded transition-colors", isUser ? "hover:bg-primary-foreground/20 active:bg-primary-foreground/30 text-primary-foreground" : "hover:bg-accent active:bg-accent/80")}
                 title="下载文件"

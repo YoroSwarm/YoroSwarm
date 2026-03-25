@@ -401,6 +401,12 @@ export async function replyToUser(
   content: string,
   metadata?: Record<string, unknown>
 ) {
+  // Extract messageType from metadata if present
+  const messageType = metadata?.messageType as string | undefined
+  const cleanMetadata = messageType && metadata
+    ? Object.fromEntries(Object.entries(metadata).filter(([k]) => k !== 'messageType'))
+    : metadata
+
   const normalizedContent = content.trim().replace(/\s+/g, ' ')
   const conversation = await prisma.externalConversation.findFirst({
     where: { swarmSessionId, userId },
@@ -447,12 +453,13 @@ export async function replyToUser(
     userId,
     leadAgentId,
     content,
-    metadata,
+    messageType: messageType || 'text',
+    metadata: cleanMetadata,
   })
 
   // 广播到 WebSocket
-  const wsAttachments = metadata?.attachments as Array<{ relativePath: string; fileName: string; mimeType: string }> | undefined
-  const wsModel = metadata?.model as string | undefined
+  const wsAttachments = cleanMetadata?.attachments as Array<{ relativePath: string; fileName: string; mimeType: string }> | undefined
+  const wsModel = cleanMetadata?.model as string | undefined
   publishRealtimeMessage(
     {
       type: 'chat_message',
@@ -463,7 +470,7 @@ export async function replyToUser(
         sender_id: leadAgentId,
         sender_name: 'Lead',
         content,
-        message_type: 'text',
+        message_type: messageType || 'text',
         metadata: {
           ...(wsAttachments ? { attachments: wsAttachments } : {}),
           ...(wsModel ? { model: wsModel } : {}),
