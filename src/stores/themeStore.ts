@@ -109,4 +109,13 @@ if (typeof window !== 'undefined') {
   };
 
   mediaQuery.addEventListener('change', handleSystemThemeChange);
+
+  // HMR 环境下模块重新评估时移除旧监听器
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mod = module as any
+  if (mod.hot) {
+    mod.hot.dispose(() => {
+      mediaQuery.removeEventListener('change', handleSystemThemeChange);
+    });
+  }
 }

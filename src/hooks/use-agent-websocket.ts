@@ -155,7 +155,7 @@ export function useAgentWebSocket({
 
       case 'chat_message': {
         const msg = message.payload as AgentMessage;
-        setMessages(prev => [...prev, msg]);
+        setMessages(prev => [...prev.slice(-499), msg]);
         onChatMessage?.(msg);
         break;
       }

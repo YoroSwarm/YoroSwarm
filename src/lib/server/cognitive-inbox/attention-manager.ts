@@ -112,6 +112,9 @@ export async function startAttentionLoop(
     while (isRunning) {
       await new Promise((resolve) => setTimeout(resolve, checkIntervalMs))
 
+      // 检查是否已停止，避免在停止后执行一次
+      if (!isRunning) break
+
       // 如果正在处理消息，重置 idle 计数器
       if (isProcessing) {
         idleTickCounter = 0

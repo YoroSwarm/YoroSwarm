@@ -13,6 +13,7 @@ import {
   getCognitiveRuntime,
   destroyRuntime,
 } from './cognitive-inbox'
+import { stopScheduler } from './parallel-scheduler'
 import {
   initCognitiveLead,
   cleanupCognitiveLead,
@@ -74,6 +75,14 @@ export async function pauseSwarmSession(swarmSessionId: string): Promise<{
     console.log(`[Lifecycle] Cleared file read cache for session ${swarmSessionId}`)
   } catch (err) {
     console.error(`[Lifecycle] Error clearing file read cache:`, err)
+  }
+
+  // 1.7. Stop the task scheduler (clears timers and scheduler state)
+  try {
+    await stopScheduler(swarmSessionId)
+    console.log(`[Lifecycle] Stopped scheduler for session ${swarmSessionId}`)
+  } catch (err) {
+    console.error(`[Lifecycle] Error stopping scheduler:`, err)
   }
 
   // 2. Cleanup Lead processor (stops attention loop)
@@ -652,6 +661,8 @@ export function registerGracefulShutdown(): void {
               if (agent.id === session.leadAgentId) continue
               cleanupCognitiveTeammate(session.id, agent.id)
             }
+            // Stop the task scheduler to clear any pending timers
+            await stopScheduler(session.id)
           } catch (err) {
             console.error(`[Lifecycle] Error aborting session ${session.id}:`, err)
           }

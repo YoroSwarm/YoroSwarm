@@ -66,6 +66,9 @@ interface RunningTaskInfo {
 // 内存中的调度器状态（按session管理）
 const schedulerStates = new Map<string, SchedulerState>()
 
+// 跟踪活跃的 timers 以便清理
+const schedulerTimers = new Map<string, NodeJS.Timeout[]>()
+
 /**
  * 初始化调度器
  */
@@ -73,6 +76,13 @@ export async function initScheduler(
   swarmSessionId: string,
   config: Partial<SchedulerConfig> = {}
 ): Promise<SchedulerState> {
+  // 清理已存在的状态（防止重复初始化时的内存泄漏）
+  const existingTimers = schedulerTimers.get(swarmSessionId)
+  if (existingTimers) {
+    existingTimers.forEach(t => clearTimeout(t))
+    schedulerTimers.delete(swarmSessionId)
+  }
+
   const state: SchedulerState = {
     swarmSessionId,
     isRunning: false,
@@ -92,6 +102,7 @@ export async function initScheduler(
   }
 
   schedulerStates.set(swarmSessionId, state)
+  schedulerTimers.set(swarmSessionId, [])
   return state
 }
 
@@ -244,6 +255,17 @@ export async function stopScheduler(swarmSessionId: string): Promise<void> {
   if (!state) return
 
   state.isRunning = false
+
+  // 清理所有待执行的 timers
+  const timers = schedulerTimers.get(swarmSessionId)
+  if (timers) {
+    timers.forEach(t => clearTimeout(t))
+    schedulerTimers.delete(swarmSessionId)
+  }
+
+  // 清理 schedulerStates 中的状态
+  schedulerStates.delete(swarmSessionId)
+
   console.log(`[Scheduler] Stopped for session ${swarmSessionId}`)
 
   publishRealtimeMessage(
@@ -303,7 +325,8 @@ async function scheduleNextBatch(swarmSessionId: string): Promise<void> {
 
       // 如果没有可用槽位，稍后重试
       if (state.isRunning) {
-        setTimeout(() => scheduleNextBatch(swarmSessionId), 1000)
+        const timer = setTimeout(() => scheduleNextBatch(swarmSessionId), 1000)
+        schedulerTimers.get(swarmSessionId)?.push(timer)
       }
       return
     }
@@ -318,12 +341,14 @@ async function scheduleNextBatch(swarmSessionId: string): Promise<void> {
 
     // 继续调度
     if (state.isRunning) {
-      setTimeout(() => scheduleNextBatch(swarmSessionId), 500)
+      const timer = setTimeout(() => scheduleNextBatch(swarmSessionId), 500)
+      schedulerTimers.get(swarmSessionId)?.push(timer)
     }
   } catch (error) {
     console.error(`[Scheduler] Error scheduling batch:`, error)
     if (state?.isRunning) {
-      setTimeout(() => scheduleNextBatch(swarmSessionId), 2000)
+      const timer = setTimeout(() => scheduleNextBatch(swarmSessionId), 2000)
+      schedulerTimers.get(swarmSessionId)?.push(timer)
     }
   }
 }
@@ -456,9 +481,10 @@ async function handleTaskCompletion(
       console.log(`[Scheduler] Retrying task ${taskId} (attempt ${retryCount + 1}/${state.config.maxRetries})`)
 
       // 延迟后重试
-      setTimeout(() => {
+      const timer = setTimeout(() => {
         retryTask(swarmSessionId, taskId, retryCount + 1)
       }, state.config.retryDelayMs)
+      schedulerTimers.get(swarmSessionId)?.push(timer)
     } else {
       // 标记为失败
       await transitionTaskStatus(taskId, 'FAILED', task.assigneeId || '')
@@ -466,7 +492,8 @@ async function handleTaskCompletion(
   }
 
   // 触发下一轮调度
-  setTimeout(() => scheduleNextBatch(swarmSessionId), 100)
+  const timer = setTimeout(() => scheduleNextBatch(swarmSessionId), 100)
+  schedulerTimers.get(swarmSessionId)?.push(timer)
 }
 
 /**
@@ -599,9 +626,10 @@ export async function triggerTaskExecution(
     return
   }
 
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     void scheduleNextBatch(swarmSessionId)
   }, 0)
+  schedulerTimers.get(swarmSessionId)?.push(timer)
 }
 
 /**
