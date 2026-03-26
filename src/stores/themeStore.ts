@@ -97,7 +97,8 @@ export const useThemeStore = create<ThemeStore>()(
 );
 
 // 监听系统主题变化
-if (typeof window !== 'undefined') {
+// 使用模块级变量确保监听器只在首次加载时添加，避免 HMR 重复注册
+if (typeof window !== 'undefined' && !window.__themeMediaQueryListenerAttached) {
   const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
   const handleSystemThemeChange = () => {
     const store = useThemeStore.getState();
@@ -109,13 +110,5 @@ if (typeof window !== 'undefined') {
   };
 
   mediaQuery.addEventListener('change', handleSystemThemeChange);
-
-  // HMR 环境下模块重新评估时移除旧监听器
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const mod = module as any
-  if (mod.hot) {
-    mod.hot.dispose(() => {
-      mediaQuery.removeEventListener('change', handleSystemThemeChange);
-    });
-  }
+  window.__themeMediaQueryListenerAttached = true;
 }

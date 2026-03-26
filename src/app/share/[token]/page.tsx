@@ -69,7 +69,8 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
     const messageAttachments = attachments?.map(a => {
       // Use relativePath as the unique identifier for the file
       const relativePath = a.relativePath || a.fileId
-      const encodedPath = relativePath ? encodeURIComponent(relativePath) : relativePath
+      if (!relativePath) return null
+      const encodedPath = encodeURIComponent(relativePath)
       const baseUrl = `/api/share/${shareToken}/file?path=${encodedPath}`
       return {
         id: relativePath,
@@ -78,10 +79,8 @@ function convertToMessages(data: ShareData, shareToken: string): Message[] {
         downloadUrl: baseUrl,
         name: a.fileName,
         mimeType: a.mimeType,
-        // Don't set relativePath here - buildAttachmentUrl will use the pre-built url/downloadUrl instead
-        // relativePath is kept only for identification purposes
       }
-    })
+    }).filter((a): a is NonNullable<typeof a> => a !== null)
 
     // Determine message type based on attachments
     // If original messageType is 'file' or 'image', use that type for proper file card rendering
