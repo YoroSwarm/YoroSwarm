@@ -398,7 +398,7 @@ function SessionItem({
       <DropdownMenu open={showMenu} onOpenChange={setShowMenu}>
         <DropdownMenuTrigger asChild>
           <button
-            className="p-0.5 hover:bg-accent rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 absolute right-0.5 top-1/2 -translate-y-1/2"
+            className="p-0.5 hover:bg-accent rounded transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 absolute right-2 top-1/2 -translate-y-1/2"
             onClick={(e) => e.stopPropagation()}
           >
             <MoreVertical className="w-3 h-3 text-muted-foreground" />
