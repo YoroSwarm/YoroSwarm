@@ -9,7 +9,6 @@ const nextConfig: NextConfig = {
   distDir: 'dist',
   turbopack: {
     root: rootDir,
-    excludeFiles: ['workspaces/**', 'session-workspaces/**', 'skills/_registry/**', 'skills/users/**'],
   },
   images: {
     unoptimized: true,
