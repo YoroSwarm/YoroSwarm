@@ -31,6 +31,7 @@ model User {
   backgroundImage String?  @map("background_image")
   timezone       String?   @map("timezone")        // IANA timezone, e.g. "Asia/Shanghai"; null = server local
   envVarsJson    String?   @map("env_vars_json")   // JSON: { "KEY": "value", ... }
+  autoArchiveDays Int      @default(7)             @map("auto_archive_days")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
   lastLogin      DateTime? @map("last_login")
@@ -102,6 +103,7 @@ model SwarmSession {
   updatedAt   DateTime           @updatedAt @map("updated_at")
   archivedAt  DateTime?          @map("archived_at")
   pinnedAt    DateTime?          @map("pinned_at")
+  lastActiveAt DateTime?         @map("last_active_at")
 
   user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   workspace             Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

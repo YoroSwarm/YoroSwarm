@@ -74,6 +74,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
   const isLoading = useSessionsStore((s) => s.isLoading);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
+  const [showArchivedSessions, setShowArchivedSessions] = useState<Set<string>>(new Set());
   const [archivedSessionsOpen, setArchivedSessionsOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -105,11 +106,27 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
   };
 
   const sessionsInWorkspace = useCallback(
-    (workspaceId: string) => {
-      return sessions.filter((s) => s.workspaceId === workspaceId && s.status !== 'archived');
+    (workspaceId: string, includeArchived = false) => {
+      return sessions.filter((s) => {
+        if (s.workspaceId !== workspaceId) return false;
+        if (includeArchived) return s.status === 'archived';
+        return s.status !== 'archived';
+      });
     },
     [sessions]
   );
+
+  const toggleShowArchived = (workspaceId: string) => {
+    setShowArchivedSessions((prev) => {
+      const next = new Set(prev);
+      if (next.has(workspaceId)) {
+        next.delete(workspaceId);
+      } else {
+        next.add(workspaceId);
+      }
+      return next;
+    });
+  };
 
   const handleDeleteWorkspace = async () => {
     if (!deleteWorkspaceId) return;
@@ -190,7 +207,9 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
               {workspaces.filter((w) => !w.archivedAt).map((workspace) => {
                 const isExpanded = expandedWorkspaces.has(workspace.id);
                 const isActive = currentWorkspaceId === workspace.id;
-                const wsSessions = sessionsInWorkspace(workspace.id);
+                const wsActiveSessions = sessionsInWorkspace(workspace.id, false);
+                const wsArchivedSessions = sessionsInWorkspace(workspace.id, true);
+                const showArchived = showArchivedSessions.has(workspace.id);
 
                 return (
                   <motion.div
@@ -316,13 +335,13 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                           transition={{ duration: 0.2 }}
                           className="pl-3 space-y-0.5 overflow-hidden"
                         >
-                          {wsSessions.length === 0 && !isLoading && (
+                          {wsActiveSessions.length === 0 && !isLoading && wsArchivedSessions.length === 0 && (
                             <div className="text-center text-muted-foreground text-xs py-2">
                               无会话
                             </div>
                           )}
 
-                          {wsSessions.map((session) => (
+                          {wsActiveSessions.map((session) => (
                             <motion.div
                               key={session.id}
                               layout
@@ -343,6 +362,47 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                               />
                             </motion.div>
                           ))}
+
+                          {/* Archived sessions list */}
+                          <AnimatePresence>
+                            {showArchived && wsArchivedSessions.map((session) => (
+                              <motion.div
+                                key={session.id}
+                                layout
+                                initial={{ opacity: 0, x: -8 }}
+                                animate={{ opacity: 1, x: 0 }}
+                                exit={{ opacity: 0, x: -8 }}
+                                transition={{ duration: 0.15, ease: 'easeOut' }}
+                              >
+                                <SessionItem
+                                  session={session}
+                                  currentSessionId={currentSessionId}
+                                  isArchived
+                                  onClick={() => router.push(`/chat?sessionId=${session.id}`)}
+                                  onShare={() => {
+                                    setShareSessionId(session.id);
+                                    setShareDialogOpen(true);
+                                  }}
+                                  onDelete={() => onDeleteSession(session.id, currentSessionId === session.id)}
+                                />
+                              </motion.div>
+                            ))}
+                          </AnimatePresence>
+
+                          {/* Archived sessions toggle - below the list */}
+                          {wsArchivedSessions.length > 0 && (
+                            <button
+                              onClick={() => toggleShowArchived(workspace.id)}
+                              className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+                            >
+                              <Archive className="w-3 h-3" />
+                              {showArchived ? (
+                                <>隐藏已归档会话</>
+                              ) : (
+                                <>{wsArchivedSessions.length} 个已归档会话...</>
+                              )}
+                            </button>
+                          )}
                         </motion.div>
                       ) : null}
                     </AnimatePresence>
@@ -541,18 +601,22 @@ function SessionItem({
   onClick,
   onShare,
   onDelete,
+  isArchived = false,
 }: {
   session: Session;
   currentSessionId: string | null;
   onClick: () => void;
   onShare: () => void;
   onDelete: () => void;
+  isArchived?: boolean;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const pinSession = useSessionsStore((s) => s.pinSession);
   const unpinSession = useSessionsStore((s) => s.unpinSession);
   const pauseSession = useSessionsStore((s) => s.pauseSession);
   const resumeSession = useSessionsStore((s) => s.resumeSession);
+  const archiveSession = useSessionsStore((s) => s.archiveSession);
+  const unarchiveSession = useSessionsStore((s) => s.unarchiveSession);
 
   const isActive = currentSessionId === session.id;
 
@@ -577,6 +641,9 @@ function SessionItem({
           )}
           {session.status === 'paused' && (
             <Pause className="w-3 h-3 shrink-0 text-amber-500" />
+          )}
+          {isArchived && (
+            <Archive className="w-3 h-3 shrink-0 text-muted-foreground" />
           )}
           <span className={cn(
             'font-medium text-xs truncate',
@@ -630,6 +697,17 @@ function SessionItem({
             <Share className="w-4 h-4 mr-2" />
             创建分享
           </DropdownMenuItem>
+          {isArchived ? (
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void unarchiveSession(session.id); }}>
+              <ArchiveRestore className="w-4 h-4 mr-2" />
+              取消归档
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void archiveSession(session.id); }}>
+              <Archive className="w-4 h-4 mr-2" />
+              归档
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             variant="destructive"
             onClick={(e) => {

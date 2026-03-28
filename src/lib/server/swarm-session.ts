@@ -63,6 +63,7 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
         goal: input.goal || null,
         mode: input.mode || 'general_office',
         status: 'ACTIVE',
+        lastActiveAt: new Date(),
       },
     })
 

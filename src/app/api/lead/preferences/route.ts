@@ -17,6 +17,7 @@ export async function GET(_request: NextRequest) {
         glassEffect: true,
         backgroundImage: true,
         timezone: true,
+        autoArchiveDays: true,
       },
     });
 
@@ -32,6 +33,7 @@ export async function GET(_request: NextRequest) {
       glassEffect: Boolean(user.glassEffect),
       backgroundImage: user.backgroundImage || null,
       timezone: user.timezone || null,
+      autoArchiveDays: user.autoArchiveDays ?? 7,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {
@@ -48,7 +50,7 @@ export async function PUT(request: NextRequest) {
     const payload = await requireTokenPayload();
     const body = await request.json();
 
-    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage } = body;
+    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage, autoArchiveDays } = body;
 
     // console.log('[API/LeadPreferences] PUT 收到:', {
     //   userId: payload.userId,
@@ -83,6 +85,10 @@ export async function PUT(request: NextRequest) {
       return errorResponse('Invalid backgroundImage', 400);
     }
 
+    if (autoArchiveDays !== undefined && (typeof autoArchiveDays !== 'number' || autoArchiveDays < 0 || autoArchiveDays > 365)) {
+      return errorResponse('Invalid autoArchiveDays: must be a number between 0 and 365', 400);
+    }
+
     // Validate IANA timezone if provided
     if (typeof timezone === 'string') {
       try {
@@ -92,7 +98,7 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const data: Record<string, string | null | boolean> = {}
+    const data: Record<string, string | null | boolean | number> = {}
     if (agentsMd !== undefined) data.leadAgentsMd = agentsMd
     if (soulMd !== undefined) data.leadSoulMd = soulMd
     if (timezone !== undefined) data.timezone = timezone
@@ -100,6 +106,7 @@ export async function PUT(request: NextRequest) {
     if (leadAvatarUrl !== undefined) data.leadAvatarUrl = leadAvatarUrl
     if (glassEffect !== undefined) data.glassEffect = glassEffect
     if (backgroundImage !== undefined) data.backgroundImage = backgroundImage
+    if (autoArchiveDays !== undefined) data.autoArchiveDays = autoArchiveDays
 
     const user = await prisma.user.update({
       where: { id: payload.userId },
@@ -112,6 +119,7 @@ export async function PUT(request: NextRequest) {
         glassEffect: true,
         backgroundImage: true,
         timezone: true,
+        autoArchiveDays: true,
       },
     });
 
@@ -133,6 +141,7 @@ export async function PUT(request: NextRequest) {
       glassEffect: Boolean(user.glassEffect),
       backgroundImage: user.backgroundImage || null,
       timezone: user.timezone || null,
+      autoArchiveDays: user.autoArchiveDays ?? 7,
     });
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

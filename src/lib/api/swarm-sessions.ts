@@ -71,6 +71,7 @@ export interface SwarmSessionResponse {
   updated_at: string;
   archived_at?: string;
   pinned_at?: string;
+  last_active_at?: string;
   last_message?: ExternalMessageResponse;
   agents: SwarmSessionAgentResponse[];
   tasks: SwarmSessionTaskResponse[];
@@ -221,7 +222,7 @@ export const swarmSessionsApi = {
     return api.post<{ success: boolean; output: string; error?: string }>(`/swarm-sessions/${sessionId}/venv/packages/action`, { action, packages });
   },
 
-  updateSession: async (sessionId: string, data: Partial<CreateSwarmSessionRequest> & { status?: string; isPinned?: boolean }): Promise<SwarmSessionResponse> => {
+  updateSession: async (sessionId: string, data: Partial<CreateSwarmSessionRequest> & { status?: string; isPinned?: boolean; lastActiveAt?: string }): Promise<SwarmSessionResponse> => {
     return api.patch<SwarmSessionResponse>(`/swarm-sessions/${sessionId}`, data);
   },
 

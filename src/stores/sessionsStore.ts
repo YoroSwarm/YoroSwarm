@@ -58,6 +58,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     unreadCount: 0,
     createdAt: session.created_at,
     updatedAt: session.updated_at,
+    lastActiveAt: session.last_active_at,
     status: session.status === 'archived' ? 'archived' : ['PAUSED', 'paused'].includes(session.status) ? 'paused' : 'active',
     isPinned: !!session.pinned_at,
   };
@@ -142,7 +143,7 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
   },
 
   unarchiveSession: async (sessionId: string) => {
-    const updated = await swarmSessionsApi.updateSession(sessionId, { status: 'active' });
+    const updated = await swarmSessionsApi.updateSession(sessionId, { status: 'active', lastActiveAt: new Date().toISOString() });
     const converted = convertSession(updated);
     set((state) => ({
       sessions: state.sessions.map((s) => (s.id === sessionId ? converted : s)),

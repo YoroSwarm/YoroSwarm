@@ -67,6 +67,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : null,
     });
 
+    // 1.5. 更新会话的最后活跃时间
+    await prisma.swarmSession.update({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    });
+
     const serialized = serializeExternalMessage(message);
 
     // Fire-and-forget: auto-rename session after user sends message

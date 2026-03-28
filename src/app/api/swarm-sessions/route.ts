@@ -8,6 +8,34 @@ import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
 export async function GET() {
   try {
     const payload = await requireTokenPayload();
+
+    // Get user's auto-archive setting
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { autoArchiveDays: true },
+    });
+    const autoArchiveDays = user?.autoArchiveDays ?? 7;
+
+    // Auto-archive sessions that haven't been active for more than autoArchiveDays
+    if (autoArchiveDays > 0) {
+      const cutoffDate = new Date();
+      cutoffDate.setDate(cutoffDate.getDate() - autoArchiveDays);
+      await prisma.swarmSession.updateMany({
+        where: {
+          userId: payload.userId,
+          archivedAt: null,
+          status: 'ACTIVE',
+          lastActiveAt: {
+            lt: cutoffDate,
+          },
+        },
+        data: {
+          archivedAt: new Date(),
+          status: 'ARCHIVED',
+        },
+      });
+    }
+
     const sessions = await prisma.swarmSession.findMany({
       where: { userId: payload.userId },
       include: {
@@ -24,7 +52,7 @@ export async function GET() {
           },
         },
       },
-      orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { updatedAt: 'desc' }],
+      orderBy: [{ pinnedAt: { sort: 'desc', nulls: 'last' } }, { lastActiveAt: { sort: 'desc', nulls: 'last' } }],
     });
 
     return successResponse({

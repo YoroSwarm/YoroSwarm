@@ -45,6 +45,7 @@ export default function SettingsPage() {
     leadAvatarUrl,
     glassEffect,
     backgroundImage,
+    autoArchiveDays,
     loadPreferences,
     savePreferences,
     setAgentsMd,
@@ -54,6 +55,7 @@ export default function SettingsPage() {
     setLeadAvatarUrl,
     setGlassEffect,
     setBackgroundImage,
+    setAutoArchiveDays,
     resetToDefaults,
     getDisplayAgentsMd,
     getDisplaySoulMd,
@@ -80,6 +82,7 @@ export default function SettingsPage() {
     leadAvatarUrl,
     glassEffect,
     backgroundImage,
+    autoArchiveDays,
   });
 
   useEffect(() => {
@@ -448,6 +451,34 @@ export default function SettingsPage() {
                       当前选择: {timezone} — 示例: {new Date().toLocaleString('zh-CN', { timeZone: timezone, hour12: false })}
                     </p>
                   )}
+                </div>
+
+                <Separator />
+
+                <div>
+                  <p className="font-medium">自动归档会话</p>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    当会话的最后活跃时间超过此天数时，将自动归档。设为 0 则禁用自动归档。
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={365}
+                      value={autoArchiveDays}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value, 10);
+                        if (!isNaN(value) && value >= 0 && value <= 365) {
+                          setAutoArchiveDays(value);
+                        }
+                      }}
+                      className="w-24"
+                    />
+                    <span className="text-sm text-muted-foreground">天</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    当前设置: {autoArchiveDays === 0 ? '禁用自动归档' : `超过 ${autoArchiveDays} 天未活跃的会话将自动归档`}
+                  </p>
                 </div>
               </CardContent>
             </Card>

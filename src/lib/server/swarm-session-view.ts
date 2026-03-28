@@ -43,6 +43,7 @@ export function serializeSwarmSession(
     updatedAt: Date;
     archivedAt: Date | null;
     pinnedAt: Date | null;
+    lastActiveAt: Date | null;
   } & {
     agents?: Array<{
       id: string;
@@ -101,6 +102,7 @@ export function serializeSwarmSession(
     updated_at: session.updatedAt.toISOString(),
     archived_at: session.archivedAt?.toISOString(),
     pinned_at: session.pinnedAt?.toISOString(),
+    last_active_at: session.lastActiveAt?.toISOString(),
     last_message: lastMessage ? serializeExternalMessage(lastMessage) : undefined,
     agents: (session.agents || []).map((agent) => ({
       id: agent.id,

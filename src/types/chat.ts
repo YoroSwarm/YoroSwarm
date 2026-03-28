@@ -81,6 +81,7 @@ export interface Session {
   unreadCount: number;
   createdAt: string;
   updatedAt: string;
+  lastActiveAt?: string;
   status: 'active' | 'archived' | 'deleted' | 'paused';
   isPinned?: boolean;
   tags?: string[];

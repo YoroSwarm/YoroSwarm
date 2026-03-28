@@ -19,6 +19,7 @@ interface LeadPreferencesState {
   glassEffect: boolean;
   backgroundImage: string | null;
   timezone: string | null;
+  autoArchiveDays: number;
   isCustomized: boolean;
   isLoading: boolean;
   lastUpdated: string | null;
@@ -31,6 +32,7 @@ interface LeadPreferencesState {
   setGlassEffect: (value: boolean) => void;
   setBackgroundImage: (value: string | null) => void;
   setTimezone: (tz: string | null) => void;
+  setAutoArchiveDays: (days: number) => void;
   resetToDefaults: () => void;
   // 用于 UI 显示的默认值
   getDisplayAgentsMd: () => string;
@@ -45,6 +47,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   glassEffect: false,
   backgroundImage: null,
   timezone: null,
+  autoArchiveDays: 7,
   isCustomized: false,
   isLoading: false,
   lastUpdated: null,
@@ -60,6 +63,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
         glassEffect: boolean;
         backgroundImage: string | null;
         timezone: string | null;
+        autoArchiveDays: number;
       }>('/lead/preferences');
 
       console.log('[LeadPreferencesStore] 加载配置:', {
@@ -75,6 +79,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
         glassEffect: Boolean(response.glassEffect),
         backgroundImage: response.backgroundImage,
         timezone: response.timezone,
+        autoArchiveDays: response.autoArchiveDays ?? 7,
         isCustomized: !isUsingDefaults(response.agentsMd, response.soulMd),
         isLoading: false,
       });
@@ -85,7 +90,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
   },
 
   savePreferences: async () => {
-    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage } = get();
+    const { agentsMd, soulMd, timezone, leadNickname, leadAvatarUrl, glassEffect, backgroundImage, autoArchiveDays } = get();
     console.log('[LeadPreferencesStore] 保存配置:', {
       agentsMd: agentsMd?.substring(0, 50) || null,
       soulMd: soulMd?.substring(0, 50) || null,
@@ -105,6 +110,7 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
         leadAvatarUrl,
         glassEffect,
         backgroundImage,
+        autoArchiveDays,
       });
       set({
         isLoading: false,
@@ -157,6 +163,10 @@ export const useLeadPreferencesStore = create<LeadPreferencesState>()((set, get)
 
   setBackgroundImage: (value) => {
     set({ backgroundImage: value });
+  },
+
+  setAutoArchiveDays: (days) => {
+    set({ autoArchiveDays: days });
   },
 
   resetToDefaults: () => {
