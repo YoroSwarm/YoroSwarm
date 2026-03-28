@@ -10,10 +10,12 @@ import {
   MoreVertical,
   Trash2,
   Loader2,
+  Pause,
+  AlertCircle,
+  Pin,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   DropdownMenu,
@@ -65,7 +67,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
   const [renameWorkspaceDescription, setRenameWorkspaceDescription] = useState<string | null>(null);
   const [deleteWorkspaceId, setDeleteWorkspaceId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
+  const { Dialog: ConfirmDialogComponent } = useConfirmDialog();
 
   // Load workspaces on mount
   useEffect(() => {
@@ -369,28 +371,24 @@ function SessionItem({
     >
       <div className="flex-1 min-w-0 pr-4">
         <div className="flex items-center gap-1">
+          {session.isPinned && (
+            <Pin className="w-3 h-3 shrink-0 text-muted-foreground fill-current" />
+          )}
+          {session.venvError && !session.initializing && (
+            <AlertCircle className="w-3 h-3 shrink-0 text-red-500" />
+          )}
+          {session.initializing && (
+            <Loader2 className="w-3 h-3 shrink-0 text-blue-500 animate-spin" />
+          )}
+          {session.status === 'paused' && (
+            <Pause className="w-3 h-3 shrink-0 text-amber-500" />
+          )}
           <span className={cn(
             'font-medium text-xs truncate',
             isActive ? 'text-foreground' : 'text-muted-foreground'
           )}>
-            {session.isPinned && <span className="mr-0.5">📌</span>}
             {session.title || '未命名会话'}
           </span>
-          {session.status === 'paused' && (
-            <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 h-3 text-amber-600 border-amber-300 bg-amber-50 dark:text-amber-400 dark:border-amber-700 dark:bg-amber-950">
-              暂停
-            </Badge>
-          )}
-          {session.initializing && (
-            <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 h-3 text-blue-600 border-blue-300 bg-blue-50 dark:text-blue-400 dark:border-blue-700 dark:bg-blue-950 animate-pulse">
-              初始化中
-            </Badge>
-          )}
-          {session.venvError && !session.initializing && (
-            <Badge variant="outline" className="shrink-0 text-[9px] px-1 py-0 h-3 text-red-600 border-red-300 bg-red-50 dark:text-red-400 dark:border-red-700 dark:bg-red-950">
-              异常
-            </Badge>
-          )}
         </div>
       </div>
 
