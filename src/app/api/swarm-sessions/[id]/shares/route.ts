@@ -105,10 +105,8 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     // 4. Copy referenced files to snapshot directory
     const shareToken = randomBytes(16).toString('hex')
     const shareId = randomBytes(8).toString('hex')
-    const snapshotDir = path.join(getSessionWorkspaceRoot(id), '.share-snapshots', shareToken)
-    await mkdir(snapshotDir, { recursive: true })
-
-    const workspaceRoot = getSessionWorkspaceRoot(id)
+    const workspaceRoot = await getSessionWorkspaceRoot(id)
+    const snapshotDir = path.join(workspaceRoot, '.share-snapshots', shareToken)
     // Manifest: maps snapshotFilename to original file identifier (fileId or relativePath)
     const snapshotManifest: Record<string, { type: 'fileId' | 'relativePath'; id: string; originalName: string }> = {}
 

@@ -36,20 +36,20 @@ export function useSessions(options: UseSessionsOptions = {}) {
   const setSessions = useSessionsStore((state) => state.setSessions);
   const updateSessionParticipant = useSessionsStore((state) => state.updateSessionParticipant);
 
-  const createSessionWithStorage = useCallback(async (input?: string | CreateSessionInput) => {
+  const createSessionWithStorage = useCallback(async (workspaceId: string, input?: string | CreateSessionInput) => {
     const payload = typeof input === 'string'
       ? { title: input }
       : input || {};
 
-    const created = await createSession(payload);
+    const created = await createSession(workspaceId, payload);
     storage.set(CURRENT_SESSION_STORAGE_KEY, created.id);
     return created;
   }, [createSession]);
 
-  const ensureLeadSession = useCallback(async ({ leadAgentId, leadAgentName }: { leadAgentId: string; leadAgentName?: string }) => {
+  const ensureLeadSession = useCallback(async ({ workspaceId, leadAgentId, leadAgentName }: { workspaceId: string; leadAgentId: string; leadAgentName?: string }) => {
     const existing = sessions.find((session) => session.participants.some((participant) => participant.id === leadAgentId));
     if (existing) return existing;
-    return createSessionWithStorage(leadAgentName ? `${leadAgentName} 会话` : `${appConfig.name} 会话`);
+    return createSessionWithStorage(workspaceId, leadAgentName ? `${leadAgentName} 会话` : `${appConfig.name} 会话`);
   }, [createSessionWithStorage, sessions]);
 
   const openDirectSessionForAgent = useCallback(async (_agentId: string, _agentName?: string) => {

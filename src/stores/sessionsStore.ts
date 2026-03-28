@@ -33,6 +33,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     id: session.id,
     title: session.title,
     description: session.goal,
+    workspaceId: session.workspace_id,
     participants: dedupeParticipants(session.agents.map((agent) => ({
       id: agent.id,
       name: normalizeParticipantName(agent.name, agent.role),
@@ -71,7 +72,7 @@ interface SessionsState {
 
 interface SessionsActions {
   loadSessions: () => Promise<void>;
-  createSession: (input?: { title?: string; goal?: string; description?: string }) => Promise<Session>;
+  createSession: (workspaceId: string, input?: { title?: string; goal?: string; description?: string }) => Promise<Session>;
   deleteSession: (sessionId: string) => Promise<void>;
   archiveSession: (sessionId: string) => Promise<void>;
   unarchiveSession: (sessionId: string) => Promise<void>;
@@ -105,8 +106,9 @@ export const useSessionsStore = create<SessionsState & SessionsActions>((set) =>
     }
   },
 
-  createSession: async (input) => {
+  createSession: async (workspaceId, input) => {
     const created = await swarmSessionsApi.createSession({
+      workspaceId,
       title: input?.title,
       goal: input?.goal,
       description: input?.description,

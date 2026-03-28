@@ -65,6 +65,7 @@ export interface SwarmSessionResponse {
   goal?: string;
   status: string;
   mode: string;
+  workspace_id: string;
   lead_agent_id?: string;
   created_at: string;
   updated_at: string;
@@ -144,6 +145,7 @@ export interface SwarmSessionMonitorResponse {
 }
 
 export interface CreateSwarmSessionRequest {
+  workspaceId: string;
   title?: string;
   goal?: string;
   mode?: string;

@@ -62,8 +62,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const workspaceId = typeof body.workspaceId === 'string' ? body.workspaceId : null
+    if (!workspaceId) {
+      return errorResponse('workspaceId is required', 400)
+    }
+
     const created = await createSwarmSession({
       userId: payload.userId,
+      workspaceId,
       title,
       goal: typeof body.goal === 'string' ? body.goal.trim() : typeof body.description === 'string' ? body.description.trim() : null,
       mode: typeof body.mode === 'string' ? body.mode : 'general_office',

@@ -20,7 +20,7 @@ export async function GET(
     const _payload = await requireTokenPayload()
     const { id: sessionId } = await params
 
-    const venvBinPath = getSessionVenvBinPath(sessionId)
+    const venvBinPath = await getSessionVenvBinPath(sessionId)
     const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
 
     try {

@@ -20,7 +20,7 @@ import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
-import { useSidebar, useSessionsStore } from '@/stores';
+import { useSidebar, useSessionsStore, useWorkspacesStore } from '@/stores';
 import { useLeadPreferencesStore } from '@/stores/leadPreferencesStore';
 import type { ChatMessagePayload, AgentStatusUpdate, ExecutionStatusUpdate, SessionStatusUpdate } from '@/types/websocket';
 import { storage } from '@/utils/storage';
@@ -393,10 +393,15 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   }, [stats?.lead_self_todos]);
 
   const handleCreateSession = async () => {
+    const currentWorkspaceId = useWorkspacesStore.getState().currentWorkspaceId;
+    if (!currentWorkspaceId) {
+      setCreateError('请先选择一个工作空间');
+      return;
+    }
     try {
       setIsCreatingSession(true);
       setCreateError(null);
-      const created = await createSession();
+      const created = await createSession(currentWorkspaceId);
       setCurrentSessionId(created.id);
       router.push(`/chat?sessionId=${created.id}`);
       return created;
@@ -566,6 +571,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
                       if (!targetSessionId) {
                         const created = await handleCreateSession();
+                        if (!created) return; // No workspace selected
                         targetSessionId = created.id;
                       }
 

@@ -4,6 +4,12 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Theme, ThemeState } from '@/types/index';
 
+declare global {
+  interface Window {
+    __themeMediaQueryListenerAttached?: boolean;
+  }
+}
+
 interface ThemeActions {
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;

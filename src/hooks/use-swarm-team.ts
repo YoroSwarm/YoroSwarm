@@ -92,12 +92,13 @@ export function useSwarmTeam() {
     }
   }, []);
 
-  const createSwarmSession = useCallback(async () => {
+  const createSwarmSession = useCallback(async (_workspaceId: string) => {
     setIsLoading(true);
     setError(null);
 
     try {
       const created = await swarmSessionsApi.createSession({
+        workspaceId: _workspaceId,
         mode: 'general_office',
       });
 

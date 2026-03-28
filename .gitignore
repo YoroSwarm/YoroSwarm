@@ -51,7 +51,7 @@ next-env.d.ts
 *.sqlite3
 
 /log.txt
-/session-workspaces
+/workspaces
 /public/avatars/
 /public/backgrounds/
 # User-installed skills (per-user data)

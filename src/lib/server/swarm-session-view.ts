@@ -33,6 +33,7 @@ export function serializeExternalMessage(message: {
 export function serializeSwarmSession(
   session: ({
     id: string;
+    workspaceId: string;
     title: string;
     goal: string | null;
     status: { toLowerCase(): string };
@@ -90,6 +91,7 @@ export function serializeSwarmSession(
 
   return {
     id: session.id,
+    workspace_id: session.workspaceId,
     title: session.title,
     goal: session.goal || undefined,
     status: session.status.toLowerCase(),

@@ -75,6 +75,7 @@ export interface Session {
   id: string;
   title: string;
   description?: string;
+  workspaceId: string;
   participants: Agent[];
   lastMessage?: Message;
   unreadCount: number;
@@ -85,6 +86,17 @@ export interface Session {
   tags?: string[];
   initializing?: boolean;
   venvError?: boolean;
+}
+
+export interface WorkspaceInfo {
+  id: string;
+  name: string;
+  description?: string;
+  sessionCount: number;
+  activeSessionCount: number;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
 }
 
 export interface ChatState {

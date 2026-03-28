@@ -7,7 +7,7 @@ import { extractFileText } from './file-text-extractor'
 import { getSkillsPythonPackages } from './skills/python-dependencies'
 
 const execFileAsync = promisify(execFile)
-export const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './session-workspaces')
+export const WORKSPACE_BASE_DIR = path.resolve(process.env.SWARM_WORKSPACE_DIR || './workspaces')
 const VENV_DIR_NAME = '.venv'
 const BASE_VENV_DIR = path.join(WORKSPACE_BASE_DIR, '.base-venv')
 
@@ -231,6 +231,227 @@ async function scanWorkspaceFiles(
   return files
 }
 
+// ---------------------------------------------------------------------------
+// Workspace ID resolution: map legacy swarmSessionId -> workspaceId
+// ---------------------------------------------------------------------------
+
+async function resolveWorkspaceId(swarmSessionId: string): Promise<string> {
+  const session = await prisma.swarmSession.findUnique({
+    where: { id: swarmSessionId },
+    select: { workspaceId: true },
+  })
+  if (!session?.workspaceId) throw new Error(`Session ${swarmSessionId} has no workspace`)
+  return session.workspaceId
+}
+
+// ---------------------------------------------------------------------------
+// Workspace-scoped primary functions (use workspaceId directly)
+// ---------------------------------------------------------------------------
+
+export function getWorkspaceRoot(workspaceId: string): string {
+  return path.join(WORKSPACE_BASE_DIR, workspaceId)
+}
+
+export async function ensureWorkspaceRoot(workspaceId: string): Promise<string> {
+  const root = getWorkspaceRoot(workspaceId)
+  await mkdir(root, { recursive: true })
+  return root
+}
+
+export function getWorkspaceVenvPath(workspaceId: string): string {
+  return path.join(getWorkspaceRoot(workspaceId), VENV_DIR_NAME)
+}
+
+export function getWorkspaceVenvBinPath(workspaceId: string): string {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  return process.platform === 'win32'
+    ? path.join(venvPath, 'Scripts')
+    : path.join(venvPath, 'bin')
+}
+
+export async function ensureWorkspaceVenv(workspaceId: string): Promise<string> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  const venvBinPath = getWorkspaceVenvBinPath(workspaceId)
+  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+
+  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
+  const [pythonExists, packagesReady] = await Promise.all([
+    pathExists(pythonPath),
+    pathExists(packagesReadyPath),
+  ])
+
+  if (pythonExists && packagesReady) {
+    return venvPath
+  }
+
+  const venvExists = await pathExists(venvPath)
+  if (venvExists) {
+    console.log(`[Workspace][${workspaceId}] Incomplete venv found, removing for retry`)
+    try {
+      await rm(venvPath, { recursive: true, force: true })
+    } catch {
+      // continue
+    }
+  }
+
+  const basePath = await ensureBaseVenv()
+  if (!basePath) {
+    console.warn(`[Workspace][${workspaceId}] Base venv unavailable, skipping venv creation`)
+    return ''
+  }
+
+  try {
+    console.log(`[Workspace][${workspaceId}] Copying venv from base...`)
+    await copyVenv(basePath, venvPath)
+
+    await createWorkspaceVenvPackagesReadyMarker(workspaceId)
+    await deleteWorkspaceVenvPackagesErrorMarker(workspaceId)
+
+    console.log(`[Workspace][${workspaceId}] Venv ready (copied from base)`)
+    return venvPath
+  } catch (error) {
+    console.warn(`[Workspace][${workspaceId}] Failed to copy venv:`, error)
+    await createWorkspaceVenvPackagesErrorMarker(workspaceId)
+    try {
+      await rm(venvPath, { recursive: true, force: true })
+    } catch {
+      // ignore
+    }
+    return ''
+  }
+}
+
+export function buildWorkspaceVenvEnvPath(workspaceId: string): string {
+  const venvBin = getWorkspaceVenvBinPath(workspaceId)
+  const currentPath = process.env.PATH || ''
+  return `${venvBin}${path.delimiter}${currentPath}`
+}
+
+export async function checkWorkspaceInitializationStatus(workspaceId: string): Promise<{
+  venvReady: boolean
+  workspaceReady: boolean
+  venvStatus: 'initializing' | 'ready' | 'error'
+}> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  const venvBinPath = getWorkspaceVenvBinPath(workspaceId)
+  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
+  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
+  const packagesErrorPath = path.join(venvPath, '.venv_packages_error')
+  const workspaceRoot = getWorkspaceRoot(workspaceId)
+
+  const [pythonExists, packagesReady, packagesError, workspaceReady] = await Promise.all([
+    pathExists(pythonPath),
+    pathExists(packagesReadyPath),
+    pathExists(packagesErrorPath),
+    pathExists(workspaceRoot),
+  ])
+
+  const venvReady = pythonExists && packagesReady
+
+  let venvStatus: 'initializing' | 'ready' | 'error' = 'initializing'
+  if (venvReady) {
+    venvStatus = 'ready'
+  } else if (packagesError) {
+    venvStatus = 'error'
+  } else if (!pythonExists) {
+    venvStatus = 'initializing'
+  } else if (pythonExists && !packagesReady && !packagesError) {
+    venvStatus = 'initializing'
+  }
+
+  return { venvReady, workspaceReady, venvStatus }
+}
+
+export async function deleteWorkspaceDirectory(workspaceId: string): Promise<void> {
+  const root = getWorkspaceRoot(workspaceId)
+  const exists = await pathExists(root)
+  if (exists) {
+    await rm(root, { recursive: true, force: true })
+  }
+}
+
+export async function deleteWorkspaceVenv(workspaceId: string): Promise<void> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  try {
+    await rm(venvPath, { recursive: true, force: true })
+  } catch {
+    // 忽略删除失败
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Workspace-scoped venv marker helpers
+// ---------------------------------------------------------------------------
+
+async function createWorkspaceVenvPackagesReadyMarker(workspaceId: string): Promise<void> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  const markerPath = path.join(venvPath, '.venv_packages_ready')
+  try {
+    await writeFile(markerPath, 'ok', 'utf-8')
+  } catch {
+    // ignore
+  }
+}
+
+async function createWorkspaceVenvPackagesErrorMarker(workspaceId: string): Promise<void> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  const markerPath = path.join(venvPath, '.venv_packages_error')
+  try {
+    await writeFile(markerPath, 'ok', 'utf-8')
+  } catch {
+    // ignore
+  }
+}
+
+async function deleteWorkspaceVenvPackagesErrorMarker(workspaceId: string): Promise<void> {
+  const venvPath = getWorkspaceVenvPath(workspaceId)
+  const markerPath = path.join(venvPath, '.venv_packages_error')
+  try {
+    await unlink(markerPath)
+  } catch {
+    // ignore
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Managed file helpers (workspace-scoped)
+// ---------------------------------------------------------------------------
+
+async function listManagedWorkspaceFilesByWorkspaceId(workspaceId: string): Promise<ManagedFileRecord[]> {
+  return prisma.file.findMany({
+    where: { workspaceId },
+    orderBy: [
+      { createdAt: 'asc' },
+      { originalName: 'asc' },
+    ],
+  })
+}
+
+async function findWorkspaceFileByPathAndWorkspaceId(workspaceId: string, relativePath: string) {
+  const normalized = normalizeWorkspaceRelativePath(relativePath)
+  const exact = await prisma.file.findFirst({
+    where: {
+      workspaceId,
+      filename: normalized,
+    },
+  })
+
+  if (exact) {
+    return exact
+  }
+
+  const files = await prisma.file.findMany({ where: { workspaceId } })
+  return files.find((file) => {
+    const metadata = parseMetadata(file.metadata)
+    return metadata.relativePath === normalized
+  }) || null
+}
+
+// ---------------------------------------------------------------------------
+// Deprecated session-scoped wrappers (resolve workspaceId via DB lookup)
+// ---------------------------------------------------------------------------
+
+/** @deprecated Use listManagedWorkspaceFilesByWorkspaceId instead */
 async function listManagedWorkspaceFiles(swarmSessionId: string): Promise<ManagedFileRecord[]> {
   return prisma.file.findMany({
     where: { swarmSessionId },
@@ -295,31 +516,32 @@ export function normalizeWorkspaceRelativePath(input: string): string {
   return safeParts.join('/')
 }
 
-export function getSessionWorkspaceRoot(swarmSessionId: string): string {
-  return path.join(WORKSPACE_BASE_DIR, swarmSessionId)
+/** @deprecated Use getWorkspaceRoot(workspaceId) instead */
+export async function getSessionWorkspaceRoot(swarmSessionId: string): Promise<string> {
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return getWorkspaceRoot(workspaceId)
 }
 
+/** @deprecated Use ensureWorkspaceRoot(workspaceId) instead */
 export async function ensureSessionWorkspaceRoot(swarmSessionId: string): Promise<string> {
-  const root = getSessionWorkspaceRoot(swarmSessionId)
-  await mkdir(root, { recursive: true })
-  return root
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return ensureWorkspaceRoot(workspaceId)
 }
 
 /**
- * 获取会话工作区的 Python 虚拟环境路径
+ * @deprecated Use getWorkspaceVenvPath(workspaceId) instead
  */
-export function getSessionVenvPath(swarmSessionId: string): string {
-  return path.join(getSessionWorkspaceRoot(swarmSessionId), VENV_DIR_NAME)
+export async function getSessionVenvPath(swarmSessionId: string): Promise<string> {
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return getWorkspaceVenvPath(workspaceId)
 }
 
 /**
- * 获取虚拟环境的 bin 目录路径（用于 PATH 注入）
+ * @deprecated Use getWorkspaceVenvBinPath(workspaceId) instead
  */
-export function getSessionVenvBinPath(swarmSessionId: string): string {
-  const venvPath = getSessionVenvPath(swarmSessionId)
-  return process.platform === 'win32'
-    ? path.join(venvPath, 'Scripts')
-    : path.join(venvPath, 'bin')
+export async function getSessionVenvBinPath(swarmSessionId: string): Promise<string> {
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return getWorkspaceVenvBinPath(workspaceId)
 }
 
 /**
@@ -440,74 +662,20 @@ async function copyVenv(from: string, to: string): Promise<void> {
 }
 
 /**
- * 创建会话级 Python 虚拟环境（如果尚不存在）
- * 优先从预构建的 base venv 复制，加速创建
+ * @deprecated Use ensureWorkspaceVenv(workspaceId) instead
  */
 export async function ensureSessionVenv(swarmSessionId: string): Promise<string> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
-  const venvBinPath = getSessionVenvBinPath(swarmSessionId)
-  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
-
-  // 检查虚拟环境是否已完整存在（python 存在且包已安装）
-  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
-  const [pythonExists, packagesReady] = await Promise.all([
-    pathExists(pythonPath),
-    pathExists(packagesReadyPath),
-  ])
-
-  // 如果 python 存在且包已安装，说明 venv 已完整初始化
-  if (pythonExists && packagesReady) {
-    return venvPath
-  }
-
-  // 如果 venv 目录存在但不完整（python 存在但包没装完，或 venv 创建失败），先删除
-  const venvExists = await pathExists(venvPath)
-  if (venvExists) {
-    console.log(`[Workspace][${swarmSessionId}] Incomplete venv found, removing for retry`)
-    try {
-      await rm(venvPath, { recursive: true, force: true })
-    } catch {
-      // 删除失败，继续尝试使用现有的
-    }
-  }
-
-  // 确保 base venv 存在
-  const basePath = await ensureBaseVenv()
-  if (!basePath) {
-    console.warn(`[Workspace][${swarmSessionId}] Base venv unavailable, skipping venv creation`)
-    return ''
-  }
-
-  try {
-    console.log(`[Workspace][${swarmSessionId}] Copying venv from base...`)
-    await copyVenv(basePath, venvPath)
-
-    // 创建会话特定的 ready 标记
-    await createVenvPackagesReadyMarker(swarmSessionId)
-    await deleteVenvPackagesErrorMarker(swarmSessionId)
-
-    console.log(`[Workspace][${swarmSessionId}] Venv ready (copied from base)`)
-    return venvPath
-  } catch (error) {
-    console.warn(`[Workspace][${swarmSessionId}] Failed to copy venv:`, error)
-    // 创建错误标记
-    await createVenvPackagesErrorMarker(swarmSessionId)
-    // 清理
-    try {
-      await rm(venvPath, { recursive: true, force: true })
-    } catch {
-      // 忽略
-    }
-    return ''
-  }
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return ensureWorkspaceVenv(workspaceId)
 }
 
 
 /**
  * 创建 venv 包安装完成的标记文件
+ * @deprecated No longer used; kept for backwards compatibility
  */
 async function createVenvPackagesReadyMarker(swarmSessionId: string): Promise<void> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
+  const venvPath = await getSessionVenvPath(swarmSessionId)
   const markerPath = path.join(venvPath, '.venv_packages_ready')
   try {
     await writeFile(markerPath, 'ok', 'utf-8')
@@ -518,9 +686,10 @@ async function createVenvPackagesReadyMarker(swarmSessionId: string): Promise<vo
 
 /**
  * 创建 venv 包安装失败的标记文件
+ * @deprecated No longer used; kept for backwards compatibility
  */
 async function createVenvPackagesErrorMarker(swarmSessionId: string): Promise<void> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
+  const venvPath = await getSessionVenvPath(swarmSessionId)
   const markerPath = path.join(venvPath, '.venv_packages_error')
   try {
     await writeFile(markerPath, 'ok', 'utf-8')
@@ -531,9 +700,10 @@ async function createVenvPackagesErrorMarker(swarmSessionId: string): Promise<vo
 
 /**
  * 删除 venv 包安装失败的标记文件
+ * @deprecated No longer used; kept for backwards compatibility
  */
 async function deleteVenvPackagesErrorMarker(swarmSessionId: string): Promise<void> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
+  const venvPath = await getSessionVenvPath(swarmSessionId)
   const markerPath = path.join(venvPath, '.venv_packages_error')
   try {
     await unlink(markerPath)
@@ -543,54 +713,23 @@ async function deleteVenvPackagesErrorMarker(swarmSessionId: string): Promise<vo
 }
 
 /**
- * 检查会话初始化状态
- * venvReady 不仅要求 python 存在，还要求包安装标记文件存在
+ * @deprecated Use checkWorkspaceInitializationStatus(workspaceId) instead
  */
 export async function checkSessionInitializationStatus(swarmSessionId: string): Promise<{
   venvReady: boolean
   workspaceReady: boolean
   venvStatus: 'initializing' | 'ready' | 'error'
 }> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
-  const venvBinPath = getSessionVenvBinPath(swarmSessionId)
-  const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
-  const packagesReadyPath = path.join(venvPath, '.venv_packages_ready')
-  const packagesErrorPath = path.join(venvPath, '.venv_packages_error')
-  const workspaceRoot = getSessionWorkspaceRoot(swarmSessionId)
-
-  const [pythonExists, packagesReady, packagesError, workspaceReady] = await Promise.all([
-    pathExists(pythonPath),
-    pathExists(packagesReadyPath),
-    pathExists(packagesErrorPath),
-    pathExists(workspaceRoot),
-  ])
-
-  // venvReady 需要 python 存在且包安装完成
-  const venvReady = pythonExists && packagesReady
-
-  // 判断 venv 状态
-  let venvStatus: 'initializing' | 'ready' | 'error' = 'initializing'
-  if (venvReady) {
-    venvStatus = 'ready'
-  } else if (packagesError) {
-    // 安装失败
-    venvStatus = 'error'
-  } else if (!pythonExists) {
-    // venv 还没开始创建
-    venvStatus = 'initializing'
-  } else if (pythonExists && !packagesReady && !packagesError) {
-    // python 存在但没有 ready 也没有 error，说明正在安装中
-    venvStatus = 'initializing'
-  }
-
-  return { venvReady, workspaceReady, venvStatus }
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return checkWorkspaceInitializationStatus(workspaceId)
 }
 
 /**
- * 删除虚拟环境（用于重试）
+ * @deprecated Use deleteWorkspaceDirectory(workspaceId) instead, or call getWorkspaceVenvPath directly
  */
 export async function deleteSessionVenv(swarmSessionId: string): Promise<void> {
-  const venvPath = getSessionVenvPath(swarmSessionId)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  const venvPath = getWorkspaceVenvPath(workspaceId)
   try {
     await rm(venvPath, { recursive: true, force: true })
   } catch {
@@ -618,26 +757,27 @@ async function detectPython(): Promise<string | null> {
 }
 
 /**
- * 构建包含虚拟环境的 PATH 环境变量
- * 将 venv/bin 插入到 PATH 最前面，确保 python/pip 优先使用虚拟环境版本
+ * @deprecated Use buildWorkspaceVenvEnvPath(workspaceId) instead
  */
-export function buildVenvEnvPath(swarmSessionId: string): string {
-  const venvBin = getSessionVenvBinPath(swarmSessionId)
+export async function buildVenvEnvPath(swarmSessionId: string): Promise<string> {
+  const venvBin = await getSessionVenvBinPath(swarmSessionId)
   const currentPath = process.env.PATH || ''
   return `${venvBin}${path.delimiter}${currentPath}`
-}
-
-export async function createWorkspaceDirectory(swarmSessionId: string, directoryPath: string): Promise<{ relativePath: string }> {
-  const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, directoryPath)
-  await mkdir(resolved.absolutePath, { recursive: true })
-  return { relativePath: resolved.relativePath }
 }
 
 export async function resolveWorkspaceAbsolutePath(
   swarmSessionId: string,
   relativePath: string
 ): Promise<{ root: string; relativePath: string; absolutePath: string }> {
-  const root = await ensureSessionWorkspaceRoot(swarmSessionId)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return resolveWorkspaceAbsolutePathByWorkspaceId(workspaceId, relativePath)
+}
+
+export async function resolveWorkspaceAbsolutePathByWorkspaceId(
+  workspaceId: string,
+  relativePath: string
+): Promise<{ root: string; relativePath: string; absolutePath: string }> {
+  const root = await ensureWorkspaceRoot(workspaceId)
   const normalized = normalizeWorkspaceRelativePath(relativePath)
   const absolutePath = path.join(root, normalized)
 
@@ -646,6 +786,12 @@ export async function resolveWorkspaceAbsolutePath(
   }
 
   return { root, relativePath: normalized, absolutePath }
+}
+
+export async function createWorkspaceDirectory(swarmSessionId: string, directoryPath: string): Promise<{ relativePath: string }> {
+  const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, directoryPath)
+  await mkdir(resolved.absolutePath, { recursive: true })
+  return { relativePath: resolved.relativePath }
 }
 
 export async function resolveFileOwnerContext(
@@ -682,30 +828,23 @@ export async function resolveFileOwnerContext(
 }
 
 /**
- * @deprecated 此函数依赖数据库查询，保留用于可选的元数据查询。主要流程已迁移至基于文件系统的操作。
+ * @deprecated Use findWorkspaceFileByPathAndWorkspaceId(workspaceId, relativePath) instead
  */
 export async function findWorkspaceFileByPath(swarmSessionId: string, relativePath: string) {
-  const normalized = normalizeWorkspaceRelativePath(relativePath)
-  const exact = await prisma.file.findFirst({
-    where: {
-      swarmSessionId,
-      filename: normalized,
-    },
-  })
-
-  if (exact) {
-    return exact
-  }
-
-  const files = await prisma.file.findMany({ where: { swarmSessionId } })
-  return files.find((file) => {
-    const metadata = parseMetadata(file.metadata)
-    return metadata.relativePath === normalized
-  }) || null
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return findWorkspaceFileByPathAndWorkspaceId(workspaceId, relativePath)
 }
 
 export async function ensureUniqueWorkspaceRelativePath(
   swarmSessionId: string,
+  desiredRelativePath: string
+): Promise<string> {
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return ensureUniqueWorkspaceRelativePathByWorkspaceId(workspaceId, desiredRelativePath)
+}
+
+export async function ensureUniqueWorkspaceRelativePathByWorkspaceId(
+  workspaceId: string,
   desiredRelativePath: string
 ): Promise<string> {
   const normalized = normalizeWorkspaceRelativePath(desiredRelativePath)
@@ -716,10 +855,10 @@ export async function ensureUniqueWorkspaceRelativePath(
   let counter = 1
 
   while (true) {
-    const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, candidate)
+    const resolved = await resolveWorkspaceAbsolutePathByWorkspaceId(workspaceId, candidate)
     const [existsOnDisk, existingRecord] = await Promise.all([
       pathExists(resolved.absolutePath),
-      findWorkspaceFileByPath(swarmSessionId, candidate),
+      findWorkspaceFileByPathAndWorkspaceId(workspaceId, candidate),
     ])
 
     if (!existsOnDisk && !existingRecord) {
@@ -735,14 +874,22 @@ export async function listWorkspaceFiles(
   swarmSessionId: string,
   options: { includeUntracked?: boolean } = {}
 ): Promise<WorkspaceFileItem[]> {
-  const managedFiles = await listManagedWorkspaceFiles(swarmSessionId)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return listWorkspaceFilesByWorkspaceId(workspaceId, options)
+}
+
+export async function listWorkspaceFilesByWorkspaceId(
+  workspaceId: string,
+  options: { includeUntracked?: boolean } = {}
+): Promise<WorkspaceFileItem[]> {
+  const managedFiles = await listManagedWorkspaceFilesByWorkspaceId(workspaceId)
   const managedItems = managedFiles.map(buildSerializedItem)
 
   if (!options.includeUntracked) {
     return managedItems
   }
 
-  const root = await ensureSessionWorkspaceRoot(swarmSessionId)
+  const root = await ensureWorkspaceRoot(workspaceId)
   const scannedFiles = await scanWorkspaceFiles(root)
   const merged = new Map<string, WorkspaceFileItem>(managedItems.map((item) => [item.relativePath, item] as const))
 
@@ -763,9 +910,30 @@ export async function saveWorkspaceFile(input: {
   metadata?: WorkspaceFileMetadata
   mode: 'create' | 'replace' | 'upsert'
 }) {
-  const { swarmSessionId, content, mimeType, mode } = input
-  const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, input.relativePath)
-  const existing = await findWorkspaceFileByPath(swarmSessionId, resolved.relativePath)
+  const workspaceId = await resolveWorkspaceId(input.swarmSessionId)
+  return saveWorkspaceFileByWorkspaceId({
+    workspaceId,
+    swarmSessionId: input.swarmSessionId,
+    relativePath: input.relativePath,
+    content: input.content,
+    mimeType: input.mimeType,
+    metadata: input.metadata,
+    mode: input.mode,
+  })
+}
+
+export async function saveWorkspaceFileByWorkspaceId(input: {
+  workspaceId: string
+  swarmSessionId?: string
+  relativePath: string
+  content: string | Buffer
+  mimeType: string
+  metadata?: WorkspaceFileMetadata
+  mode: 'create' | 'replace' | 'upsert'
+}) {
+  const { content, mimeType, mode, workspaceId, swarmSessionId } = input
+  const resolved = await resolveWorkspaceAbsolutePathByWorkspaceId(workspaceId, input.relativePath)
+  const existing = await findWorkspaceFileByPathAndWorkspaceId(workspaceId, resolved.relativePath)
   const existsOnDisk = await pathExists(resolved.absolutePath)
 
   if (mode === 'create' && (existing || existsOnDisk)) {
@@ -807,7 +975,9 @@ export async function saveWorkspaceFile(input: {
     })
   }
 
-  const { userId, sessionId } = await resolveFileOwnerContext(swarmSessionId)
+  const ownerContext = swarmSessionId
+    ? await resolveFileOwnerContext(swarmSessionId)
+    : { userId: null, sessionId: '' }
   return prisma.file.create({
     data: {
       filename: resolved.relativePath,
@@ -815,23 +985,29 @@ export async function saveWorkspaceFile(input: {
       mimeType,
       size: buffer.byteLength,
       path: resolved.absolutePath,
-      sessionId,
-      swarmSessionId,
-      userId,
+      sessionId: ownerContext.sessionId,
+      workspaceId,
+      swarmSessionId: swarmSessionId || null,
+      userId: ownerContext.userId,
       metadata: JSON.stringify(nextMetadata),
     },
   })
 }
 
 export async function readWorkspaceFile(swarmSessionId: string, relativePath: string) {
-  const resolved = await resolveWorkspaceAbsolutePath(swarmSessionId, relativePath)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  return readWorkspaceFileByWorkspaceId(workspaceId, relativePath)
+}
+
+export async function readWorkspaceFileByWorkspaceId(workspaceId: string, relativePath: string) {
+  const resolved = await resolveWorkspaceAbsolutePathByWorkspaceId(workspaceId, relativePath)
   const info = await stat(resolved.absolutePath).catch(() => null)
 
   if (!info || !info.isFile()) {
     throw new Error(`文件不存在: ${relativePath}`)
   }
 
-  const fileRecord = await findWorkspaceFileByPath(swarmSessionId, resolved.relativePath)
+  const fileRecord = await findWorkspaceFileByPathAndWorkspaceId(workspaceId, resolved.relativePath)
   const mimeType = fileRecord?.mimeType || inferMimeType(resolved.relativePath)
   const originalName = fileRecord?.originalName || path.posix.basename(resolved.relativePath)
 
@@ -860,9 +1036,10 @@ export async function attachFilesToTaskMetadata(
   taskId: string,
   fileIds: string[]
 ) {
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
   const files = await prisma.file.findMany({
     where: {
-      swarmSessionId,
+      workspaceId,
       id: { in: fileIds },
     },
   })
@@ -885,7 +1062,8 @@ export async function attachFilesToTaskMetadata(
 }
 
 export async function listFilesForTask(swarmSessionId: string, taskId: string): Promise<WorkspaceFileItem[]> {
-  const files = await listWorkspaceFiles(swarmSessionId)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  const files = await listWorkspaceFilesByWorkspaceId(workspaceId)
   return files.filter((file) => {
     return file.sourceTaskId === taskId || Boolean(getAttachedTaskIdsFromItem(file).includes(taskId))
   })
@@ -897,7 +1075,8 @@ function getAttachedTaskIdsFromItem(file: WorkspaceFileItem): string[] {
 }
 
 export async function listFilesForTaskIds(swarmSessionId: string, taskIds: string[]) {
-  const allFiles = await prisma.file.findMany({ where: { swarmSessionId } })
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  const allFiles = await prisma.file.findMany({ where: { workspaceId } })
 
   return allFiles
     .map((file) => ({ file, metadata: parseMetadata(file.metadata) }))
@@ -915,7 +1094,8 @@ export async function listWorkspaceDirectory(
   directoryPath: string = '',
   recursive: boolean = false
 ) {
-  const root = await ensureSessionWorkspaceRoot(swarmSessionId)
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  const root = await ensureWorkspaceRoot(workspaceId)
   const normalizedDir = directoryPath ? normalizeWorkspaceRelativePath(directoryPath) : ''
   const targetDir = normalizedDir ? path.join(root, normalizedDir) : root
 
@@ -935,7 +1115,7 @@ export async function listWorkspaceDirectory(
     await mkdir(targetDir, { recursive: true })
   }
 
-  const managedFiles = await listManagedWorkspaceFiles(swarmSessionId)
+  const managedFiles = await listManagedWorkspaceFilesByWorkspaceId(workspaceId)
   const managedByRelativePath = new Map(
     managedFiles.map((file) => {
       const metadata = parseMetadata(file.metadata)
@@ -993,9 +1173,6 @@ export async function readRawWorkspaceFile(filePath: string): Promise<string> {
 }
 
 export async function deleteSessionWorkspace(swarmSessionId: string): Promise<void> {
-  const root = getSessionWorkspaceRoot(swarmSessionId)
-  const exists = await pathExists(root)
-  if (exists) {
-    await rm(root, { recursive: true, force: true })
-  }
+  const workspaceId = await resolveWorkspaceId(swarmSessionId)
+  await deleteWorkspaceDirectory(workspaceId)
 }

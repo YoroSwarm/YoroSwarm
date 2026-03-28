@@ -331,6 +331,21 @@ export async function executeApprovedCommand(
     console.warn('[ToolApproval] Failed to load user env vars:', envErr)
   }
 
+  // 构建 PATH：虚拟环境 bin 目录优先，确保 python/pip 使用工作区隔离版本
+  const venvEnvPath = await buildVenvEnvPath(swarmSessionId)
+  const venvBin = await getSessionVenvBinPath(swarmSessionId)
+  const envVars = {
+    ...process.env,
+    PATH: venvEnvPath,
+    VIRTUAL_ENV: pathModule.join(workingDir, '.venv'),
+    ...userEnvVars,
+  }
+
+  // 如果 venv bin 存在，在 PATH 中覆盖用户设置的 PATH
+  if (fsModule.existsSync(venvBin)) {
+    envVars.PATH = `${venvBin}${pathModule.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
+  }
+
   return new Promise((resolve, reject) => {
     let stdout = ''
     let stderr = ''
@@ -354,21 +369,6 @@ export async function executeApprovedCommand(
     }
 
     const shellPath = detectShell()
-
-    // 构建 PATH：虚拟环境 bin 目录优先，确保 python/pip 使用工作区隔离版本
-    const venvEnvPath = buildVenvEnvPath(swarmSessionId)
-    const venvBin = getSessionVenvBinPath(swarmSessionId)
-    const envVars = {
-      ...process.env,
-      PATH: venvEnvPath,
-      VIRTUAL_ENV: pathModule.join(workingDir, '.venv'),
-      ...userEnvVars,
-    }
-
-    // 如果 venv bin 存在，在 PATH 中覆盖用户设置的 PATH
-    if (fsModule.existsSync(venvBin)) {
-      envVars.PATH = `${venvBin}${pathModule.delimiter}${userEnvVars.PATH || process.env.PATH || ''}`
-    }
 
     // 构建沙盒参数：根据平台自动选择 Seatbelt / Bubblewrap / 降级
     const commandPolicy = determineSandboxPolicy(command)

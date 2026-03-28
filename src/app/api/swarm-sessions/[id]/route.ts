@@ -3,7 +3,6 @@ import prisma from '@/lib/db';
 import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response';
 import { requireTokenPayload } from '@/lib/server/swarm';
 import { serializeSwarmSession } from '@/lib/server/swarm-session-view';
-import { deleteSessionWorkspace } from '@/lib/server/session-workspace';
 import {
   cleanupCognitiveLead,
 } from '@/lib/server/cognitive-lead-runner';
@@ -143,12 +142,8 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
       }
     }
 
-    // 4. 删除会话工作区文件
-    try {
-      await deleteSessionWorkspace(id);
-    } catch (err) {
-      console.error(`[DeleteSession] Error deleting workspace for session ${id}:`, err);
-    }
+    // 4. 不再删除工作区目录（现在工作区在 workspace 级别共享，多个会话共用）
+    // 会话删除只清理会话特定的 Agent/任务/对话，不影响工作区文件
 
     // 5. 从数据库删除会话（包括级联删除关联数据）
     await prisma.swarmSession.delete({

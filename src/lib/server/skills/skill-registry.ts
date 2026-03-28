@@ -363,7 +363,7 @@ async function installSkillLocalPackage(swarmSessionId: string, skillBasePath: s
       return
     }
 
-    const venvBinPath = getSessionVenvBinPath(swarmSessionId)
+    const venvBinPath = await getSessionVenvBinPath(swarmSessionId)
     const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
 
     // 检查 scripts 目录是否存在

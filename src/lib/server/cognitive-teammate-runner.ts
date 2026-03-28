@@ -324,7 +324,7 @@ async function ensureCognitiveTeammateProcessor(
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, teammateId, {
     userId: sessionUserId,
     llmConfig: {
-      systemPrompt: buildTeammateSystemPrompt(teammate, null, undefined, timezone, getSessionWorkspaceRoot(swarmSessionId)),
+      systemPrompt: buildTeammateSystemPrompt(teammate, null, undefined, timezone, await getSessionWorkspaceRoot(swarmSessionId)),
       agentName: teammate.name,
       tools: [...teammateTools, ...progressTools],
       executeTool: buildTeammateToolExecutor(
@@ -740,7 +740,7 @@ async function processTeammateMessages(
 
   // 执行LLM循环
   const result = await runAgentLoop({
-    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection, timezone, getSessionWorkspaceRoot(swarmSessionId)),
+    systemPrompt: buildTeammateSystemPrompt(teammate, task, skillsSection, timezone, await getSessionWorkspaceRoot(swarmSessionId)),
     agentId: teammateId,
     agentName: teammate.name,
     swarmSessionId,

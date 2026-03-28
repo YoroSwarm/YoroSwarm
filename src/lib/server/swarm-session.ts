@@ -1,6 +1,5 @@
 import { AgentKind, type Prisma } from '@prisma/client'
 import prisma from '@/lib/db'
-import { ensureSessionWorkspaceRoot, ensureSessionVenv } from './session-workspace'
 
 type RosterMember = {
   name: string
@@ -12,6 +11,7 @@ type RosterMember = {
 
 type CreateSwarmSessionInput = {
   userId: string
+  workspaceId: string
   title?: string | null
   goal?: string | null
   mode?: string | null
@@ -58,6 +58,7 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
     const session = await tx.swarmSession.create({
       data: {
         userId: input.userId,
+        workspaceId: input.workspaceId,
         title,
         goal: input.goal || null,
         mode: input.mode || 'general_office',
@@ -98,11 +99,8 @@ export async function createSwarmSession(input: CreateSwarmSessionInput) {
     })
   })
 
-  await ensureSessionWorkspaceRoot(createdSession.id)
-  // 异步创建 Python 虚拟环境（不阻塞会话创建）
-  ensureSessionVenv(createdSession.id).catch((err) =>
-    console.warn(`[SwarmSession] Venv creation failed for ${createdSession.id}:`, err)
-  )
+  // Workspace directory and venv are created at the workspace level, not per session.
+  // No per-session workspace setup needed here.
   return createdSession
 }
 

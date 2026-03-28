@@ -39,7 +39,7 @@ export async function GET(request: Request, context: RouteContext) {
     const file = await prisma.file.findFirst({
       where: {
         id: fileId,
-        swarmSession: { userId: payload.userId },
+        workspace: { userId: payload.userId },
       },
     })
 
@@ -48,7 +48,7 @@ export async function GET(request: Request, context: RouteContext) {
       // Search message attachments for this fileId to find the filename
       const messages = await prisma.externalMessage.findMany({
         where: {
-          swarmSession: { userId: payload.userId },
+          swarmSession: { workspace: { userId: payload.userId } },
         },
         select: { metadata: true, swarmSessionId: true },
         orderBy: { createdAt: 'desc' },
@@ -159,7 +159,7 @@ export async function DELETE(request: Request, context: RouteContext) {
     const file = await prisma.file.findFirst({
       where: {
         id: fileId,
-        swarmSession: { userId: payload.userId },
+        workspace: { userId: payload.userId },
       },
     })
 

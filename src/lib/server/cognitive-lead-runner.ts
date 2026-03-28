@@ -36,7 +36,7 @@ import {
 /**
  * 构建带有时间戳的 Lead 系统提示
  */
-function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null, swarmSessionId?: string): string {
+async function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?: string | null, swarmSessionId?: string): Promise<string> {
   const appName = process.env.NEXT_PUBLIC_APP_NAME || 'Swarm'
   let prompt = LEAD_SYSTEM_PROMPT_BASE.replace(/\{APP_NAME\}/g, appName)
 
@@ -52,7 +52,7 @@ function buildLeadSystemPrompt(createdAt: Date, timezone: string, leadNickname?:
 
   // 注入工作区根目录
   if (swarmSessionId) {
-    const workspaceRoot = getSessionWorkspaceRoot(swarmSessionId)
+    const workspaceRoot = await getSessionWorkspaceRoot(swarmSessionId)
     prompt += `
 
 ## 工作区
@@ -258,7 +258,7 @@ export async function initCognitiveLead(input: LeadProcessorInput): Promise<void
   const cleanupAttentionLoop = await startAttentionLoop(swarmSessionId, leadAgentId, {
     userId,
     llmConfig: {
-      systemPrompt: buildLeadSystemPrompt(leadAgent.createdAt, timezone, leadNickname, swarmSessionId),
+      systemPrompt: await buildLeadSystemPrompt(leadAgent.createdAt, timezone, leadNickname, swarmSessionId),
       agentName: 'Team Lead',
       tools: leadTools,
       executeTool: buildLeadToolExecutor(input),
@@ -504,7 +504,7 @@ ${messageSummary}
   // 执行LLM循环
   const communicationToolCounts = new Map<string, number>()
   const result = await runAgentLoop({
-    systemPrompt: buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone, preferences.leadNickname, swarmSessionId),
+    systemPrompt: await buildLeadSystemPrompt(leadAgent?.createdAt ?? new Date(), timezone, preferences.leadNickname, swarmSessionId),
     agentId: leadAgentId,
     agentName: 'Team Lead',
     swarmSessionId,
@@ -621,12 +621,16 @@ async function getLeadOrchestrationContext(
       where: { swarmSessionId, status: { not: 'OFFLINE' } },
       orderBy: { createdAt: 'asc' },
     }),
-    prisma.swarmSession.findUnique({ where: { id: swarmSessionId } }),
-    prisma.file.findMany({
-      where: { swarmSessionId, userId },
-      orderBy: { createdAt: 'desc' },
-      take: 20,
-    }),
+    prisma.swarmSession.findUnique({ where: { id: swarmSessionId }, select: { workspaceId: true } }),
+    (async () => {
+      const session = await prisma.swarmSession.findUnique({ where: { id: swarmSessionId }, select: { workspaceId: true } })
+      if (!session) return []
+      return prisma.file.findMany({
+        where: { workspaceId: session.workspaceId, userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      })
+    })(),
     getLeadSelfTodoItems(leadAgentId),
   ])
 

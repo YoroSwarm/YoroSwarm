@@ -37,6 +37,7 @@ model User {
 
   // Relations
   sessions      Session[]
+  workspaces    Workspace[]
   swarmSessions SwarmSession[]
   externalConversations ExternalConversation[]
   files         File[]
@@ -67,9 +68,31 @@ model Session {
   @@map("sessions")
 }
 
+// ============================================
+// 工作空间模块 (Workspace)
+// ============================================
+
+model Workspace {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  name        String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  archivedAt  DateTime? @map("archived_at")
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions SwarmSession[]
+  files    File[]
+
+  @@index([userId, updatedAt])
+  @@map("workspaces")
+}
+
 model SwarmSession {
   id          String             @id @default(uuid())
   userId      String             @map("user_id")
+  workspaceId String             @map("workspace_id")
   title       String
   goal        String?
   status      SwarmSessionStatus @default(ACTIVE)
@@ -81,6 +104,7 @@ model SwarmSession {
   pinnedAt    DateTime?          @map("pinned_at")
 
   user                  User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace             Workspace?            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   leadAgent             Agent?                @relation("LeadAgent", fields: [leadAgentId], references: [id], onDelete: SetNull)
   agents                Agent[]
   agentContextEntries   AgentContextEntry[]
@@ -90,7 +114,6 @@ model SwarmSession {
   internalMessages      InternalMessage[]
   externalConversations ExternalConversation[]
   externalMessages      ExternalMessage[]
-  files                 File[]
   leadSelfTodos         LeadSelfTodo[]
   llmUsageEvents        LlmUsageEvent[]
   sharedKnowledgeEntries SharedKnowledgeEntry[]
@@ -98,6 +121,7 @@ model SwarmSession {
   skillAssignments      AgentSkillAssignment[]
   sessionShares         SessionShare[]
 
+  @@index([workspaceId])
   @@map("swarm_sessions")
 }
 
@@ -113,17 +137,19 @@ model File {
   size         Int
   path         String
   sessionId    String   @map("session_id")
-  swarmSessionId String @map("swarm_session_id")
+  workspaceId  String   @map("workspace_id")
+  swarmSessionId String? @map("swarm_session_id")
   userId       String?  @map("user_id")
   createdAt    DateTime @default(now()) @map("created_at")
   metadata     String? // JSON string
 
   // Relations
   session   Session        @relation(fields: [sessionId], references: [id])
-  swarmSession SwarmSession @relation(fields: [swarmSessionId], references: [id], onDelete: Cascade)
+  workspace Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user      User?          @relation(fields: [userId], references: [id])
   thumbnails FileThumbnail[]
 
+  @@index([workspaceId])
   @@map("files")
 }
 

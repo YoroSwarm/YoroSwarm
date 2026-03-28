@@ -8,6 +8,7 @@ import { RealTimeMonitor } from './RealTimeMonitor';
 import { TaskAssignment } from './TaskAssignment';
 import { SessionOverview } from './TeamOverview';
 import { useSwarmTeam } from '@/hooks/use-swarm-team';
+import { useWorkspacesStore } from '@/stores';
 import { appConfig } from '@/lib/config/app';
 import { useTasks } from '@/hooks/use-tasks';
 import { useAgentWebSocket } from '@/hooks/use-agent-websocket';
@@ -202,7 +203,9 @@ export const MonitorDashboard: React.FC = () => {
   };
 
   const handleCreateSwarmSession = async () => {
-    await createSwarmSession();
+    const currentWorkspaceId = useWorkspacesStore.getState().currentWorkspaceId;
+    if (!currentWorkspaceId) return;
+    await createSwarmSession(currentWorkspaceId);
     setIsCreateModalOpen(false);
   };
 

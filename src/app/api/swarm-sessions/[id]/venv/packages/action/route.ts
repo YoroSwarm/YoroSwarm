@@ -30,7 +30,7 @@ export async function POST(
       return errorResponse('Invalid request: action and packages are required', 400)
     }
 
-    const venvBinPath = getSessionVenvBinPath(sessionId)
+    const venvBinPath = await getSessionVenvBinPath(sessionId)
     const pythonPath = path.join(venvBinPath, process.platform === 'win32' ? 'python.exe' : 'python')
 
     let result: { success: boolean; output: string; error?: string } = { success: false, output: '' }
