@@ -118,23 +118,27 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
 
   // 当 resolvedSessionId 与 URL 不一致时，更新 URL
   // 这处理了：会话被删除、工作区被归档等情况下的自动跳转
-  // 防止循环跳转：使用 previousUrlRef 记录上次的 URL，避免同一 URL 被重复设置
-  const previousUrlRef = useRef<string | null>(null);
+  // 防循环：使用 prevResolvedRef 记录上一次的 resolvedSessionId，只在值真正变化时跳转
+  const prevResolvedRef = useRef<string | null | undefined>(undefined);
   useEffect(() => {
-    if (!resolvedSessionId) {
-      const targetUrl = '/chat';
-      if (previousUrlRef.current !== targetUrl) {
-        previousUrlRef.current = targetUrl;
-        router.push(targetUrl);
-      }
+    // resolvedSessionId 没变化，不跳转
+    if (resolvedSessionId === prevResolvedRef.current) {
       return;
     }
-    const targetUrl = `/chat?sessionId=${resolvedSessionId}`;
-    if (targetUrl !== previousUrlRef.current && resolvedSessionId !== initialSessionId) {
-      previousUrlRef.current = targetUrl;
-      router.push(targetUrl);
+
+    // 首次渲染（prevResolvedRef 是 undefined），只记录不跳转
+    if (prevResolvedRef.current === undefined) {
+      prevResolvedRef.current = resolvedSessionId;
+      return;
     }
-  }, [resolvedSessionId, initialSessionId, router]);
+
+    const targetUrl = resolvedSessionId
+      ? `/chat?sessionId=${resolvedSessionId}`
+      : '/chat';
+
+    prevResolvedRef.current = resolvedSessionId;
+    router.push(targetUrl);
+  }, [resolvedSessionId, router]);
 
   // 检查会话初始化状态（持续轮询直到完成）
   useEffect(() => {
