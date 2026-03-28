@@ -15,7 +15,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Exclude skills directory
     "skills/**",
-    "session-workspaces/**"
+    "session-workspaces/**",
+    // Exclude workspaces directory (contains venvs)
+    "workspaces/**"
   ]),
   {
     rules: {

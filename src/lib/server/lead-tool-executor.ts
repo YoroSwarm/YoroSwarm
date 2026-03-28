@@ -693,18 +693,12 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
               message: `已保存到长期记忆 (${category})`,
             })
           }
-        } catch (importError) {
+        } catch {
           // personal-memory 模块不存在，降级到 SharedKnowledgeEntry
         }
 
         // 降级：保存到 SharedKnowledgeEntry
         const tagsJson = tags.length > 0 ? JSON.stringify(tags) : null
-        const metadata: Record<string, unknown> = {
-          importance,
-          source: 'remember_to_memory',
-          ...(context ? { context } : {}),
-          ...(sourceRef ? { sourceRef } : {}),
-        }
 
         const entry = await prisma.sharedKnowledgeEntry.create({
           data: {

@@ -167,7 +167,9 @@ export async function createPersonalMemory(input: PersonalMemoryItem): Promise<P
  * 批量创建个人记忆
  */
 export async function createPersonalMemories(inputs: PersonalMemoryItem[]): Promise<PersonalMemoryRow[]> {
-  const rows = await prisma.personalMemory.createMany({
+  if (inputs.length === 0) return []
+
+  await prisma.personalMemory.createMany({
     data: inputs.map(input => ({
       userId: input.userId,
       workspaceId: input.workspaceId ?? null,
@@ -179,11 +181,6 @@ export async function createPersonalMemories(inputs: PersonalMemoryItem[]): Prom
       relatedEntityType: input.relatedEntityType ?? null,
       relatedEntityId: input.relatedEntityId ?? null,
     })),
-  })
-
-  const created = await prisma.personalMemory.findMany({
-    where: { id: { in: [] } }, // Placeholder — return empty since createMany doesn't return all
-    take: 0,
   })
 
   // Re-fetch by user + timestamps for batch results

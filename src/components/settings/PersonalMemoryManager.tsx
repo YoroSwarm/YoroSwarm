@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -29,7 +28,6 @@ import {
   Plus,
   Trash2,
   Edit3,
-  ChevronDown,
   ChevronRight,
   Calendar,
   Tag,

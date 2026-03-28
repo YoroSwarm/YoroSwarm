@@ -5,7 +5,6 @@ import {
   deleteWorkspace,
   getWorkspaceByUser,
   updateWorkspace,
-  type WorkspaceWithStats,
 } from '@/lib/server/workspace'
 
 type RouteContext = {

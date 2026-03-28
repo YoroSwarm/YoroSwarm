@@ -4,7 +4,6 @@ import { requireTokenPayload } from '@/lib/server/swarm'
 import {
   createWorkspace,
   listWorkspaces,
-  type WorkspaceWithStats,
 } from '@/lib/server/workspace'
 
 export async function GET() {

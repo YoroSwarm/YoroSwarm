@@ -5,10 +5,6 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Plus,
-  MoreVertical,
-  Trash2,
-  Archive,
   PanelLeftClose,
   AlertCircle,
   Share2,
@@ -32,7 +28,6 @@ import {
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
-import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
 import { workspacesApi } from '@/lib/api/workspaces';
 import { ShareDialog } from '@/components/session/ShareDialog';
 import { WorkspaceTree } from './WorkspaceTree';
@@ -65,8 +60,6 @@ export function Sidebar() {
   }, [loadHasConfig]);
 
   const {
-    sessions,
-    isLoading,
     createSession,
     deleteSession,
   } = useSessions();
@@ -142,11 +135,6 @@ export function Sidebar() {
   // Share dialog state
   const [shareDialogSessionId, setShareDialogSessionId] = useState<string | null>(null);
 
-  const handleShareClick = useCallback((e: React.MouseEvent, sessionId: string) => {
-    e.stopPropagation();
-    setShareDialogSessionId(sessionId);
-  }, []);
-
   // Delete confirmation with share check
   const [deleteConfirm, setDeleteConfirm] = useState<{
     sessionId: string;
@@ -154,18 +142,6 @@ export function Sidebar() {
     shareCount: number;
     checking: boolean;
   } | null>(null);
-
-  const handleDeleteClick = useCallback(async (e: React.MouseEvent, session: { id: string; title?: string }) => {
-    e.stopPropagation();
-    const title = session.title || '未命名会话';
-    setDeleteConfirm({ sessionId: session.id, sessionTitle: title, shareCount: 0, checking: true });
-    try {
-      const res = await swarmSessionsApi.listShares(session.id);
-      setDeleteConfirm(prev => prev ? { ...prev, shareCount: res.items.length, checking: false } : null);
-    } catch {
-      setDeleteConfirm(prev => prev ? { ...prev, checking: false } : null);
-    }
-  }, []);
 
   const handleConfirmDelete = async () => {
     if (!deleteConfirm) return;

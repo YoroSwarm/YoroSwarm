@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server'
-import { errorResponse, notFoundResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
+import { errorResponse, successResponse, unauthorizedResponse } from '@/lib/api/response'
 import { requireTokenPayload } from '@/lib/server/swarm'
-import { getWorkspaceByUser } from '@/lib/server/workspace'
 import { deleteWorkspaceVenv, ensureWorkspaceVenv, checkWorkspaceInitializationStatus } from '@/lib/server/session-workspace'
 
 type RouteContext = {

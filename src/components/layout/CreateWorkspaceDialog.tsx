@@ -27,7 +27,7 @@ export function CreateWorkspaceDialog({ open, onOpenChange, onCreated }: CreateW
   const [isCreating, setIsCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createWorkspace = useWorkspacesStore((state) => state.createWorkspace);
-  const router = useRouter();
+  useRouter();
 
   const handleCreate = async () => {
     if (!name.trim()) {
