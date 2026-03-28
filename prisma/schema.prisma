@@ -46,6 +46,8 @@ model User {
   llmApiConfigs LlmApiConfig[]
   skills        UserSkill[]
   sessionShares SessionShare[]
+  personalMemories PersonalMemory[]
+  dreamLogs     DreamLog[]
 
   @@map("users")
 }
@@ -85,6 +87,7 @@ model Workspace {
   user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   sessions SwarmSession[]
   files    File[]
+  personalMemories PersonalMemory[]
 
   @@index([userId, updatedAt])
   @@map("workspaces")
@@ -635,4 +638,65 @@ model AgentSkillAssignment {
   @@unique([agentId, skillName])
   @@index([swarmSessionId, agentId])
   @@map("agent_skill_assignments")
+}
+
+// ============================================
+// 个人记忆模块 (Personal Memory)
+// ============================================
+
+enum MemoryType {
+  PERSONAL  // 个人经历
+  DREAM     // 梦境记忆
+  EXPERIENCE // 经验总结
+  FACT      // 事实性知识
+  PREFERENCE // 偏好设置
+}
+
+model PersonalMemory {
+  id               String      @id @default(uuid())
+  userId           String      @map("user_id")
+  workspaceId      String?     @map("workspace_id")
+  title            String
+  content          String
+  memoryType       MemoryType  @default(PERSONAL) @map("memory_type")
+  tags             String?     // JSON array of tags
+  importance       Int         @default(1)        // 1-5: VERY_LOW to CRITICAL
+  relatedEntityType String?    @map("related_entity_type")
+  relatedEntityId   String?    @map("related_entity_id")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  dreamLogs     DreamLog[]
+
+  @@index([userId, memoryType])
+  @@index([userId, importance])
+  @@index([userId, createdAt])
+  @@map("personal_memories")
+}
+
+model DreamLog {
+  id               String   @id @default(uuid())
+  userId           String   @map("user_id")
+  memoryId         String   @map("memory_id")
+  title            String
+  content          String
+  mood             String?  // e.g. "peaceful", "anxious", "excited"
+  emotion          String?  // e.g. "joy", "fear", "wonder"
+  dreamSymbols     String?  // JSON array of dream symbols
+  interpretation   String?
+  relatedEntityType String? @map("related_entity_type")
+  relatedEntityId   String? @map("related_entity_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  memory PersonalMemory  @relation(fields: [memoryId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([memoryId])
+  @@map("dream_logs")
 }

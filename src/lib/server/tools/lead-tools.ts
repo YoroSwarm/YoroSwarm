@@ -387,4 +387,41 @@ export const leadTools: ToolDefinition[] = [
       required: ['teammate_id', 'skill_name'],
     },
   },
+  {
+    name: 'remember_to_memory',
+    description: '将重要信息保存到长期记忆，供未来会话参考。适用于记录关键决策、用户偏好、重要发现、模式经验等。记忆会被持久化存储，在后续会话中可通过上下文自动注入供你参考。',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        content: {
+          type: 'string',
+          description: '要记住的核心内容。应当简洁、准确、可检索，提取关键信息而非长篇大论。',
+        },
+        category: {
+          type: 'string',
+          enum: ['user_preference', 'decision', 'discovery', 'pattern', 'fact', 'context', 'other'],
+          description: '记忆类别：user_preference=用户偏好/习惯, decision=重要决策及理由, discovery=关键发现或洞察, pattern=反复出现的模式, fact=需要长期记住的事实, context=当前上下文/背景, other=其他',
+        },
+        importance: {
+          type: 'string',
+          enum: ['high', 'medium', 'low'],
+          description: '重要性：high=跨会话必须记住的核心信息, medium=重要但可选择性使用, low=次要备注',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: '标签列表，用于分类和检索（如 "用户-偏好", "项目-X", "技术栈-python"）。建议至少包含一个语义标签。',
+        },
+        source_ref: {
+          type: 'string',
+          description: '可选。信息来源引用，如 "task:xxx", "session:yyy", "message:zzz"。',
+        },
+        context: {
+          type: 'string',
+          description: '可选。补充上下文信息，说明这条记忆的背景或使用场景。',
+        },
+      },
+      required: ['content', 'category', 'importance'],
+    },
+  },
 ]

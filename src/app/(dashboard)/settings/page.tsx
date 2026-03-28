@@ -19,6 +19,7 @@ import {
   Image as ImageIcon,
   Sparkles,
   Trash2,
+  Brain,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,7 @@ import { Input } from "@/components/ui/input";
 import { LlmApiConfigList } from "@/components/settings/LlmApiConfigList";
 import { SkillsManager } from "@/components/settings/SkillsManager";
 import { EnvVarsManager } from "@/components/settings/EnvVarsManager";
+import { PersonalMemoryManager } from "@/components/settings/PersonalMemoryManager";
 import { useConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 
@@ -208,6 +210,7 @@ export default function SettingsPage() {
   const tabs = [
     { id: "appearance", label: "外观", icon: Palette },
     { id: "general", label: "通用", icon: Globe },
+    { id: "personal-memory", label: "记忆管理", icon: Brain },
     { id: "llm-api", label: "LLM API", icon: Key },
     { id: "skills", label: "Skills", icon: Puzzle },
     { id: "env-vars", label: "环境变量", icon: Terminal },
@@ -480,6 +483,20 @@ export default function SettingsPage() {
                     当前设置: {autoArchiveDays === 0 ? '禁用自动归档' : `超过 ${autoArchiveDays} 天未活跃的会话将自动归档`}
                   </p>
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {activeTab === "personal-memory" && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg">Personal Memory 管理</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  管理和查看您的个人记忆，包括个人经历、梦境、经验、事实和偏好。
+                </p>
+              </CardHeader>
+              <CardContent>
+                <PersonalMemoryManager />
               </CardContent>
             </Card>
           )}

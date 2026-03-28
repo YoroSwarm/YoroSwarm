@@ -232,6 +232,7 @@ function buildLeadSystemStateMessage(input: {
     soulMd?: string | null
   }
   skillsSection?: string | null
+  memorySection?: string | null
 }): string | null {
   const parts: string[] = []
 
@@ -274,6 +275,12 @@ function buildLeadSystemStateMessage(input: {
   // 1.5 注入 Skills 目录（如果存在）
   if (input.skillsSection) {
     parts.push(input.skillsSection)
+    parts.push('')
+  }
+
+  // 1.6 注入 Personal Memory（如果存在）
+  if (input.memorySection) {
+    parts.push(input.memorySection)
     parts.push('')
   }
 
@@ -352,6 +359,9 @@ export async function buildLeadContextMessages(input: {
 }): Promise<LLMMessage[]> {
   const messages: LLMMessage[] = []
 
+  // 获取记忆内容并渲染为文本段落
+  const memorySection = await buildMemorySectionForContext(input.userId, input.swarmSessionId)
+
   const stateMessage = buildLeadSystemStateMessage({
     teammates: input.teammates,
     tasks: input.tasks,
@@ -359,6 +369,7 @@ export async function buildLeadContextMessages(input: {
     selfTodos: input.selfTodos,
     preferences: input.preferences,
     skillsSection: input.skillsSection,
+    memorySection,
   })
   if (stateMessage) {
     pushMessage(messages, 'user', stateMessage)
@@ -406,12 +417,13 @@ export function buildLeadContextSummary(input: {
     soulMd?: string | null
   }
   skillsSection?: string | null
+  memorySection?: string | null
 }): string {
   const parts: string[] = []
 
   if (input.externalMessages.length > 0) {
     parts.push('## 最近对话')
-    parts.push('优先满足最近一次用户明确提出、且尚未产出的交付物。若用户追加了“讲义/教案/汇总稿/总结版”等新成果，不能把先前的分析报告误当作该交付物已经完成。')
+    parts.push('优先满足最近一次用户明确提出、且尚未产出的交付物。若用户追加了”讲义/教案/汇总稿/总结版”等新成果，不能把先前的分析报告误当作该交付物已经完成。')
     for (const message of input.externalMessages) {
       const speaker = message.senderType === 'user' ? '用户' : 'Lead'
       parts.push(`- ${speaker}: ${message.content.slice(0, 300)}`)
@@ -425,6 +437,7 @@ export function buildLeadContextSummary(input: {
     selfTodos: input.selfTodos,
     preferences: input.preferences,
     skillsSection: input.skillsSection,
+    memorySection: input.memorySection,
   })
   if (stateMessage) {
     parts.push(stateMessage)
@@ -505,4 +518,108 @@ ${input.newMessagesSummary}
     agentId: input.agentId,
     userId: input.userId,
   })
+}
+
+// ============================================
+// Personal Memory 上下文注入
+// ============================================
+
+/**
+ * 为上下文构建渲染记忆文本段落
+ *
+ * 优先尝试使用 personal-memory.ts 模块（如果已存在），
+ * 否则直接通过 Prisma 查询 PersonalMemory 表。
+ */
+async function buildMemorySectionForContext(
+  userId?: string | null,
+  _swarmSessionId?: string | null
+): Promise<string | null> {
+  if (!userId) return null
+
+  try {
+    // 优先尝试从 personal-memory 模块获取记忆
+    let memories: Array<{
+      title: string
+      content: string
+      memoryType: string
+      importance: number
+      tags: string[]
+    }> = []
+
+    try {
+      const { listPersonalMemories } = await import('./personal-memory')
+      const rows = await listPersonalMemories(userId, {
+        limit: 20,
+      })
+      memories = rows.map(r => ({
+        title: r.title,
+        content: r.content,
+        memoryType: r.memoryType,
+        importance: r.importance,
+        tags: r.tags,
+      }))
+    } catch {
+      // personal-memory 模块不存在，直接使用 Prisma
+      const prisma = (await import('@/lib/db')).default
+      const rows = await prisma.personalMemory.findMany({
+        where: { userId },
+        orderBy: [{ importance: 'desc' }, { createdAt: 'desc' }],
+        take: 20,
+        select: {
+          title: true,
+          content: true,
+          memoryType: true,
+          importance: true,
+          tags: true,
+        },
+      })
+      memories = rows.map(r => ({
+        title: r.title,
+        content: r.content,
+        memoryType: String(r.memoryType),
+        importance: r.importance,
+        tags: r.tags ? JSON.parse(r.tags) as string[] : [],
+      }))
+    }
+
+    if (memories.length === 0) {
+      return null
+    }
+
+    // 按类型分组渲染
+    const byType: Record<string, typeof memories> = {}
+    for (const mem of memories) {
+      if (!byType[mem.memoryType]) byType[mem.memoryType] = []
+      byType[mem.memoryType].push(mem)
+    }
+
+    const lines: string[] = [
+      '## Personal Memory',
+      '以下是与你相关的个人记忆，可以在决策时参考：',
+    ]
+
+    const typeLabels: Record<string, string> = {
+      PERSONAL: '个人经历',
+      EXPERIENCE: '经验总结',
+      FACT: '事实性知识',
+      PREFERENCE: '偏好',
+      DREAM: '梦境记忆',
+    }
+
+    for (const [type, mems] of Object.entries(byType)) {
+      const label = typeLabels[type] || type
+      lines.push(`### ${label}`)
+      for (const mem of mems.slice(0, 5)) {
+        const importanceStars = '★'.repeat(Math.min(mem.importance, 5))
+        const tagPart = mem.tags.length > 0 ? ` [${mem.tags.slice(0, 3).join(', ')}]` : ''
+        lines.push(`- ${importanceStars} **${mem.title}**${tagPart}: ${mem.content.slice(0, 200)}${mem.content.length > 200 ? '...' : ''}`)
+      }
+    }
+
+    return lines.join('\n')
+  } catch (err) {
+    // 记忆获取失败不影响主流程
+    console.warn('[llm-context] Failed to build memory section:', err)
+    return null
+  }
 }

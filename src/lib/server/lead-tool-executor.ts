@@ -650,6 +650,86 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
         })
       }
 
+      case 'remember_to_memory': {
+        const content = toolInput.content as string
+        const category = toolInput.category as string
+        const importance = toolInput.importance as string
+        const tags = (toolInput.tags as string[]) || []
+        const sourceRef = toolInput.source_ref as string | undefined
+        const context = toolInput.context as string | undefined
+
+        if (!content || !content.trim()) {
+          return JSON.stringify({ success: false, error: 'content 是必填项，不能为空' })
+        }
+
+        if (content.length < 5) {
+          return JSON.stringify({ success: false, error: 'content 长度至少需要 5 个字符' })
+        }
+
+        if (content.length > 10000) {
+          return JSON.stringify({ success: false, error: 'content 长度不能超过 10000 个字符' })
+        }
+
+        // 尝试使用 personal-memory 模块保存记忆
+        try {
+          const memoryModule = await import('./personal-memory')
+          if (memoryModule && typeof memoryModule.saveMemory === 'function') {
+            const result = await memoryModule.saveMemory({
+              swarmSessionId,
+              agentId: leadAgentId,
+              content,
+              category,
+              importance,
+              tags,
+              sourceRef,
+              context,
+            })
+            return JSON.stringify({
+              success: true,
+              memory_id: result.id,
+              category,
+              importance,
+              tags,
+              message: `已保存到长期记忆 (${category})`,
+            })
+          }
+        } catch (importError) {
+          // personal-memory 模块不存在，降级到 SharedKnowledgeEntry
+        }
+
+        // 降级：保存到 SharedKnowledgeEntry
+        const tagsJson = tags.length > 0 ? JSON.stringify(tags) : null
+        const metadata: Record<string, unknown> = {
+          importance,
+          source: 'remember_to_memory',
+          ...(context ? { context } : {}),
+          ...(sourceRef ? { sourceRef } : {}),
+        }
+
+        const entry = await prisma.sharedKnowledgeEntry.create({
+          data: {
+            swarmSessionId,
+            agentId: leadAgentId,
+            entryType: 'memory',
+            title: content.slice(0, 100),
+            content: content,
+            summary: content.slice(0, 200),
+            tags: tagsJson,
+            confidence: importance === 'high' ? 1.0 : importance === 'medium' ? 0.8 : 0.5,
+          },
+        })
+
+        return JSON.stringify({
+          success: true,
+          memory_id: entry.id,
+          category,
+          importance,
+          tags,
+          fallback: true,
+          message: `已保存到共享知识库（${category}）`,
+        })
+      }
+
       case 'shell_exec': {
         const command = toolInput.command as string
         const description = toolInput.description as string

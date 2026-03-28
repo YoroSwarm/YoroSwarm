@@ -368,6 +368,7 @@ function getToolDisplayName(toolName: string | undefined): string {
     'assign_skill_to_teammate': '分配技能',
     'send_files_to_user': '发送文件',
     'dismiss_teammate': '移除队友',
+    'remember_to_memory': '保存记忆',
   };
   return nameMap[toolName] || toolName;
 }
@@ -784,6 +785,33 @@ function formatToolOutput(toolName: string, output: string | undefined): ToolOut
         }
         if ((parsedOutput as Record<string, unknown>).message) {
           fields.push({ label: '消息', value: String((parsedOutput as Record<string, unknown>).message) });
+        }
+        if (fields.length > 0) {
+          return { type: 'fields', content: output, fields };
+        }
+      }
+      return { type: 'success', content: output };
+
+    case 'remember_to_memory':
+      if (parsedOutput && typeof parsedOutput === 'object') {
+        const fields: ToolOutputField[] = [];
+        if ((parsedOutput as Record<string, unknown>).id) {
+          fields.push({ label: '记忆ID', value: String((parsedOutput as Record<string, unknown>).id) });
+        }
+        if ((parsedOutput as Record<string, unknown>).title) {
+          fields.push({ label: '标题', value: String((parsedOutput as Record<string, unknown>).title), isLong: true });
+        }
+        if ((parsedOutput as Record<string, unknown>).memoryType) {
+          fields.push({ label: '类型', value: String((parsedOutput as Record<string, unknown>).memoryType) });
+        }
+        if ((parsedOutput as Record<string, unknown>).importance !== undefined) {
+          fields.push({ label: '重要性', value: String((parsedOutput as Record<string, unknown>).importance) });
+        }
+        if ((parsedOutput as Record<string, unknown>).tags && Array.isArray((parsedOutput as Record<string, unknown>).tags)) {
+          fields.push({ label: '标签', value: ((parsedOutput as Record<string, unknown>).tags as string[]).join(', ') });
+        }
+        if ((parsedOutput as Record<string, unknown>).createdAt) {
+          fields.push({ label: '创建时间', value: String((parsedOutput as Record<string, unknown>).createdAt) });
         }
         if (fields.length > 0) {
           return { type: 'fields', content: output, fields };

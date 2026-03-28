@@ -104,8 +104,56 @@ export async function startAttentionLoop(
 
   // 周期性自检计数器（每个 tick 约 500ms）
   const SELF_CHECK_INTERVAL_TICKS = 60 // ~30秒 (60 * 500ms)
+  const DREAM_CHECK_INTERVAL_TICKS = 600 // ~5分钟 (600 * 500ms)
   let idleTickCounter = 0
+  let dreamTickCounter = 0
   let selfCheckPending = false // 防止重复注入
+  let dreamCheckPending = false // 防止重复触发 Dream
+
+  // Dream 触发检查（异步，不阻塞主循环）
+  const triggerDreamGeneration = async (
+    uid: string,
+    sid: string,
+    aid: string
+  ): Promise<void> => {
+    let shouldTrigger = false
+    let reason = ''
+
+    try {
+      const { shouldTriggerDream } = await import('../auto-dream')
+      const check = await shouldTriggerDream(uid)
+      shouldTrigger = check.shouldTrigger
+      reason = check.reason
+    } catch {
+      console.log(`[AttentionManager][${aid}] Dream trigger skipped: auto-dream module not available`)
+      dreamCheckPending = false
+      return
+    }
+
+    if (!shouldTrigger) {
+      console.log(`[AttentionManager][${aid}] Dream trigger skipped: ${reason}`)
+      dreamCheckPending = false
+      return
+    }
+
+    console.log(`[AttentionManager][${aid}] Dream trigger: conditions met, starting generation`)
+
+    try {
+      const { runDreamGeneration } = await import('../auto-dream')
+      const result = await runDreamGeneration(uid, sid)
+      if (result.skipped) {
+        console.log(`[AttentionManager][${aid}] Dream generation skipped: ${result.reason}`)
+      } else {
+        console.log(
+          `[AttentionManager][${aid}] Dream generated: ${result.title} (mood: ${result.mood}, emotion: ${result.emotion})`
+        )
+      }
+    } catch (err) {
+      console.error(`[AttentionManager][${aid}] Dream generation failed:`, err)
+    } finally {
+      dreamCheckPending = false
+    }
+  }
 
   // 主动注意力检查循环
   const checkLoop = async () => {
@@ -145,6 +193,7 @@ export async function startAttentionLoop(
       // 周期性自检：当 Lead 持续空闲时，检查是否有未分配的待处理任务
       if (runtime.inbox.pending.length === 0) {
         idleTickCounter++
+        dreamTickCounter++
 
         if (idleTickCounter >= SELF_CHECK_INTERVAL_TICKS && !selfCheckPending) {
           idleTickCounter = 0
@@ -203,12 +252,29 @@ export async function startAttentionLoop(
             selfCheckPending = false
           }
         }
+
+        // Dream 触发检查：当 Lead 持续空闲足够长时间后，触发梦境生成
+        if (dreamTickCounter >= DREAM_CHECK_INTERVAL_TICKS && !dreamCheckPending) {
+          dreamTickCounter = 0
+          dreamCheckPending = true
+
+          if (options.userId) {
+            // 异步触发 Dream，不阻塞主循环
+            triggerDreamGeneration(options.userId, swarmSessionId, agentId).catch((err) => {
+              console.error(`[AttentionManager][${agentId}] Dream trigger error:`, err)
+              dreamCheckPending = false
+            })
+          }
+        }
+
         continue
       }
 
       // 有新消息要处理时，重置 idle 状态
       idleTickCounter = 0
+      dreamTickCounter = 0
       selfCheckPending = false
+      dreamCheckPending = false
 
       const currentWorkContext = runtime.currentWorkContext ?? {
         type: 'idle',
@@ -1019,3 +1085,4 @@ function isDeepWorkContext(context: CurrentWorkContext): boolean {
     || context.type === 'evaluating_task'
     || context.estimatedTimeToComplete !== 'seconds'
 }
+
