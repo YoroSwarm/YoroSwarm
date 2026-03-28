@@ -63,6 +63,8 @@ interface WorkspaceTreeProps {
 export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSession, onDeleteSession }: WorkspaceTreeProps) {
   const router = useRouter();
   const workspaces = useWorkspacesStore((s) => s.workspaces);
+  const initializingWorkspaces = useWorkspacesStore((s) => s.initializingWorkspaces);
+  const errorWorkspaces = useWorkspacesStore((s) => s.errorWorkspaces);
   const loadWorkspaces = useWorkspacesStore((s) => s.loadWorkspaces);
   const currentWorkspaceId = useWorkspacesStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspace = useWorkspacesStore((s) => s.setCurrentWorkspace);
@@ -244,11 +246,17 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                       {/* Workspace name */}
                       <span
                         className={cn(
-                          'flex-1 text-sm font-medium truncate',
+                          'flex-1 text-sm font-medium truncate flex items-center gap-1',
                           isActive && !currentSessionId ? 'text-foreground' : 'text-muted-foreground'
                         )}
                       >
                         {workspace.name}
+                        {errorWorkspaces.has(workspace.id) && (
+                          <AlertCircle className="w-3 h-3 shrink-0 text-red-500" />
+                        )}
+                        {initializingWorkspaces.has(workspace.id) && (
+                          <Loader2 className="w-3 h-3 shrink-0 text-blue-500 animate-spin" />
+                        )}
                       </span>
 
                       {/* New session button */}
@@ -632,12 +640,6 @@ function SessionItem({
         <div className="flex items-center gap-1">
           {session.isPinned && (
             <Pin className="w-3 h-3 shrink-0 text-muted-foreground fill-current" />
-          )}
-          {session.venvError && !session.initializing && (
-            <AlertCircle className="w-3 h-3 shrink-0 text-red-500" />
-          )}
-          {session.initializing && (
-            <Loader2 className="w-3 h-3 shrink-0 text-blue-500 animate-spin" />
           )}
           {session.status === 'paused' && (
             <Pause className="w-3 h-3 shrink-0 text-amber-500" />

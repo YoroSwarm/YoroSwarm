@@ -17,6 +17,7 @@ import { useToolApprovals } from '@/hooks/use-tool-approvals';
 import { useApprovalRules } from '@/hooks/use-approval-rules';
 import { useSessions, CURRENT_SESSION_STORAGE_KEY } from '@/hooks/use-sessions';
 import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
+import { workspacesApi } from '@/lib/api/workspaces';
 import { useMessages } from '@/hooks/use-messages';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useTeamStats } from '@/hooks/use-team-stats';
@@ -92,15 +93,20 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   }, [initialSessionId]);
 
   // 计算有效的会话ID，确保始终使用一个存在于 sessions 列表中的 ID
-  // 且该会话所在的工作区未被归档
+  // 且该会话所在的工作区未被归档，且工作区仍然存在
+  const workspaceIds = useMemo(
+    () => new Set(workspaces.map((w) => w.id)),
+    [workspaces]
+  );
+
   const archivedWorkspaceIds = useMemo(
     () => new Set(workspaces.filter((w) => w.archivedAt).map((w) => w.id)),
     [workspaces]
   );
 
   const validSessions = useMemo(
-    () => sessions.filter((s) => !archivedWorkspaceIds.has(s.workspaceId)),
-    [sessions, archivedWorkspaceIds]
+    () => sessions.filter((s) => workspaceIds.has(s.workspaceId) && !archivedWorkspaceIds.has(s.workspaceId)),
+    [sessions, workspaceIds, archivedWorkspaceIds]
   );
 
   const resolvedSessionId = useMemo(() => {
@@ -140,50 +146,57 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     router.push(targetUrl);
   }, [resolvedSessionId, router]);
 
-  // 检查会话初始化状态（持续轮询直到完成）
-  useEffect(() => {
-    if (!resolvedSessionId) return;
+  // 当前会话
+  const currentSession = useMemo(
+    () => sessions.find((session) => session.id === resolvedSessionId) || null,
+    [resolvedSessionId, sessions]
+  );
 
-    let isMounted = true;
-    let pollInterval: NodeJS.Timeout | null = null;
+  // 检查工作区初始化状态（持续轮询直到完成）
+  useEffect(() => {
+    if (!resolvedSessionId || !currentSession) return;
+
+    const workspaceId = currentSession.workspaceId;
+    let shouldContinue = true;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     const checkInitStatus = async () => {
-      if (!isMounted) return;
+      if (!shouldContinue) return;
 
       try {
-        const status = await swarmSessionsApi.getSessionStatus(resolvedSessionId);
-        if (!isMounted) return;
+        const status = await workspacesApi.getWorkspaceStatus(workspaceId);
+        if (!shouldContinue) return;
 
         if (status.venvReady && status.workspaceReady) {
-          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, false);
-          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, false);
-          // 清理轮询
-          if (pollInterval) clearInterval(pollInterval);
+          useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, false);
+          useWorkspacesStore.getState().setWorkspaceVenvError(workspaceId, false);
         } else if (status.venvStatus === 'error') {
-          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, false);
-          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, true);
-          if (pollInterval) clearInterval(pollInterval);
+          useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, false);
+          useWorkspacesStore.getState().setWorkspaceVenvError(workspaceId, true);
         } else {
           // 还在初始化中，继续轮询
-          useSessionsStore.getState().setSessionInitializing(resolvedSessionId, true);
-          useSessionsStore.getState().setSessionVenvError(resolvedSessionId, false);
+          useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, true);
+          useWorkspacesStore.getState().setWorkspaceVenvError(workspaceId, false);
+          if (shouldContinue) {
+            timeoutId = setTimeout(checkInitStatus, 2000);
+          }
         }
       } catch {
         // 忽略错误，继续轮询
+        if (shouldContinue) {
+          timeoutId = setTimeout(checkInitStatus, 2000);
+        }
       }
     };
 
     // 立即检查一次
     checkInitStatus();
 
-    // 持续轮询直到完成
-    pollInterval = setInterval(checkInitStatus, 2000);
-
     return () => {
-      isMounted = false;
-      if (pollInterval) clearInterval(pollInterval);
+      shouldContinue = false;
+      if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [resolvedSessionId]);
+  }, [resolvedSessionId, currentSession?.workspaceId]);
 
   // Sync URL when auto-selecting a session (no explicit sessionId in URL)
   const initialUrlSynced = useRef(false);
@@ -201,11 +214,6 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
   // 工具审批 hook - 需要在 resolvedSessionId 之后调用
   const { approvals: toolApprovals, handleDecision: handleToolApprovalDecision, handleWSMessage: handleApprovalWSMessage } = useToolApprovals(resolvedSessionId);
   const { addInlineAutoApprove } = useApprovalRules(resolvedSessionId);
-
-  const currentSession = useMemo(
-    () => sessions.find((session) => session.id === resolvedSessionId) || null,
-    [resolvedSessionId, sessions]
-  );
 
   const {
     messages,
@@ -528,7 +536,7 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
               {/* Main content area */}
               <div className="flex-1 overflow-hidden relative">
                 {/* Chat tab - 初始化时只显示加载卡片，不显示消息列表 */}
-                {currentSession?.initializing ? (
+                {currentSession && workspaces.find(w => w.id === currentSession.workspaceId)?.initializing ? (
                   <div className="h-full flex flex-col items-center justify-center">
                     <div className="flex flex-col items-center px-6 py-4 rounded-xl bg-background shadow-sm">
                       <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
@@ -586,8 +594,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
                     sessionId={resolvedSessionId}
                     replyTo={replyToMessage}
                     onCancelReply={() => setReplyToMessage(null)}
-                    disabled={isCreatingSession || currentSession?.status === 'paused' || currentSession?.initializing}
-                    placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : currentSession?.initializing ? '环境初始化中，请稍候...' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
+                    disabled={isCreatingSession || currentSession?.status === 'paused' || !!(currentSession && workspaces.find(w => w.id === currentSession.workspaceId)?.initializing)}
+                    placeholder={currentSession?.status === 'paused' ? '会话已暂停，请先恢复后再发送消息' : (currentSession && workspaces.find(w => w.id === currentSession.workspaceId)?.initializing) ? '环境初始化中，请稍候...' : resolvedSessionId ? '输入消息...' : '直接输入首条消息，系统会自动创建一个 Lead 会话'}
                     onSend={async (content, attachments, replyToId) => {
                       let targetSessionId = resolvedSessionId;
 

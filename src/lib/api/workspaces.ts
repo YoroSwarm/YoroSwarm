@@ -10,6 +10,8 @@ export interface WorkspaceResponse {
   archivedAt: string | null;
   sessionCount: number;
   activeSessionCount: number;
+  initializing?: boolean;
+  venvError?: boolean;
 }
 
 export interface CreateWorkspaceRequest {

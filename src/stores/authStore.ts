@@ -39,6 +39,8 @@ export const useAuthStore = create<AuthStore>()(
 
           storage.set('access_token', tokens.accessToken);
           storage.set('refresh_token', tokens.refreshToken);
+          // Clear old session data on login
+          storage.remove('current_swarm_session_id');
 
           set({
             user,
@@ -60,6 +62,8 @@ export const useAuthStore = create<AuthStore>()(
 
           storage.set('access_token', tokens.accessToken);
           storage.set('refresh_token', tokens.refreshToken);
+          // Clear old session data on registration
+          storage.remove('current_swarm_session_id');
 
           set({
             user,

@@ -8,6 +8,8 @@ interface WorkspacesState {
   currentWorkspaceId: string | null;
   isLoading: boolean;
   error: string | null;
+  initializingWorkspaces: Set<string>;
+  errorWorkspaces: Set<string>;
 }
 
 interface WorkspacesActions {
@@ -18,6 +20,8 @@ interface WorkspacesActions {
   archiveWorkspace: (workspaceId: string) => Promise<void>;
   unarchiveWorkspace: (workspaceId: string) => Promise<void>;
   setCurrentWorkspace: (workspaceId: string | null) => void;
+  setWorkspaceInitializing: (workspaceId: string, initializing: boolean) => void;
+  setWorkspaceVenvError: (workspaceId: string, venvError: boolean) => void;
 }
 
 export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((set, get) => ({
@@ -25,6 +29,8 @@ export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((s
   currentWorkspaceId: null,
   isLoading: false,
   error: null,
+  initializingWorkspaces: new Set(),
+  errorWorkspaces: new Set(),
 
   loadWorkspaces: async () => {
     set({ isLoading: true, error: null });
@@ -45,10 +51,15 @@ export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((s
 
   createWorkspace: async (name, description) => {
     const created = await workspacesApi.createWorkspace({ name, description });
-    set((state) => ({
-      workspaces: [created, ...state.workspaces],
-      currentWorkspaceId: state.currentWorkspaceId || created.id,
-    }));
+    set((state) => {
+      const newSet = new Set(state.initializingWorkspaces);
+      newSet.add(created.id);
+      return {
+        workspaces: [created, ...state.workspaces],
+        currentWorkspaceId: state.currentWorkspaceId || created.id,
+        initializingWorkspaces: newSet,
+      };
+    });
     return created;
   },
 
@@ -87,5 +98,39 @@ export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((s
 
   setCurrentWorkspace: (workspaceId) => {
     set({ currentWorkspaceId: workspaceId });
+  },
+
+  setWorkspaceInitializing: (workspaceId, initializing) => {
+    set((state) => {
+      const newSet = new Set(state.initializingWorkspaces);
+      if (initializing) {
+        newSet.add(workspaceId);
+      } else {
+        newSet.delete(workspaceId);
+      }
+      return {
+        initializingWorkspaces: newSet,
+        workspaces: state.workspaces.map((w) =>
+          w.id === workspaceId ? { ...w, initializing } : w
+        ),
+      };
+    });
+  },
+
+  setWorkspaceVenvError: (workspaceId, venvError) => {
+    set((state) => {
+      const newSet = new Set(state.errorWorkspaces);
+      if (venvError) {
+        newSet.add(workspaceId);
+      } else {
+        newSet.delete(workspaceId);
+      }
+      return {
+        errorWorkspaces: newSet,
+        workspaces: state.workspaces.map((w) =>
+          w.id === workspaceId ? { ...w, venvError } : w
+        ),
+      };
+    });
   },
 }));

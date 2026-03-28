@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { swarmSessionsApi } from '@/lib/api/swarm-sessions';
+import { workspacesApi } from '@/lib/api/workspaces';
 import { ShareDialog } from '@/components/session/ShareDialog';
 import { WorkspaceTree } from './WorkspaceTree';
 
@@ -50,7 +51,7 @@ export function Sidebar() {
   }, []);
 
   // 会话初始化轮询状态
-  const initializingSessionsRef = useRef<Set<string>>(new Set());
+  const initializingWorkspacesRef = useRef<Set<string>>(new Set());
 
   // 确认对话框
   const { confirm, Dialog: ConfirmDialogComponent } = useConfirmDialog();
@@ -70,37 +71,42 @@ export function Sidebar() {
     deleteSession,
   } = useSessions();
 
-  // 轮询会话初始化状态（用于新创建的会话，快速反馈）
-  const pollSessionInit = useCallback(async (sessionId: string) => {
-    if (initializingSessionsRef.current.has(sessionId)) return;
-    initializingSessionsRef.current.add(sessionId);
+  // 轮询工作区 venv 初始化状态（用于新创建的会话，快速反馈）
+  const pollWorkspaceVenvStatus = useCallback(async (workspaceId: string) => {
+    if (initializingWorkspacesRef.current.has(workspaceId)) return;
+    initializingWorkspacesRef.current.add(workspaceId);
 
     const checkStatus = async () => {
-      if (!initializingSessionsRef.current.has(sessionId)) return;
+      // 检查是否仍然需要轮询
+      if (!initializingWorkspacesRef.current.has(workspaceId)) return;
 
       try {
-        const status = await swarmSessionsApi.getSessionStatus(sessionId);
+        const status = await workspacesApi.getWorkspaceStatus(workspaceId);
+        // 再次检查，因为可能在 API 调用期间状态已改变
+        if (!initializingWorkspacesRef.current.has(workspaceId)) return;
+
         if (status.venvReady && status.workspaceReady) {
           // 初始化完成，移除标记并清除状态
-          initializingSessionsRef.current.delete(sessionId);
-          useSessionsStore.getState().setSessionInitializing(sessionId, false);
-          useSessionsStore.getState().setSessionVenvError(sessionId, false);
+          initializingWorkspacesRef.current.delete(workspaceId);
+          useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, false);
+          useWorkspacesStore.getState().setWorkspaceVenvError(workspaceId, false);
           return;
         }
         // 检查是否是错误状态
         if (status.venvStatus === 'error') {
-          initializingSessionsRef.current.delete(sessionId);
-          useSessionsStore.getState().setSessionInitializing(sessionId, false);
-          useSessionsStore.getState().setSessionVenvError(sessionId, true);
+          initializingWorkspacesRef.current.delete(workspaceId);
+          useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, false);
+          useWorkspacesStore.getState().setWorkspaceVenvError(workspaceId, true);
           return;
         }
-      } catch {
-        // 忽略错误，继续轮询
-      }
 
-      // 继续轮询
-      if (initializingSessionsRef.current.has(sessionId)) {
-        setTimeout(checkStatus, 1000);
+        // 还在初始化中，继续轮询
+        if (initializingWorkspacesRef.current.has(workspaceId)) {
+          setTimeout(checkStatus, 2000);
+        }
+      } catch {
+        // API 出错时停止轮询，避免无限重试
+        initializingWorkspacesRef.current.delete(workspaceId);
       }
     };
 
@@ -111,9 +117,9 @@ export function Sidebar() {
     setIsCreating(true);
     try {
       const created = await createSession(workspaceId);
-      // 设置初始化状态并开始轮询
-      useSessionsStore.getState().setSessionInitializing(created.id, true);
-      pollSessionInit(created.id);
+      // 设置工作区初始化状态并开始轮询
+      useWorkspacesStore.getState().setWorkspaceInitializing(workspaceId, true);
+      pollWorkspaceVenvStatus(workspaceId);
       router.push(`/chat?sessionId=${created.id}`);
     } catch (err) {
       console.error('Failed to create session:', err);
