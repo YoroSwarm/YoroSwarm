@@ -46,7 +46,7 @@ export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((s
   createWorkspace: async (name, description) => {
     const created = await workspacesApi.createWorkspace({ name, description });
     set((state) => ({
-      workspaces: [...state.workspaces, created],
+      workspaces: [created, ...state.workspaces],
       currentWorkspaceId: state.currentWorkspaceId || created.id,
     }));
     return created;
