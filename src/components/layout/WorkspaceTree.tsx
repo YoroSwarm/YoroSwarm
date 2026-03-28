@@ -161,10 +161,10 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
         {/* Header: New workspace button */}
         <div className="p-3 shrink-0">
           <Button
-            variant="outline"
+            variant="default"
             size="sm"
             onClick={() => setCreateDialogOpen(true)}
-            className="w-full justify-start text-sm"
+            className="w-full justify-center text-sm"
           >
             <Plus className="w-4 h-4 mr-2" />
             新建工作空间
