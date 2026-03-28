@@ -191,7 +191,15 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                 const wsSessions = sessionsInWorkspace(workspace.id);
 
                 return (
-                  <div key={workspace.id} className="space-y-0.5">
+                  <motion.div
+                    key={workspace.id}
+                    layout
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.2, ease: 'easeOut' }}
+                    className="space-y-0.5"
+                  >
                     {/* Workspace header - click anywhere to toggle */}
                     <div
                       onClick={(e) => handleWorkspaceClick(e, workspace)}
@@ -293,17 +301,25 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                           )}
 
                           {wsSessions.map((session) => (
-                            <SessionItem
+                            <motion.div
                               key={session.id}
-                              session={session}
-                              currentSessionId={currentSessionId}
-                              onClick={() => router.push(`/chat?sessionId=${session.id}`)}
-                            />
+                              layout
+                              initial={{ opacity: 0, x: -8 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              exit={{ opacity: 0, x: -8 }}
+                              transition={{ duration: 0.15, ease: 'easeOut' }}
+                            >
+                              <SessionItem
+                                session={session}
+                                currentSessionId={currentSessionId}
+                                onClick={() => router.push(`/chat?sessionId=${session.id}`)}
+                              />
+                            </motion.div>
                           ))}
                         </motion.div>
                       ) : null}
                     </AnimatePresence>
-                  </div>
+                  </motion.div>
                 );
               })}
             </AnimatePresence>
