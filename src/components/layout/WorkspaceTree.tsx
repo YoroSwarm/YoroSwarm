@@ -40,6 +40,12 @@ import {
 import { useConfirmDialog } from '@/components/ui/confirm-dialog';
 import { CreateWorkspaceDialog } from './CreateWorkspaceDialog';
 import { RenameWorkspaceDialog } from './RenameWorkspaceDialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useWorkspacesStore } from '@/stores';
 import { useSessionsStore } from '@/stores';
 import type { Session } from '@/types/chat';
@@ -58,12 +64,14 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
   const currentWorkspaceId = useWorkspacesStore((s) => s.currentWorkspaceId);
   const setCurrentWorkspace = useWorkspacesStore((s) => s.setCurrentWorkspace);
   const deleteWorkspace = useWorkspacesStore((s) => s.deleteWorkspace);
+  const archiveWorkspace = useWorkspacesStore((s) => s.archiveWorkspace);
+  const unarchiveWorkspace = useWorkspacesStore((s) => s.unarchiveWorkspace);
 
   const sessions = useSessionsStore((s) => s.sessions);
   const isLoading = useSessionsStore((s) => s.isLoading);
 
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<Set<string>>(new Set());
-  const [showArchived, setShowArchived] = useState(false);
+  const [archivedSessionsOpen, setArchivedSessionsOpen] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [renameDialogOpen, setRenameDialogOpen] = useState(false);
   const [renameWorkspaceId, setRenameWorkspaceId] = useState<string | null>(null);
@@ -93,13 +101,9 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
 
   const sessionsInWorkspace = useCallback(
     (workspaceId: string) => {
-      const inWs = sessions.filter((s) => s.workspaceId === workspaceId);
-      if (showArchived) {
-        return inWs.filter((s) => s.status === 'archived');
-      }
-      return inWs.filter((s) => s.status !== 'archived');
+      return sessions.filter((s) => s.workspaceId === workspaceId && s.status !== 'archived');
     },
-    [sessions, showArchived]
+    [sessions]
   );
 
   const handleDeleteWorkspace = async () => {
@@ -166,16 +170,19 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
             新建工作空间
           </Button>
 
-          <div className="flex items-center justify-between px-1">
-            <span className="text-xs font-medium text-muted-foreground">已归档</span>
+          {workspaces.filter((w) => w.archivedAt).length > 0 && (
             <Button
               variant="ghost"
-              onClick={() => setShowArchived((v) => !v)}
-              className={cn('h-6 text-xs', showArchived && 'bg-accent')}
+              onClick={() => setArchivedSessionsOpen(true)}
+              className="w-full justify-start text-sm h-auto py-1.5"
             >
-              {showArchived ? '隐藏' : '显示'}
+              <Archive className="w-4 h-4 mr-2" />
+              已归档工作区
+              <span className="ml-auto text-xs bg-muted rounded-full px-1.5 py-0.5">
+                {workspaces.filter((w) => w.archivedAt).length}
+              </span>
             </Button>
-          </div>
+          )}
         </div>
 
         {/* Workspace tree */}
@@ -189,7 +196,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
             )}
 
             <AnimatePresence initial={false}>
-              {workspaces.map((workspace) => {
+              {workspaces.filter((w) => !w.archivedAt).map((workspace) => {
                 const isExpanded = expandedWorkspaces.has(workspace.id);
                 const isActive = currentWorkspaceId === workspace.id;
                 const wsSessions = sessionsInWorkspace(workspace.id);
@@ -235,8 +242,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                       </span>
 
                       {/* New session button */}
-                      {!showArchived && (
-                        <button
+                      <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setCurrentWorkspace(workspace.id);
@@ -252,7 +258,6 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                             <Plus className="w-3.5 h-3.5 text-muted-foreground" />
                           )}
                         </button>
-                      )}
 
                       {/* More button */}
                       <DropdownMenu>
@@ -274,6 +279,27 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                             <Pencil className="w-4 h-4 mr-2" />
                             重命名
                           </DropdownMenuItem>
+                          {workspace.archivedAt ? (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void unarchiveWorkspace(workspace.id);
+                              }}
+                            >
+                              <ArchiveRestore className="w-4 h-4 mr-2" />
+                              取消归档
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void archiveWorkspace(workspace.id);
+                              }}
+                            >
+                              <Archive className="w-4 h-4 mr-2" />
+                              归档
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
@@ -301,7 +327,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                         >
                           {wsSessions.length === 0 && !isLoading && (
                             <div className="text-center text-muted-foreground text-xs py-2">
-                              {showArchived ? '无归档会话' : '无会话'}
+                              无会话
                             </div>
                           )}
 
@@ -358,7 +384,135 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Archived workspaces modal */}
+      <Dialog open={archivedSessionsOpen} onOpenChange={setArchivedSessionsOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Archive className="w-5 h-5" />
+              已归档工作区
+            </DialogTitle>
+          </DialogHeader>
+          <ScrollArea className="max-h-[60vh] mt-4">
+            <div className="space-y-2">
+              {workspaces
+                .filter((w) => w.archivedAt)
+                .map((workspace) => (
+                  <ArchivedWorkspaceItem
+                    key={workspace.id}
+                    workspace={workspace}
+                    sessions={sessions.filter((s) => s.workspaceId === workspace.id)}
+                    onUnarchive={() => {
+                      void unarchiveWorkspace(workspace.id);
+                      setArchivedSessionsOpen(false);
+                    }}
+                  />
+                ))}
+            </div>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </>
+  );
+}
+
+function ArchivedWorkspaceItem({
+  workspace,
+  sessions,
+  onUnarchive,
+}: {
+  workspace: WorkspaceResponse;
+  sessions: Session[];
+  onUnarchive: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    return new Date(dateStr).toLocaleDateString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div
+        className="group flex items-center gap-2 px-3 py-2 hover:bg-accent/30 cursor-pointer transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <ChevronRight
+          className={cn(
+            'w-4 h-4 text-muted-foreground shrink-0 transition-transform',
+            expanded && 'rotate-90'
+          )}
+        />
+        <Archive className="w-4 h-4 text-muted-foreground shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-medium truncate">{workspace.name}</div>
+          <div className="text-xs text-muted-foreground">
+            {workspace.sessionCount} 个会话
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onUnarchive();
+          }}
+          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-500 hover:text-white"
+        >
+          <ArchiveRestore className="w-4 h-4" />
+        </Button>
+      </div>
+
+      <AnimatePresence>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="overflow-hidden"
+          >
+            <div className="px-4 py-3 bg-muted/30 border-t space-y-2">
+              <div className="text-xs text-muted-foreground">
+                <div className="flex gap-4">
+                  <span>创建于: {formatDate(workspace.createdAt)}</span>
+                  <span>归档于: {formatDate(workspace.archivedAt)}</span>
+                </div>
+              </div>
+              {workspace.description && (
+                <div className="text-sm text-muted-foreground">{workspace.description}</div>
+              )}
+              {sessions.length > 0 ? (
+                <div className="space-y-1 pt-1">
+                  <div className="text-xs font-medium text-muted-foreground">会话列表:</div>
+                  {sessions.map((session) => (
+                    <div
+                      key={session.id}
+                      className="flex items-center gap-2 text-xs py-1 px-2 rounded bg-background/50"
+                    >
+                      <span className="truncate flex-1">{session.title || '未命名会话'}</span>
+                      <span className="text-muted-foreground shrink-0">
+                        {session.status === 'archived' ? '已归档' : session.status}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-xs text-muted-foreground italic pt-1">无会话</div>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
@@ -373,8 +527,6 @@ function SessionItem({
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
-  const archiveSession = useSessionsStore((s) => s.archiveSession);
-  const unarchiveSession = useSessionsStore((s) => s.unarchiveSession);
   const pinSession = useSessionsStore((s) => s.pinSession);
   const unpinSession = useSessionsStore((s) => s.unpinSession);
   const pauseSession = useSessionsStore((s) => s.pauseSession);
@@ -446,17 +598,6 @@ function SessionItem({
               暂停
             </DropdownMenuItem>
           ) : null}
-          {session.status === 'archived' ? (
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void unarchiveSession(session.id); }}>
-              <ArchiveRestore className="w-4 h-4 mr-2" />
-              取消归档
-            </DropdownMenuItem>
-          ) : (
-            <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void archiveSession(session.id); }}>
-              <Archive className="w-4 h-4 mr-2" />
-              归档
-            </DropdownMenuItem>
-          )}
           <DropdownMenuItem
             variant="destructive"
             onClick={(e) => {

@@ -46,8 +46,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     const name = typeof body.name === 'string' ? body.name.trim() : undefined
     const description = typeof body.description === 'string' ? body.description.trim() : undefined
+    const archivedAt =
+      body.archivedAt === true
+        ? new Date()
+        : body.archivedAt === false || body.archivedAt === null
+          ? null
+          : undefined
 
-    const updated = await updateWorkspace(id, { name, description })
+    const updated = await updateWorkspace(id, { name, description, archivedAt })
     return successResponse(updated)
   } catch (error) {
     if (error instanceof Error && error.message === 'UNAUTHORIZED') {

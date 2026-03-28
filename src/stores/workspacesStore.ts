@@ -71,14 +71,18 @@ export const useWorkspacesStore = create<WorkspacesState & WorkspacesActions>((s
     });
   },
 
-  archiveWorkspace: async (_workspaceId) => {
-    // Archive is handled by setting archivedAt on the workspace
-    // For now, we just reload the list
-    await get().loadWorkspaces();
+  archiveWorkspace: async (workspaceId) => {
+    const updated = await workspacesApi.archiveWorkspace(workspaceId);
+    set((state) => ({
+      workspaces: state.workspaces.map((w) => (w.id === workspaceId ? updated : w)),
+    }));
   },
 
-  unarchiveWorkspace: async (_workspaceId) => {
-    await get().loadWorkspaces();
+  unarchiveWorkspace: async (workspaceId) => {
+    const updated = await workspacesApi.unarchiveWorkspace(workspaceId);
+    set((state) => ({
+      workspaces: state.workspaces.map((w) => (w.id === workspaceId ? updated : w)),
+    }));
   },
 
   setCurrentWorkspace: (workspaceId) => {

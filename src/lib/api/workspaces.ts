@@ -61,4 +61,12 @@ export const workspacesApi = {
   retryVenvSetup: async (workspaceId: string): Promise<WorkspaceStatusResponse> => {
     return api.post<WorkspaceStatusResponse>(`/workspaces/${workspaceId}/venv/retry`);
   },
+
+  archiveWorkspace: async (workspaceId: string): Promise<WorkspaceResponse> => {
+    return api.patch<WorkspaceResponse>(`/workspaces/${workspaceId}`, { archivedAt: true });
+  },
+
+  unarchiveWorkspace: async (workspaceId: string): Promise<WorkspaceResponse> => {
+    return api.patch<WorkspaceResponse>(`/workspaces/${workspaceId}`, { archivedAt: false });
+  },
 };

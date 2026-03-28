@@ -22,6 +22,7 @@ export interface CreateWorkspaceInput {
 export interface UpdateWorkspaceInput {
   name?: string
   description?: string
+  archivedAt?: Date | null
 }
 
 export interface WorkspaceWithStats {
@@ -167,6 +168,7 @@ export async function updateWorkspace(
     data: {
       name: data.name,
       description: data.description,
+      archivedAt: data.archivedAt,
       updatedAt: new Date(),
     },
     include: {
