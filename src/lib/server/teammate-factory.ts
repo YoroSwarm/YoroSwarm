@@ -5,7 +5,7 @@ import { appendAgentContextEntry } from '@/lib/server/agent-context'
 import { createInternalThread, sendInternalMessage } from '@/lib/server/internal-bus'
 import { initCognitiveTeammate } from '@/lib/server/cognitive-teammate-runner'
 
-const MAX_TEAMMATES_PER_SESSION = 30
+const MAX_TEAMMATES_PER_SESSION = 100
 
 /**
  * Teammate 创建输入 - 完全由 Lead 控制

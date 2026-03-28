@@ -746,23 +746,6 @@ export async function resetCircuitBreaker(swarmSessionId: string): Promise<boole
 }
 
 /**
- * 注册 Agent Loop 的全局工具调用计数
- */
-export function recordToolCall(swarmSessionId: string): void {
-  const state = getSchedulerState(swarmSessionId)
-  if (state) {
-    state.stats.totalToolCalls++
-  }
-}
-
-/**
- * 获取 session 级别的全局工具调用计数
- */
-export function getSessionToolCallCount(swarmSessionId: string): number {
-  return getSchedulerState(swarmSessionId)?.stats.totalToolCalls || 0
-}
-
-/**
  * 通知Lead Agent熔断器已触发
  */
 async function notifyLeadOfCircuitBreaker(swarmSessionId: string, failureCount: number): Promise<void> {

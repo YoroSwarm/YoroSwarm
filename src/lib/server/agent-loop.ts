@@ -2,10 +2,8 @@ import { callLLM, extractTextContent, extractToolUseBlocks } from './llm/client'
 import type { AgentLoopResult, ToolDefinition, LLMMessage, LLMResponse, ToolResultBlock } from './llm/types'
 import { appendAgentContextEntry } from './agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
-import { recordToolCall, getSessionToolCallCount } from './parallel-scheduler'
 
 const MAX_ITERATIONS = 50
-const MAX_SESSION_TOOL_CALLS = 2000
 
 /**
  * 检测文本是否是纯标签（如 <end_turn>），没有实际内容
@@ -360,20 +358,6 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         totalToolCalls++
         console.log(`[AgentLoop][${agentName}] Tool call #${totalToolCalls}: ${toolUse.name}`)
-
-        // 全局工具调用计数与限制
-        recordToolCall(swarmSessionId)
-        const sessionToolCalls = getSessionToolCallCount(swarmSessionId)
-        if (sessionToolCalls > MAX_SESSION_TOOL_CALLS) {
-          console.warn(`[AgentLoop][${agentName}] Session tool call limit reached (${sessionToolCalls}/${MAX_SESSION_TOOL_CALLS})`)
-          toolResults.push({
-            type: 'tool_result',
-            tool_use_id: toolUse.id,
-            content: `会话全局工具调用已达上限 (${MAX_SESSION_TOOL_CALLS})，请结束当前任务。`,
-            is_error: true,
-          })
-          continue
-        }
 
         // Generate unique tool call ID for this specific tool invocation
         const toolCallId = `tc-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
