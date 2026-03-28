@@ -17,6 +17,7 @@ import {
   Archive,
   ArchiveRestore,
   Play,
+  Share,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -50,6 +51,7 @@ import { useWorkspacesStore } from '@/stores';
 import { useSessionsStore } from '@/stores';
 import type { Session } from '@/types/chat';
 import type { WorkspaceResponse } from '@/lib/api/workspaces';
+import { ShareDialog } from '@/components/session/ShareDialog';
 
 interface WorkspaceTreeProps {
   currentSessionId: string | null;
@@ -80,6 +82,8 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
   const [deleteWorkspaceId, setDeleteWorkspaceId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const { Dialog: ConfirmDialogComponent } = useConfirmDialog();
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareSessionId, setShareSessionId] = useState<string | null>(null);
 
   // Load workspaces on mount
   useEffect(() => {
@@ -330,6 +334,10 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                                 session={session}
                                 currentSessionId={currentSessionId}
                                 onClick={() => router.push(`/chat?sessionId=${session.id}`)}
+                                onShare={() => {
+                                  setShareSessionId(session.id);
+                                  setShareDialogOpen(true);
+                                }}
                               />
                             </motion.div>
                           ))}
@@ -415,6 +423,13 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
           </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* Share dialog */}
+      <ShareDialog
+        open={shareDialogOpen}
+        onOpenChange={setShareDialogOpen}
+        sessionId={shareSessionId || ''}
+      />
     </>
   );
 }
@@ -522,10 +537,12 @@ function SessionItem({
   session,
   currentSessionId,
   onClick,
+  onShare,
 }: {
   session: Session;
   currentSessionId: string | null;
   onClick: () => void;
+  onShare: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
   const deleteSession = useSessionsStore((s) => s.deleteSession);
@@ -600,6 +617,16 @@ function SessionItem({
               暂停
             </DropdownMenuItem>
           ) : null}
+          <DropdownMenuItem
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowMenu(false);
+              onShare();
+            }}
+          >
+            <Share className="w-4 h-4 mr-2" />
+            创建分享
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
             onClick={(e) => {
