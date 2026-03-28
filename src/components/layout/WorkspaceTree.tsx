@@ -13,6 +13,10 @@ import {
   Pause,
   AlertCircle,
   Pin,
+  Pencil,
+  Archive,
+  ArchiveRestore,
+  Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -267,6 +271,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                               handleRenameWorkspace(workspace);
                             }}
                           >
+                            <Pencil className="w-4 h-4 mr-2" />
                             重命名
                           </DropdownMenuItem>
                           <DropdownMenuItem
@@ -421,28 +426,34 @@ function SessionItem({
         <DropdownMenuContent align="end" className="w-40">
           {session.isPinned ? (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void unpinSession(session.id); }}>
+              <Pin className="w-4 h-4 mr-2" />
               取消置顶
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void pinSession(session.id); }}>
+              <Pin className="w-4 h-4 mr-2" />
               置顶
             </DropdownMenuItem>
           )}
           {session.status === 'paused' ? (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void resumeSession(session.id); }}>
+              <Play className="w-4 h-4 mr-2" />
               恢复
             </DropdownMenuItem>
           ) : session.status === 'active' ? (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void pauseSession(session.id); }}>
+              <Pause className="w-4 h-4 mr-2" />
               暂停
             </DropdownMenuItem>
           ) : null}
           {session.status === 'archived' ? (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void unarchiveSession(session.id); }}>
+              <ArchiveRestore className="w-4 h-4 mr-2" />
               取消归档
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem onClick={(e) => { e.stopPropagation(); void archiveSession(session.id); }}>
+              <Archive className="w-4 h-4 mr-2" />
               归档
             </DropdownMenuItem>
           )}
@@ -453,6 +464,7 @@ function SessionItem({
               void deleteSession(session.id);
             }}
           >
+            <Trash2 className="w-4 h-4 mr-2" />
             删除
           </DropdownMenuItem>
         </DropdownMenuContent>
