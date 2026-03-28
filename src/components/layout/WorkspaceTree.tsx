@@ -158,8 +158,8 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
       />
 
       <div className="flex flex-col h-full">
-        {/* Header: New workspace button + archive toggle */}
-        <div className="p-3 shrink-0 space-y-2">
+        {/* Header: New workspace button */}
+        <div className="p-3 shrink-0">
           <Button
             variant="outline"
             size="sm"
@@ -169,20 +169,6 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
             <Plus className="w-4 h-4 mr-2" />
             新建工作空间
           </Button>
-
-          {workspaces.filter((w) => w.archivedAt).length > 0 && (
-            <Button
-              variant="ghost"
-              onClick={() => setArchivedSessionsOpen(true)}
-              className="w-full justify-start text-sm h-auto py-1.5"
-            >
-              <Archive className="w-4 h-4 mr-2" />
-              已归档工作区
-              <span className="ml-auto text-xs bg-muted rounded-full px-1.5 py-0.5">
-                {workspaces.filter((w) => w.archivedAt).length}
-              </span>
-            </Button>
-          )}
         </div>
 
         {/* Workspace tree */}
@@ -356,6 +342,22 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
             </AnimatePresence>
           </div>
         </ScrollArea>
+
+        {/* Archived workspaces link - fixed at bottom */}
+        {workspaces.filter((w) => w.archivedAt).length > 0 && (
+          <div className="p-3 border-t shrink-0">
+            <button
+              onClick={() => setArchivedSessionsOpen(true)}
+              className="flex items-center gap-2 px-2 text-xs text-muted-foreground hover:text-foreground hover:underline transition-colors"
+            >
+              <Archive className="w-3.5 h-3.5" />
+              已归档工作区
+              <span className="text-xs bg-muted rounded-full px-1.5 py-0.5">
+                {workspaces.filter((w) => w.archivedAt).length}
+              </span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Delete workspace confirmation */}
