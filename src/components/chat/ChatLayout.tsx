@@ -71,6 +71,8 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     updateSessionParticipant,
   } = useSessions();
 
+  const workspaces = useWorkspacesStore((s) => s.workspaces);
+
   // 保存右侧面板状态到 storage
   useEffect(() => {
     storage.set(RIGHT_PANEL_STORAGE_KEY, isRightPanelOpen);
@@ -89,34 +91,50 @@ export function ChatLayout({ className, initialSessionId = null }: ChatLayoutPro
     }
   }, [initialSessionId]);
 
-  // 清理无效的当前会话ID
+  // 计算有效的会话ID，确保始终使用一个存在于 sessions 列表中的 ID
+  // 且该会话所在的工作区未被归档
+  const archivedWorkspaceIds = useMemo(
+    () => new Set(workspaces.filter((w) => w.archivedAt).map((w) => w.id)),
+    [workspaces]
+  );
+
+  const validSessions = useMemo(
+    () => sessions.filter((s) => !archivedWorkspaceIds.has(s.workspaceId)),
+    [sessions, archivedWorkspaceIds]
+  );
+
+  const resolvedSessionId = useMemo(() => {
+    // 如果 currentSessionId 有效，直接使用
+    if (currentSessionId && validSessions.some((s) => s.id === currentSessionId)) {
+      return currentSessionId;
+    }
+    // 如果 initialSessionId 有效，使用它
+    if (initialSessionId && validSessions.some((s) => s.id === initialSessionId)) {
+      return initialSessionId;
+    }
+    // 否则使用第一个有效会话
+    return validSessions[0]?.id ?? null;
+  }, [currentSessionId, initialSessionId, validSessions]);
+
+  // 当 resolvedSessionId 与 URL 不一致时，更新 URL
+  // 这处理了：会话被删除、工作区被归档等情况下的自动跳转
+  // 防止循环跳转：使用 previousUrlRef 记录上次的 URL，避免同一 URL 被重复设置
+  const previousUrlRef = useRef<string | null>(null);
   useEffect(() => {
-    if (currentSessionId) {
-      const sessionExists = sessions.some((s) => s.id === currentSessionId);
-      if (!sessionExists) {
-        setCurrentSessionId(null);
-        storage.remove(CURRENT_SESSION_STORAGE_KEY);
+    if (!resolvedSessionId) {
+      const targetUrl = '/chat';
+      if (previousUrlRef.current !== targetUrl) {
+        previousUrlRef.current = targetUrl;
+        router.push(targetUrl);
       }
-    }
-  }, [currentSessionId, sessions]);
-
-  const resolvedSessionId = currentSessionId ?? initialSessionId ?? sessions[0]?.id ?? null;
-
-  useEffect(() => {
-    if (resolvedSessionId) {
-      storage.set(CURRENT_SESSION_STORAGE_KEY, resolvedSessionId);
       return;
     }
-
-    if (sessions.length === 0) {
-      storage.remove(CURRENT_SESSION_STORAGE_KEY);
-      return;
+    const targetUrl = `/chat?sessionId=${resolvedSessionId}`;
+    if (targetUrl !== previousUrlRef.current && resolvedSessionId !== initialSessionId) {
+      previousUrlRef.current = targetUrl;
+      router.push(targetUrl);
     }
-
-    const nextSessionId = sessions[0].id;
-    setCurrentSessionId(nextSessionId);
-    storage.set(CURRENT_SESSION_STORAGE_KEY, nextSessionId);
-  }, [resolvedSessionId, sessions]);
+  }, [resolvedSessionId, initialSessionId, router]);
 
   // 检查会话初始化状态（持续轮询直到完成）
   useEffect(() => {

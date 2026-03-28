@@ -170,8 +170,14 @@ export function Sidebar() {
 
     if (wasCurrentSession) {
       // 删除当前会话后，直接从 store 获取最新的 sessions
-      const state = useSessionsStore.getState();
-      const remainingSessions = state.sessions.filter((s) => s.id !== sessionIdToDelete);
+      const sessionsState = useSessionsStore.getState();
+      const workspacesState = useWorkspacesStore.getState();
+      const archivedWorkspaceIds = new Set(
+        workspacesState.workspaces.filter((w) => w.archivedAt).map((w) => w.id)
+      );
+      const remainingSessions = sessionsState.sessions.filter(
+        (s) => s.id !== sessionIdToDelete && !archivedWorkspaceIds.has(s.workspaceId)
+      );
       if (remainingSessions.length > 0) {
         // 跳转到第一个有效会话，而不是先跳 /chat 再自动跳转
         router.push(`/chat?sessionId=${remainingSessions[0].id}`);
@@ -182,6 +188,27 @@ export function Sidebar() {
     }
     setDeleteConfirm(null);
   };
+
+  // 处理来自 WorkspaceTree SessionItem 的删除请求
+  const handleDeleteSession = useCallback(async (sessionId: string, wasCurrentSession: boolean) => {
+    await deleteSession(sessionId);
+
+    if (wasCurrentSession) {
+      const sessionsState = useSessionsStore.getState();
+      const workspacesState = useWorkspacesStore.getState();
+      const archivedWorkspaceIds = new Set(
+        workspacesState.workspaces.filter((w) => w.archivedAt).map((w) => w.id)
+      );
+      const validSessions = sessionsState.sessions.filter(
+        (s) => s.id !== sessionId && !archivedWorkspaceIds.has(s.workspaceId)
+      );
+      if (validSessions.length > 0) {
+        router.push(`/chat?sessionId=${validSessions[0].id}`);
+      } else {
+        router.push('/chat');
+      }
+    }
+  }, [deleteSession, router]);
 
   return (
     <>
@@ -234,6 +261,7 @@ export function Sidebar() {
               void handleCreateSession(workspaceId);
             }}
             isCreatingSession={isCreating}
+            onDeleteSession={handleDeleteSession}
           />
         </div>
 

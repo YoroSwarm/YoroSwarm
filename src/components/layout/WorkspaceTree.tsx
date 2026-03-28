@@ -57,9 +57,10 @@ interface WorkspaceTreeProps {
   currentSessionId: string | null;
   onCreateSession: (workspaceId: string) => void;
   isCreatingSession: boolean;
+  onDeleteSession: (sessionId: string, wasCurrentSession: boolean) => void;
 }
 
-export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSession }: WorkspaceTreeProps) {
+export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSession, onDeleteSession }: WorkspaceTreeProps) {
   const router = useRouter();
   const workspaces = useWorkspacesStore((s) => s.workspaces);
   const loadWorkspaces = useWorkspacesStore((s) => s.loadWorkspaces);
@@ -338,6 +339,7 @@ export function WorkspaceTree({ currentSessionId, onCreateSession, isCreatingSes
                                   setShareSessionId(session.id);
                                   setShareDialogOpen(true);
                                 }}
+                                onDelete={() => onDeleteSession(session.id, currentSessionId === session.id)}
                               />
                             </motion.div>
                           ))}
@@ -538,14 +540,15 @@ function SessionItem({
   currentSessionId,
   onClick,
   onShare,
+  onDelete,
 }: {
   session: Session;
   currentSessionId: string | null;
   onClick: () => void;
   onShare: () => void;
+  onDelete: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
-  const deleteSession = useSessionsStore((s) => s.deleteSession);
   const pinSession = useSessionsStore((s) => s.pinSession);
   const unpinSession = useSessionsStore((s) => s.unpinSession);
   const pauseSession = useSessionsStore((s) => s.pauseSession);
@@ -631,7 +634,7 @@ function SessionItem({
             variant="destructive"
             onClick={(e) => {
               e.stopPropagation();
-              void deleteSession(session.id);
+              onDelete();
             }}
           >
             <Trash2 className="w-4 h-4 mr-2" />
