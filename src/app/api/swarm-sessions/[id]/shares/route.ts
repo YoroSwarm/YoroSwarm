@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server'
 import { randomBytes } from 'crypto'
-import { mkdir, copyFile, writeFile } from 'fs/promises'
+import { mkdir, copyFile, writeFile, stat } from 'fs/promises'
 import path from 'path'
 import prisma from '@/lib/db'
 import { errorResponse, successResponse, unauthorizedResponse, notFoundResponse } from '@/lib/api/response'
@@ -110,6 +110,9 @@ export async function POST(_request: NextRequest, context: RouteContext) {
     // Manifest: maps snapshotFilename to original file identifier (fileId or relativePath)
     const snapshotManifest: Record<string, { type: 'fileId' | 'relativePath'; id: string; originalName: string }> = {}
 
+    // Create snapshot directory before copying files
+    await mkdir(snapshotDir, { recursive: true })
+
     // Copy files by relativePath (preferred, filesystem-based)
     for (const relativePath of referencedRelativePaths) {
       try {
@@ -139,10 +142,32 @@ export async function POST(_request: NextRequest, context: RouteContext) {
         if (referencedRelativePaths.has(fileRelativePath)) continue
 
         try {
+          let srcPath: string
           // file.path can be absolute or relative - handle both cases
-          const srcPath = path.isAbsolute(file.path)
-            ? file.path
-            : path.join(workspaceRoot, file.path)
+          if (path.isAbsolute(file.path)) {
+            srcPath = file.path
+          } else {
+            srcPath = path.join(workspaceRoot, file.path)
+          }
+
+          // If srcPath doesn't exist, file may have been migrated to new workspace structure
+          // Try to find it in the current workspace by originalName
+          let needsFallback = false
+          try {
+            await stat(srcPath)
+          } catch {
+            needsFallback = true
+          }
+          if (needsFallback || !srcPath.startsWith(workspaceRoot)) {
+            const fallbackPath = path.join(workspaceRoot, file.originalName)
+            try {
+              await stat(fallbackPath)
+              srcPath = fallbackPath
+            } catch {
+              // Fallback also doesn't exist, will fail on copyFile below
+            }
+          }
+
           const snapshotFilename = `${file.id}_${file.originalName}`
           const destPath = path.join(snapshotDir, snapshotFilename)
           await copyFile(srcPath, destPath)
