@@ -71,7 +71,8 @@ export async function GET(
         id: entry.id,
         agentId: entry.agentId,
         agentName: agent.name,
-        agentRole: (agent.id === swarmSession?.leadAgentId ? 'lead' : 'teammate') as 'lead' | 'teammate',
+        // Prefer leadAgentId from session, fallback to agent.role === 'lead'
+        agentRole: (agent.id === swarmSession?.leadAgentId || agent.role === 'lead' ? 'lead' : 'teammate') as 'lead' | 'teammate',
         agentKind: agent.kind,
         createdAt: entry.createdAt.toISOString(),
       }

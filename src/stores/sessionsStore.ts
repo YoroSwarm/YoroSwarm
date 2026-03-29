@@ -27,7 +27,9 @@ function dedupeParticipants(participants: Agent[]): Agent[] {
 }
 
 function convertSession(session: SwarmSessionResponse): Session {
-  const lead = session.agents.find((agent) => agent.id === session.lead_agent_id);
+  // Determine lead agent: prefer lead_agent_id field, fallback to agent.role === 'lead'
+  const leadAgentId = session.lead_agent_id || session.agents.find((a) => a.role === 'lead')?.id
+  const lead = session.agents.find((agent) => agent.id === leadAgentId);
 
   return {
     id: session.id,
@@ -37,7 +39,7 @@ function convertSession(session: SwarmSessionResponse): Session {
     participants: dedupeParticipants(session.agents.map((agent) => ({
       id: agent.id,
       name: normalizeParticipantName(agent.name, agent.role),
-      role: agent.id === session.lead_agent_id ? 'lead' : 'teammate',
+      role: agent.id === leadAgentId ? 'lead' : 'teammate',
       status: agent.status === 'offline' ? 'offline' : agent.status === 'busy' ? 'busy' : 'online',
     }))),
     lastMessage: session.last_message
