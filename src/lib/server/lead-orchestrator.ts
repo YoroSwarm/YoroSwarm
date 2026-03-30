@@ -212,7 +212,7 @@ export async function getLeadContext(swarmSessionId: string, leadAgentId: string
       where: { id: swarmSessionId },
     }),
     getSessionAttachments(swarmSessionId),
-    listExternalMessages(swarmSessionId, userId),
+    listExternalMessages(swarmSessionId, userId, { limit: 30 }),
     getLeadSelfTodoItems(leadAgentId),
   ])
 
@@ -592,5 +592,4 @@ export async function orchestrate(input: OrchestrateInput) {
     },
   }
 }
-
 

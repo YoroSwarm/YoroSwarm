@@ -46,6 +46,7 @@ if (!globalForWs.__wsClients) {
 }
 
 export const clients = globalForWs.__wsClients
+const DEBUG_WS = process.env.DEBUG_WS === '1'
 
 function getPayloadObject(payload: unknown): Record<string, unknown> {
   return typeof payload === 'object' && payload !== null ? payload as Record<string, unknown> : {}
@@ -130,8 +131,7 @@ export function shouldDeliver(state: ClientState, scope?: DeliveryScope) {
   if (scope.agentId && hasSubscription(state, 'agent', scope.agentId)) return true
   if (scope.taskId && hasSubscription(state, 'task', scope.taskId)) return true
 
-  // Debug logging for subscription matching issues
-  if (scope.sessionId) {
+  if (DEBUG_WS && scope.sessionId) {
     const sessionSubs = state.subscriptions.get('session')
     console.log('[shouldDeliver] session check:', {
       scopeSessionId: scope.sessionId,
@@ -152,7 +152,7 @@ export function broadcast(message: WebSocketMessage, options?: { excludeClientId
     state.socket.send(messageStr)
     deliveredCount++
   })
-  if (message.type !== 'pong') {
+  if (DEBUG_WS && message.type !== 'pong') {
     console.log('[WS Broadcast]', message.type, 'to', deliveredCount, 'clients (total:', clients.size, ')')
   }
 }

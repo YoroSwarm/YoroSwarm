@@ -401,7 +401,7 @@ async function processInboxMessages(
     externalChat,
   ] = await Promise.all([
     getLeadOrchestrationContext(swarmSessionId, leadAgentId, userId),
-    listExternalMessages(swarmSessionId, userId),
+    listExternalMessages(swarmSessionId, userId, { limit: 30 }),
   ])
 
   // 构建当前收件箱消息提示

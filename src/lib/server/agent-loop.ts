@@ -2,8 +2,13 @@ import { callLLM, extractTextContent, extractToolUseBlocks } from './llm/client'
 import type { AgentLoopResult, ToolDefinition, LLMMessage, LLMResponse, ToolResultBlock } from './llm/types'
 import { appendAgentContextEntry } from './agent-context'
 import { publishRealtimeMessage } from '@/app/api/ws/route'
+import { compressContextMessagesSync, estimateMessagesTokens } from './llm-context'
 
 const MAX_ITERATIONS = 50
+const MAX_THINKING_SUMMARY_CHARS = 4000
+const MAX_TOOL_IO_SUMMARY_CHARS = 2000
+const LOOP_COMPACTION_TOKEN_THRESHOLD = 40000
+const MAX_THINKING_ITEMS = 8
 
 /**
  * 检测文本是否是纯标签（如 <end_turn>），没有实际内容
@@ -14,6 +19,27 @@ function isPureTagMessage(text: string): boolean {
   // 检查是否整个文本就是单个XML标签
   // 匹配 <tag> 或 </tag> 格式，但不能有其他内容
   return /^<\/?[a-zA-Z_][a-zA-Z0-9_]*\s*\/?>$/.test(trimmed)
+}
+
+function summarizeText(value: string | undefined, maxChars: number): string | undefined {
+  if (!value) return value
+  if (value.length <= maxChars) return value
+  return `${value.slice(0, maxChars)}\n...[truncated ${value.length - maxChars} chars]`
+}
+
+function pushBounded<T>(items: T[], value: T, maxItems: number): void {
+  items.push(value)
+  if (items.length > maxItems) {
+    items.splice(0, items.length - maxItems)
+  }
+}
+
+function compactLoopMessages(messages: LLMMessage[]): LLMMessage[] {
+  if (estimateMessagesTokens(messages) <= LOOP_COMPACTION_TOKEN_THRESHOLD) {
+    return messages
+  }
+
+  return compressContextMessagesSync(messages)
 }
 
 export type ToolExecutor = (
@@ -249,7 +275,11 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
     // Persist real thinking to DB and broadcast
     let messageSeq = 0
     if (response.reasoningContent) {
-      thinkingContent.push(response.reasoningContent)
+      pushBounded(
+        thinkingContent,
+        summarizeText(response.reasoningContent, MAX_THINKING_SUMMARY_CHARS) || response.reasoningContent,
+        MAX_THINKING_ITEMS
+      )
 
       const thinkingEntry = await appendAgentContextEntry({
         swarmSessionId,
@@ -268,7 +298,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
             agent_name: agentName,
             swarm_session_id: swarmSessionId,
             status: 'thinking',
-            content: response.reasoningContent,
+            content: summarizeText(response.reasoningContent, MAX_THINKING_SUMMARY_CHARS) || response.reasoningContent,
             entry_id: thinkingEntry?.id,
             timestamp: new Date().toISOString(),
             seq: messageSeq++,
@@ -340,13 +370,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         if (singleUseToolsPerRun.has(toolUse.name) && usedSingleUseTools.has(toolUse.name)) {
           console.warn(`[AgentLoop][${agentName}] Skipping repeated single-use tool: ${toolUse.name}`)
-          toolCalls.push({
+          pushBounded(toolCalls, {
             toolName: toolUse.name,
             status: 'error',
-            inputSummary: JSON.stringify(toolUse.input).slice(0, 100),
+            inputSummary: summarizeText(JSON.stringify(toolUse.input), MAX_TOOL_IO_SUMMARY_CHARS),
             resultSummary: 'Skipped repeated single-use tool invocation in the same loop',
             timestamp: new Date().toISOString(),
-          })
+          }, MAX_ITERATIONS * 4)
           toolResults.push({
             type: 'tool_result',
             tool_use_id: toolUse.id,
@@ -361,7 +391,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         // Generate unique tool call ID for this specific tool invocation
         const toolCallId = `tc-${agentId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-        const inputSummary = JSON.stringify(toolUse.input)
+        const inputSummary = summarizeText(JSON.stringify(toolUse.input), MAX_TOOL_IO_SUMMARY_CHARS) || '{}'
 
         // Broadcast tool activity - calling
         publishRealtimeMessage(
@@ -485,7 +515,7 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
               tool_call_id: toolCallId,
               tool_name: toolUse.name,
               status: isError ? 'error' : 'completed',
-              result_summary: result,
+              result_summary: summarizeText(result, MAX_TOOL_IO_SUMMARY_CHARS) || result,
               timestamp: new Date().toISOString(),
               model: currentModel,
             },
@@ -498,13 +528,13 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
           && !result.includes('\"success\":false')
 
         // Record tool call for persistence (format compatible with frontend)
-        toolCalls.push({
+        pushBounded(toolCalls, {
           toolName: toolUse.name,
           status: isError ? 'error' : 'completed',
           inputSummary: inputSummary,
-          resultSummary: result,
+          resultSummary: summarizeText(result, MAX_TOOL_IO_SUMMARY_CHARS) || result,
           timestamp: new Date().toISOString(),
-        })
+        }, MAX_ITERATIONS * 4)
 
         const shouldStopFromCallback = !isError && Boolean(shouldStopAfterToolCall?.({
           toolName: toolUse.name,
@@ -524,6 +554,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
         if (shouldStopAfterTool || shouldStopFromCallback) {
           messages.push({ role: 'user', content: toolResults })
+          const compacted = compactLoopMessages(messages)
+          if (compacted !== messages) {
+            messages.splice(0, messages.length, ...compacted)
+          }
 
           publishRealtimeMessage(
             {
@@ -585,6 +619,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
 
       // Add tool results as next user message
       messages.push({ role: 'user', content: toolResults })
+      const compacted = compactLoopMessages(messages)
+      if (compacted !== messages) {
+        messages.splice(0, messages.length, ...compacted)
+      }
     } else if (response.stopReason === 'max_tokens' && maxTokensContinuations < MAX_CONTINUATIONS) {
       // Response was truncated due to max_tokens limit — continue the loop
       maxTokensContinuations++
@@ -593,6 +631,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
       // Save partial response as assistant message
       if (textContent) {
         messages.push({ role: 'assistant', content: textContent })
+        const compacted = compactLoopMessages(messages)
+        if (compacted !== messages) {
+          messages.splice(0, messages.length, ...compacted)
+        }
 
         // Record as bubble message for Lead only; discard for non-Lead
         // Filter out pure tag messages (e.g., <end_turn>)
@@ -629,6 +671,10 @@ export async function runAgentLoop(options: AgentLoopOptions): Promise<AgentLoop
         role: 'user',
         content: '你的回复因长度限制被截断了。请从截断处继续完成。如果你正在生成文件内容，请使用工具（如 write_file）来写入完整内容，而不是直接在回复中输出长文本。',
       })
+      const compacted = compactLoopMessages(messages)
+      if (compacted !== messages) {
+        messages.splice(0, messages.length, ...compacted)
+      }
 
       // Continue the loop — next iteration will call LLM again
     } else {

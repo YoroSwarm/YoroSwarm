@@ -65,11 +65,19 @@ export async function appendLeadReply(input: {
   })
 }
 
-export async function listExternalMessages(swarmSessionId: string, userId: string) {
+export async function listExternalMessages(
+  swarmSessionId: string,
+  userId: string,
+  options?: { limit?: number }
+) {
   const conversation = await getOrCreateExternalConversation(swarmSessionId, userId)
+  const limit = typeof options?.limit === 'number' && options.limit > 0
+    ? Math.min(Math.floor(options.limit), 200)
+    : undefined
   const messages = await prisma.externalMessage.findMany({
     where: { conversationId: conversation.id },
     orderBy: { createdAt: 'asc' },
+    ...(limit ? { take: limit } : {}),
   })
 
   return { conversation, messages }
