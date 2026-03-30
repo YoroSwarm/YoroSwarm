@@ -30,6 +30,20 @@ import { readFile, writeFile } from 'fs/promises'
 
 // 持久化文件读取缓存
 const teammateReadFileCache = new Map<string, Map<string, string>>()
+const MAX_PERSISTENT_READ_CACHE_ENTRIES = 32
+
+function touchReadCacheEntry(cache: Map<string, string>, key: string, value: string): void {
+  if (cache.has(key)) {
+    cache.delete(key)
+  }
+  cache.set(key, value)
+
+  while (cache.size > MAX_PERSISTENT_READ_CACHE_ENTRIES) {
+    const oldestKey = cache.keys().next().value
+    if (!oldestKey) break
+    cache.delete(oldestKey)
+  }
+}
 
 // ──────────────────────────────────────────────
 // Runtime Control 构建器
@@ -349,12 +363,13 @@ export function buildTeammateToolExecutor(
         const persistentCached = persistentReadCache.get(filePath)
         if (persistentCached) {
           toolCache.set(cacheKey, persistentCached)
+          touchReadCacheEntry(persistentReadCache, filePath, persistentCached)
           return persistentCached
         }
 
         const result = await handleReadWorkspaceFile(swarmSessionId, input)
         toolCache.set(cacheKey, result)
-        persistentReadCache.set(filePath, result)
+        touchReadCacheEntry(persistentReadCache, filePath, result)
         return result
       }
 

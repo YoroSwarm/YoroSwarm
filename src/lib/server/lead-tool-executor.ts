@@ -22,6 +22,7 @@ import {
   getCognitiveRuntime,
   resumeSnapshot,
 } from './cognitive-inbox'
+import { cleanupCognitiveTeammate } from './cognitive-teammate-runner'
 import { assignSkillToAgent } from './skills/skill-registry'
 import {
   listWorkspaceDirectory,
@@ -510,6 +511,8 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
           data: { assigneeId: null },
         })
 
+        cleanupCognitiveTeammate(swarmSessionId, teammateId)
+
         return JSON.stringify({
           success: true,
           teammate_id: teammateId,
@@ -825,4 +828,3 @@ export function buildLeadToolExecutor(input: LeadProcessorInput, options: LeadTo
     }
   }
 }
-

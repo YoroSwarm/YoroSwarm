@@ -32,6 +32,20 @@ const runtimes = new Map<string, CognitiveRuntime>()
 // 事件发射器
 const cognitiveEvents = new EventEmitter()
 
+const MAX_COMPLETED_MESSAGE_IDS = 2000
+const MAX_CONTEXT_STACK_SIZE = 20
+const MAX_EXECUTION_HISTORY_SIZE = 200
+
+function trimArrayToSize<T>(items: T[], maxSize: number): void {
+  if (items.length <= maxSize) return
+  items.splice(0, items.length - maxSize)
+}
+
+function rememberCompletedMessage(runtime: CognitiveRuntime, messageId: string): void {
+  runtime.inbox.completed.push(messageId)
+  trimArrayToSize(runtime.inbox.completed, MAX_COMPLETED_MESSAGE_IDS)
+}
+
 function persistRuntimeEventSafely(
   promise: Promise<void>,
   context: { swarmSessionId: string; agentId: string; event: string }
@@ -130,6 +144,7 @@ export function destroyRuntime(
     runtime.inbox.deferred = []
     runtime.inbox.completed = []
     runtime.contextStack = []
+    runtime.currentSnapshot = undefined
     runtime.executionHistory = []
 
     // Reset state to idle before deletion
@@ -207,7 +222,7 @@ export async function deliverMessage(
 
   if (isMessageExpired(inboxMessage)) {
     inboxMessage.status = 'ignored'
-    runtime.inbox.completed.push(inboxMessage.id)
+    rememberCompletedMessage(runtime, inboxMessage.id)
     return inboxMessage
   }
 
@@ -266,6 +281,7 @@ export async function createSnapshot(
   }
 
   runtime.contextStack.push(snapshot)
+  trimArrayToSize(runtime.contextStack, MAX_CONTEXT_STACK_SIZE)
   runtime.stats.totalSnapshotsCreated++
 
   emitEvent('snapshot_created', { snapshot }, runtime)
@@ -306,7 +322,13 @@ export async function resumeSnapshot(
     runtime.contextStack.splice(index, 1)
   }
 
-  runtime.currentSnapshot = snapshot
+  runtime.currentSnapshot = {
+    ...snapshot,
+    conversationContext: {
+      ...snapshot.conversationContext,
+      messages: [],
+    },
+  }
 
   if (snapshot.executionId && runtime.currentExecution?.id === snapshot.executionId) {
     resumeExecution(swarmSessionId, agentId, {
@@ -414,7 +436,7 @@ export function markMessageCompleted(
     message.status = 'completed'
     message.processedAt = new Date()
     runtime.inbox.pending.splice(index, 1)
-    runtime.inbox.completed.push(messageId)
+    rememberCompletedMessage(runtime, messageId)
     runtime.inbox.processing = undefined
     runtime.stats.totalMessagesProcessed++
 
@@ -491,7 +513,7 @@ export function reviveDeferredMessages(
     if (shouldDropDeferredMessage(message)) {
       message.status = 'completed'
       message.processedAt = new Date()
-      runtime.inbox.completed.push(message.id)
+      rememberCompletedMessage(runtime, message.id)
       continue
     }
 
@@ -558,6 +580,7 @@ export function startExecution(
 
   runtime.currentExecution = execution
   runtime.executionHistory.push(execution)
+  trimArrayToSize(runtime.executionHistory, MAX_EXECUTION_HISTORY_SIZE)
   emitEvent('execution_started', { execution }, runtime)
   persistRuntimeEventSafely(
     persistExecutionEvent(runtime, 'started', execution),
@@ -998,12 +1021,11 @@ function markMessageIgnored(runtime: CognitiveRuntime, message: InboxMessage, no
   message.status = 'ignored'
   message.processedAt = now
   if (!runtime.inbox.completed.includes(message.id)) {
-    runtime.inbox.completed.push(message.id)
+    rememberCompletedMessage(runtime, message.id)
   }
 
   if (runtime.inbox.processing?.id === message.id) {
     runtime.inbox.processing = undefined
   }
 }
-
 

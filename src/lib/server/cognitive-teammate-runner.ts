@@ -18,6 +18,7 @@ import { buildTeammateContextMessages as buildSharedTeammateContextMessages } fr
 
 // 认知收件箱
 import {
+  destroyRuntime,
   initCognitiveEngine,
   deliverMessage,
   getInterruptionMode,
@@ -31,6 +32,7 @@ import {
 // 工具执行器（已提取到独立模块）
 import {
   buildTeammateToolExecutor,
+  clearTeammateReadFileCache,
   publishStatusUpdate,
 } from './teammate-tool-executor'
 
@@ -943,4 +945,7 @@ export function cleanupCognitiveTeammate(swarmSessionId: string, teammateId: str
     teammateProcessors.delete(key)
     console.log(`[CognitiveTeammateRunner] Cleaned up for ${key}`)
   }
+
+  destroyRuntime(swarmSessionId, teammateId)
+  clearTeammateReadFileCache(swarmSessionId, teammateId)
 }
